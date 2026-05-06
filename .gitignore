@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.astro/
+.vercel/
+.netlify/
+.wrangler/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+coverage/
+playwright-report/
+test-results/
+.cache/
+.tmp/
+
+# Local generated sites can be committed selectively.
+runs/*/site/node_modules/
+runs/*/site/dist/
+runs/*/site/.astro/
+runs/*/site/.npm-cache/

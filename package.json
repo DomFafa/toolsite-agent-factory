@@ -1,0 +1,11 @@
+{
+  "name": "toolsite-agent-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "create-run": "bash scripts/create-run.sh",
+    "qa:starter": "bash scripts/qa/run-local-qa.sh starter-site",
+    "tree": "find . -maxdepth 4 -not -path './.git/*' -not -path './starter-site/node_modules/*' | sort"
+  }
+}

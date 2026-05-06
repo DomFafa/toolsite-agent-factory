@@ -1,0 +1,7 @@
+---
+interface Props { label?: string }
+const { label = 'Reserved monetization slot' } = Astro.props;
+---
+<aside class="monetization-slot" aria-label={label}>
+  <span>{label}</span>
+</aside>

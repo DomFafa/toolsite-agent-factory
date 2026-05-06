@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chipotle Nutrition Calculator Prototype</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Independent meal estimator</p>
+          <h1>Chipotle Nutrition Calculator</h1>
+          <p class="lede">Build a bowl, burrito, salad, tacos, or side order and estimate calories, macros, sodium, fiber, and sugar before you order.</p>
+        </div>
+        <div class="source-card">
+          <span>Data basis</span>
+          <strong>Published US menu nutrition</strong>
+          <p>Use light, normal, extra, and double portions to model real orders.</p>
+        </div>
+      </section>
+
+      <section class="calculator-grid" aria-label="Nutrition calculator prototype">
+        <aside class="totals-panel">
+          <p class="panel-label">Meal totals</p>
+          <strong id="total-calories">0</strong>
+          <span>calories</span>
+          <dl class="macro-grid">
+            <div><dt>Protein</dt><dd id="total-protein">0g</dd></div>
+            <div><dt>Carbs</dt><dd id="total-carbs">0g</dd></div>
+            <div><dt>Fat</dt><dd id="total-fat">0g</dd></div>
+            <div><dt>Sodium</dt><dd id="total-sodium">0mg</dd></div>
+            <div><dt>Fiber</dt><dd id="total-fiber">0g</dd></div>
+            <div><dt>Sugar</dt><dd id="total-sugar">0g</dd></div>
+          </dl>
+          <button id="copy-summary" class="primary-button">Copy summary</button>
+          <button id="clear-all" class="ghost-button">Clear all</button>
+        </aside>
+
+        <div class="builder-panel">
+          <div class="section-head">
+            <div>
+              <p class="panel-label">Step 1</p>
+              <h2>Choose format</h2>
+            </div>
+          </div>
+          <div class="format-grid" id="format-grid"></div>
+
+          <div class="section-head">
+            <div>
+              <p class="panel-label">Step 2</p>
+              <h2>Add ingredients</h2>
+            </div>
+          </div>
+          <div id="ingredient-groups" class="ingredient-groups"></div>
+        </div>
+
+        <aside class="side-panel">
+          <p class="panel-label">Quick presets</p>
+          <div id="preset-list" class="preset-list"></div>
+          <div class="compare-card">
+            <span>Bowl vs burrito</span>
+            <strong>+320 cal</strong>
+            <p>A flour tortilla also adds about 50g carbs before fillings.</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script src="./script.js"></script>
+  </body>
+</html>

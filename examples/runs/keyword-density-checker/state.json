@@ -1,0 +1,12 @@
+{
+  "site_id": "keyword-density-checker",
+  "domain": "keyworddensitychecker.com",
+  "status": "example_initialized",
+  "current_agent": null,
+  "approved_for_production": false,
+  "launch": {
+    "cloudflare_project": "dom-tool-keyword-density-checker",
+    "production_url": "https://keyworddensitychecker.com",
+    "sitemap_url": "https://keyworddensitychecker.com/sitemap.xml"
+  }
+}

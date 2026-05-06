@@ -1,0 +1,24 @@
+{
+  "site_id": "chipotle-nutrition-calculator",
+  "domain": "chipotlenutritioncalculator.app",
+  "status": "agent_6_completed_custom_domain_live",
+  "current_agent": null,
+  "approved_for_production": false,
+  "agent_outputs": {
+    "agent_1": "agent-1-output/keyword-research-report.md",
+    "agent_2": "agent-2-output/site-brief.md",
+    "agent_3": "agent-3-output/implementation-handoff.md",
+    "agent_4": "agent-4-output/implementation-report.md",
+    "agent_5": "agent-5-output/qa-report.md",
+    "agent_6": "agent-6-output/launch-report.md"
+  },
+  "qa": {
+    "passed": true,
+    "report": "agent-5-output/qa-report.md"
+  },
+  "launch": {
+    "cloudflare_project": "dom-tool-chipotle-nutrition-calculator",
+    "production_url": "https://chipotlenutritioncalculator.app/",
+    "sitemap_url": "https://chipotlenutritioncalculator.app/sitemap.xml"
+  }
+}

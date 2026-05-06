@@ -1,0 +1,344 @@
+:root {
+  --paper: #f6f0df;
+  --paper-deep: #e7d8b5;
+  --ink: #232015;
+  --muted: #6f6755;
+  --green: #245f3b;
+  --green-bright: #3f8f59;
+  --tomato: #a23b2a;
+  --corn: #d6a741;
+  --line: #d4c49f;
+  --white: #fffaf0;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top left, rgba(214, 167, 65, 0.2), transparent 32rem), var(--paper);
+  color: var(--ink);
+  font-family: "Avenir Next", "Trebuchet MS", sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.intro {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 22px;
+}
+
+.eyebrow,
+.panel-label {
+  margin: 0 0 8px;
+  color: var(--tomato);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  line-height: 0.98;
+}
+
+h1 {
+  max-width: 760px;
+  font-size: clamp(2.45rem, 5vw, 5.2rem);
+}
+
+h2 {
+  font-size: 1.35rem;
+}
+
+.lede {
+  max-width: 720px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+  line-height: 1.55;
+}
+
+.source-card,
+.totals-panel,
+.builder-panel,
+.side-panel {
+  border: 1px solid var(--line);
+  background: rgba(255, 250, 240, 0.86);
+  box-shadow: 0 18px 50px rgba(77, 58, 20, 0.12);
+}
+
+.source-card {
+  padding: 18px;
+}
+
+.source-card span,
+.compare-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.source-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.1rem;
+}
+
+.source-card p,
+.compare-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.calculator-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 270px;
+  gap: 16px;
+  align-items: start;
+}
+
+.totals-panel,
+.builder-panel,
+.side-panel {
+  padding: 18px;
+}
+
+.totals-panel,
+.side-panel {
+  position: sticky;
+  top: 14px;
+}
+
+#total-calories {
+  display: block;
+  font-family: Menlo, Consolas, monospace;
+  font-size: 4rem;
+  line-height: 1;
+}
+
+.macro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.macro-grid div {
+  border-top: 2px solid var(--ink);
+  padding-top: 8px;
+}
+
+.macro-grid dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.macro-grid dd {
+  margin: 2px 0 0;
+  font-family: Menlo, Consolas, monospace;
+  font-weight: 800;
+}
+
+.primary-button,
+.ghost-button {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.primary-button {
+  background: var(--green);
+  color: white;
+}
+
+.ghost-button {
+  margin-top: 8px;
+  background: transparent;
+  color: var(--ink);
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.section-head:not(:first-child) {
+  margin-top: 26px;
+}
+
+.format-grid,
+.ingredient-list,
+.preset-list {
+  display: grid;
+  gap: 8px;
+}
+
+.format-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.format-button,
+.ingredient-card,
+.item-toggle,
+.preset-button {
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.format-button {
+  min-height: 74px;
+  padding: 12px;
+}
+
+.format-button.active,
+.ingredient-card.active {
+  border-color: var(--green);
+  background: #e4f0df;
+  box-shadow: inset 0 0 0 2px rgba(36, 95, 59, 0.18);
+}
+
+.format-button strong,
+.item-toggle strong {
+  display: block;
+}
+
+.format-button span,
+.item-toggle span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.ingredient-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.ingredient-group h3 {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.ingredient-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ingredient-card {
+  min-height: 72px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.item-toggle {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+}
+
+.portion-row {
+  display: none;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.ingredient-card.active .portion-row {
+  display: grid;
+  padding: 0 8px 8px;
+}
+
+.portion-row button {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  font-size: 0.68rem;
+  padding: 0 3px;
+}
+
+.portion-row button.active {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.preset-button {
+  padding: 12px;
+}
+
+.compare-card {
+  margin-top: 14px;
+  border: 1px dashed var(--tomato);
+  padding: 14px;
+  background: #fff6e2;
+}
+
+.compare-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--tomato);
+  font-family: Menlo, Consolas, monospace;
+  font-size: 1.45rem;
+}
+
+@media (max-width: 960px) {
+  .intro,
+  .calculator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .totals-panel,
+  .side-panel {
+    position: static;
+  }
+
+  .format-grid,
+  .ingredient-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    width: min(100% - 20px, 1180px);
+    padding-top: 18px;
+  }
+
+  h1 {
+    font-size: 2.55rem;
+  }
+
+  .format-grid,
+  .ingredient-list {
+    grid-template-columns: 1fr;
+  }
+}

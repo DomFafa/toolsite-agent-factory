@@ -1,0 +1,24 @@
+# Checklist
+
+- [ ] Approval completed
+- [ ] QA passed
+- [ ] Zone ID discovered from target domain, not trusted from root `.env.local`
+- [ ] Cloudflare zone active
+- [ ] Pages project created or updated
+- [ ] Apex domain bound
+- [ ] WWW domain bound
+- [ ] DNS records point to Pages
+- [ ] WWW-to-apex 301 redirect configured
+- [ ] DNS was completed through API/CLI or Dashboard DNS fallback
+- [ ] SSL active
+- [ ] Images Transformations enabled for the zone
+- [ ] Email Routing catch-all configured to `.env.local` destination
+- [ ] Legacy Google Workspace and Squarespace DNS records removed or confirmed absent
+- [ ] Speed Settings `Enable all available settings` completed
+- [ ] API-first path attempted for every Cloudflare operation
+- [ ] Dashboard/web-access fallback completed for every Cloudflare operation that token API could not finish
+- [ ] Cloudflare Web Analytics site token created or reused for the launch domain
+- [ ] Cloudflare Web Analytics beacon injected into the production build
+- [ ] Site redeployed after Web Analytics injection
+- [ ] Live custom-domain HTML contains the Cloudflare Web Analytics beacon
+- [ ] Sitemap submitted
