@@ -53,9 +53,32 @@
 
 ## GSC
 
+- Required launch gate:
+- Login/access method:
+- Property:
+- Verification method:
+- Sitemap submission:
+- Homepage request indexing:
+- Evidence:
+
 ## Bing
 
+- Required launch gate:
+- Login/access method:
+- Site add/import method:
+- Import selection guard:
+- Sitemap submission:
+- URL Submission count:
+- Evidence:
+
 ## IndexNow
+
+- Key file:
+- Key URL:
+- Submitted URL count:
+- Endpoint:
+- HTTP status:
+- Result:
 
 ## Email Routing
 

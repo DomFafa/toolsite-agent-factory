@@ -46,6 +46,8 @@ Development and preview environments must use `noindex`.
 
 Production may use `index,follow` only after approval.
 
+After production deploy and custom-domain verification, GSC and Bing Webmaster submission are mandatory Agent 6 launch gates. The user has authorized Agent 6 to operate the GSC and Bing login flows through `web-access`. Use existing sessions, saved accounts, passkeys, or OAuth prompts where available. Do not store, print, or request passwords in repository files. If user-only password or MFA input is required, pause for user input and keep the launch blocked until submission is complete.
+
 ## UI reference safety
 
 Reference URLs and screenshots are used for inspiration only. Agent 3 must not copy brand assets, exact layouts, copyrighted illustrations, trademarks, or distinctive protected designs.

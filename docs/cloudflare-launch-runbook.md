@@ -37,11 +37,12 @@ dom-tool-<site-id>
 10. Enable Images > Transformations for the zone using `docs/cloudflare-image-transformations.md`.
 11. Configure Email Routing catch-all using `docs/cloudflare-email-routing-catchall.md`.
 12. Create or reuse the per-domain Cloudflare Web Analytics token, inject it into the production build, redeploy, and verify the live beacon using `docs/cloudflare-web-analytics.md`.
-13. Submit sitemap to Google Search Console and Bing Webmaster Tools.
-14. Submit changed URLs with IndexNow when applicable.
-15. Write launch report.
+13. Prepare and submit IndexNow using `docs/gsc-bing-indexing-runbook.md`.
+14. Complete Google Search Console setup, sitemap submission, and homepage request-indexing through API or `web-access`.
+15. Complete Bing Webmaster Tools setup/import, sitemap submission, and URL Submission through API or `web-access`.
+16. Write launch report.
 
-Steps 3, 6, 7, 9, 10, 11, and 12 are required Cloudflare launch gates. Do not mark the run `launched` until each gate is completed and verified.
+Steps 3, 6, 7, 9, 10, 11, 12, 13, 14, and 15 are required launch gates. Do not mark the run `launched` until each gate is completed and verified.
 
 ## Cloudflare operation policy
 
@@ -126,6 +127,20 @@ docs/cloudflare-web-analytics.md
 ```
 
 Try the Cloudflare token API first. If the token lacks Account Settings Write or RUM/Web Analytics permissions, use `web-access` and the Dashboard same-origin API before manual UI clicks. Do not ask the user to create the token manually, and do not reuse a token from another domain.
+
+## Automatic indexing
+
+Agent 6 must prepare an IndexNow key, redeploy the site with the key file, submit sitemap URLs through IndexNow, complete Google Search Console submission, and complete Bing Webmaster Tools submission:
+
+```txt
+docs/gsc-bing-indexing-runbook.md
+```
+
+IndexNow, GSC, and Bing are required post-deploy launch gates. Google Search Console request-indexing is a browser UI flow for normal pages, so use `web-access` and report the exact UI confirmation or hard blocker.
+
+If GSC or Bing is signed out, Agent 6 is authorized to start and complete the login flow through `web-access` using existing browser sessions, saved accounts, passkeys, or OAuth prompts. If password or MFA input is required and cannot be completed by the agent, pause for user input and keep the launch blocked until the console submission is complete.
+
+For Bing Webmaster Tools, Agent 6 must import or add only the target domain, submit the sitemap, then submit the sitemap URLs through URL Submission using the available daily quota. Quota exhaustion is a hard blocker for any unsubmitted canonical URLs. If importing from Google Search Console, deselect every unrelated GSC property before completing the import.
 
 ## Stop conditions
 

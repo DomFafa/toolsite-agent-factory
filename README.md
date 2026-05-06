@@ -10,7 +10,7 @@ This repository is intentionally file-first. Version 1 does **not** provide a fu
 - Default project name format: `dom-tool-<site-id>`.
 - Domains are usually purchased in Squarespace, but nameservers are manually pointed to Cloudflare before Agent 6 runs.
 - Agent 6 only handles domains whose Cloudflare zone is already active.
-- Root `.env.local` should keep only account-level Cloudflare values: API token, account ID, and Email Routing destination. Agent 6 discovers each target domain's zone ID at runtime and creates/reuses the per-domain Web Analytics token during launch.
+- Root `.env.local` should keep only account-level Cloudflare values: API token, account ID, and Email Routing destination. Agent 6 discovers each target domain's zone ID at runtime, creates/reuses the per-domain Web Analytics token during launch, and completes IndexNow, Google Search Console, and Bing Webmaster Tools submission as required launch gates.
 - All system docs, specs, reports, and site content are written in English by default.
 - Development builds stay `noindex` until QA passes and production launch is explicitly approved in `approval.md`.
 - Cloudflare Web Analytics is the default analytics system. Agent 6 creates or reuses a per-domain Web Analytics token during launch and injects it into the production build. GA4 is not included by default.

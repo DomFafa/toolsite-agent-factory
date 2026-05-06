@@ -234,6 +234,36 @@ Configured.
   - Legacy Google Workspace MX/SPF/DKIM records removed.
   - Legacy Squarespace `_domainconnect` and `www` CNAME records removed.
 
+## Automatic Indexing
+
+Configured.
+
+- Production indexability: verified on `https://chipotlenutritioncalculator.app/`.
+- Sitemap: `https://chipotlenutritioncalculator.app/sitemap.xml`.
+- Sitemap URL count: 3.
+- IndexNow key file: `runs/chipotle-nutrition-calculator/site/public/cf265ed40776f4c69280d3d417a110a0.txt`.
+- IndexNow key: `cf26...10a0`.
+- IndexNow key URL: `https://chipotlenutritioncalculator.app/cf26...10a0.txt`.
+- IndexNow submission endpoint: `https://api.indexnow.org/indexnow`.
+- IndexNow HTTP status: `202`.
+- IndexNow result: accepted.
+- Google Search Console required launch gate: completed.
+- Google Search Console access: authenticated browser session through `web-access`.
+- Google Search Console property: `sc-domain:chipotlenutritioncalculator.app`.
+- Google verification method: Cloudflare Domain Connect / DNS provider.
+- Google sitemap submission: success.
+- Google discovered pages from sitemap: 3.
+- Google homepage request indexing: success; homepage added to the priority crawl queue.
+- Evidence screenshot: `google-indexing-requested.png`.
+- Bing Webmaster Tools required launch gate: completed.
+- Bing Webmaster Tools access: authenticated browser session through `web-access`.
+- Bing Webmaster Tools import: success through `Import from Google Search Console`.
+- Bing import selection: only `https://chipotlenutritioncalculator.app/` selected; unrelated GSC properties deselected.
+- Bing sitemap submission: success; status `Submitted / Processing`.
+- Bing URL Submission: success; 3 URLs submitted.
+- Bing evidence screenshots: `bing-sitemap-submitted.png`, `bing-url-submission-success.png`.
+- Bing-compatible automatic submission: completed through IndexNow with HTTP 202.
+
 ## Handoff
 
-The site is live on the custom domain. `www` is bound, active, and redirects to the apex domain with a 301 while preserving path and query string. Speed Settings recommendations are enabled where available. Images Transformations are enabled. Email Routing catch-all is active and forwarding to the configured destination. Cloudflare Web Analytics is installed in the live production HTML with the domain-specific token. Optional next step is sitemap submission to Google Search Console/Bing Webmaster Tools if not already completed in the browser accounts.
+The site is live on the custom domain. `www` is bound, active, and redirects to the apex domain with a 301 while preserving path and query string. Speed Settings recommendations are enabled where available. Images Transformations are enabled. Email Routing catch-all is active and forwarding to the configured destination. Cloudflare Web Analytics is installed in the live production HTML with the domain-specific token. Automatic indexing baseline is complete through IndexNow, Google Search Console, and Bing Webmaster Tools.

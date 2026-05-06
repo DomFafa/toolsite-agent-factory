@@ -23,7 +23,8 @@ Launch an approved, QA-passed static site to Cloudflare Pages and complete domai
 - Required launch gate: open Cloudflare Speed Settings and complete `Enable all available settings`, or verify all available settings are already enabled. Use `docs/cloudflare-speed-settings.md`. Paid-only upgrade requirements are recorded, not enabled.
 - Required launch gate: enable Cloudflare Images > Transformations for the launched zone. Use `docs/cloudflare-image-transformations.md`.
 - Required launch gate: create or reuse the Cloudflare Web Analytics site token for the launched domain, inject it into the production build, redeploy, and verify the live beacon. Use `docs/cloudflare-web-analytics.md`. Do not ask the user to create `PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` manually.
-- Do not write final status `launched` unless every required Cloudflare launch gate above is completed and verified.
+- Required launch gate: complete IndexNow, Google Search Console, and Bing Webmaster Tools setup/submission after the custom domain is live. Use `docs/gsc-bing-indexing-runbook.md`. If GSC or Bing is signed out, use `web-access` to complete login with available browser sessions, saved accounts, passkeys, or OAuth prompts. Missing login is not a skip condition.
+- Do not write final status `launched` unless every required launch gate above is completed and verified. A hard GSC/Bing blocker must keep the launch blocked until resolved.
 
 ## Task
 

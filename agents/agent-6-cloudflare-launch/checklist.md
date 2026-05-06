@@ -21,4 +21,15 @@
 - [ ] Cloudflare Web Analytics beacon injected into the production build
 - [ ] Site redeployed after Web Analytics injection
 - [ ] Live custom-domain HTML contains the Cloudflare Web Analytics beacon
-- [ ] Sitemap submitted
+- [ ] Production indexability verified on custom domain
+- [ ] IndexNow key file generated or reused
+- [ ] IndexNow key file deployed and publicly verified
+- [ ] Live sitemap URLs submitted through IndexNow
+- [ ] Google Search Console access confirmed or login completed through `web-access`
+- [ ] Google Search Console domain property verified
+- [ ] Google Search Console sitemap submitted
+- [ ] Google homepage request-indexing confirmed through Search Console UI
+- [ ] Bing Webmaster Tools access confirmed or login completed through `web-access`
+- [ ] Bing Webmaster site imported from GSC or added directly
+- [ ] Bing Webmaster sitemap submitted
+- [ ] Bing URL Submission completed for sitemap URLs

@@ -8,6 +8,22 @@ Required outputs:
 
 Each output should include decisions, assumptions, and next-agent handoff notes.
 
+Indexing outputs must record:
+
+- Production homepage HTTP status and `index,follow` evidence
+- Robots.txt crawl policy and sitemap reference
+- Sitemap URL and parsed URL count
+- IndexNow key file path and masked key
+- Live IndexNow key URL verification
+- IndexNow submission endpoint, status code, accepted/rejected result, and submitted URL count
+- Google Search Console login/access method, property verification method, sitemap submission method, and result
+- Google URL Inspection request-indexing confirmation for the homepage
+- Bing Webmaster Tools login/access method and GSC import/site-add method and result
+- Bing Webmaster Tools sitemap submission method and result
+- Bing URL Submission submitted URL count and result
+- Bing IndexNow verification result
+- Any hard GSC/Bing blocker, with screenshot/log evidence and next required user action
+
 If Dashboard DNS fallback is used, outputs must also record:
 
 - Why API/CLI DNS mutation failed

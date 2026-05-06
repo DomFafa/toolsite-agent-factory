@@ -96,7 +96,9 @@ toolsite-agent-factory/
       README.md
       cloudflare-bind-domain.sh
       cloudflare-direct-upload.sh
+      indexnow-submit.mjs
       indexnow-submit.sh
+      indexnow-submit.test.mjs
     qa/
       README.md
       check-basic-seo.mjs

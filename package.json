@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "create-run": "bash scripts/create-run.sh",
+    "indexnow": "node scripts/deploy/indexnow-submit.mjs",
+    "test:indexnow": "node --test scripts/deploy/indexnow-submit.test.mjs",
     "qa:starter": "bash scripts/qa/run-local-qa.sh starter-site",
     "tree": "find . -maxdepth 4 -not -path './.git/*' -not -path './starter-site/node_modules/*' | sort"
   }

@@ -26,6 +26,18 @@
 - [x] Cloudflare Web Analytics beacon injected into the production build
 - [x] Site redeployed after Web Analytics injection
 - [x] Live custom-domain HTML contains the Cloudflare Web Analytics beacon
+- [x] Production indexability verified on custom domain
+- [x] IndexNow key file generated
+- [x] IndexNow key file deployed and publicly verified
+- [x] Live sitemap URLs submitted through IndexNow
+- [x] Google Search Console access confirmed
+- [x] Google Search Console domain property verified
+- [x] Google Search Console sitemap submitted
+- [x] Google homepage request-indexing submitted
+- [x] Bing Webmaster Tools access confirmed
+- [x] Bing Webmaster site imported from Google Search Console
+- [x] Bing Webmaster sitemap submitted
+- [x] Bing URL Submission completed for sitemap URLs
 
 ## Speed Settings
 
@@ -57,6 +69,26 @@
 - Redeploy evidence: Cloudflare Pages deployment `https://b826895a.dom-tool-chipotle-nutrition-calculator.pages.dev`
 - Live beacon verification: `https://chipotlenutritioncalculator.app/` contains `beacon.min.js` and `data-cf-beacon`
 - Post-redeploy WWW check: `https://www.chipotlenutritioncalculator.app/privacy?from=www` returns 301 to apex while preserving path and query
+
+## Automatic Indexing
+
+- Sitemap: `https://chipotlenutritioncalculator.app/sitemap.xml`
+- Sitemap URL count: 3
+- IndexNow key: `cf26...10a0`
+- IndexNow key URL: `https://chipotlenutritioncalculator.app/cf26...10a0.txt`
+- IndexNow result: HTTP 202 accepted
+- Google Search Console property: `sc-domain:chipotlenutritioncalculator.app`
+- Google Search Console access: authenticated browser session through `web-access`
+- Google verification: Cloudflare Domain Connect / DNS provider
+- Google sitemap submission: success
+- Google homepage request indexing: success; added to priority crawl queue
+- Screenshot: `google-indexing-requested.png`
+- Bing Webmaster Tools access: authenticated browser session through `web-access`
+- Bing Webmaster Tools import: success through `Import from Google Search Console`
+- Bing import selection: only `https://chipotlenutritioncalculator.app/` selected; unrelated GSC properties deselected
+- Bing sitemap submission: success; status `Submitted / Processing`
+- Bing URL Submission: success; 3 URLs submitted
+- Screenshots: `bing-sitemap-submitted.png`, `bing-url-submission-success.png`
 
 ## Email Routing
 
