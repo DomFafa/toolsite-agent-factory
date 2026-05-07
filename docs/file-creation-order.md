@@ -11,6 +11,7 @@ Use this order when creating or regenerating the repository.
 7. `starter-site/`
 8. `scripts/qa/`
 9. `scripts/deploy/`
-10. `examples/`
-11. `runs/.gitkeep`
-12. `scaffold-report.md`
+10. `scripts/design/`
+11. `examples/`
+12. `runs/.gitkeep`
+13. `scaffold-report.md`

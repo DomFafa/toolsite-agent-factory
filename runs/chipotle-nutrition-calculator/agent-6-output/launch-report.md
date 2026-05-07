@@ -1,5 +1,42 @@
 # Launch Report
 
+## UI Modification Redeploy
+
+Status: launched.
+
+The approved UI modification based on Agent 2.5 Option B is deployed on:
+
+https://chipotlenutritioncalculator.app/
+
+Deployment URL:
+
+https://382e5932.dom-tool-chipotle-nutrition-calculator.pages.dev
+
+Verification:
+
+- Custom domain HTML contains the new UI copy: `make smarter choices before you order`.
+- Production meta robots: `index,follow`.
+- Production robots.txt: `Allow: /`.
+- Production sitemap exists and lists the root, privacy, and terms pages.
+- Cloudflare Web Analytics beacon remains present.
+- `www.chipotlenutritioncalculator.app` still redirects to the apex domain with HTTP 301.
+- Browser-rendered live interaction works:
+  - Default calories: `570`.
+  - High Protein Double Chicken preset: `750` calories, `77g` protein.
+  - Switching that preset to burrito: `1070` calories.
+- IndexNow was resubmitted after the UI redeploy:
+  - HTTP status: `200`.
+  - Submitted URL count: `3`.
+- Live desktop screenshot: `deployed-ui-mod-desktop.png`.
+- Live mobile screenshot: `deployed-ui-mod-mobile.png`.
+
+Commands:
+
+```bash
+PUBLIC_SITE_URL=https://chipotlenutritioncalculator.app PUBLIC_INDEX_SITE=true PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN=<domain-site-token> npm run build
+npx --yes wrangler pages deploy dist --project-name=dom-tool-chipotle-nutrition-calculator --branch=main --commit-dirty=true
+```
+
 ## Result
 
 Status: launched.

@@ -4,7 +4,7 @@
 
 - [x] Root README
 - [x] Docs folder
-- [x] Six agent folders
+- [x] Agent folders
 - [x] Shared schemas
 - [x] Shared templates
 - [x] Starter Astro site

@@ -7,13 +7,24 @@
 - Primary keyword:
 - Brief requirements:
 
-## Optional UI reference
+## Optional UI references
 
+References are optional. Leave this section blank when none are available; Agent 2.5 still runs in open-exploration mode.
+
+### Reference 1
+
+- Type: mood | component | layout | illustration | interaction
 - Reference URL:
 - Desktop screenshot path:
 - Mobile screenshot path:
+- Component/image path:
 - What to borrow:
 - What to avoid:
+- Reference strength: mood | component | layout
+
+### Additional references
+
+- Add more references as needed.
 
 ## Constraints
 

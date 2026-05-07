@@ -20,6 +20,12 @@ toolsite-agent-factory/
       input.schema.md
       output.schema.md
       prompt.md
+    agent-2-5-ui-design-generation/
+      checklist.md
+      examples.md
+      input.schema.md
+      output.schema.md
+      prompt.md
     agent-3-ui-code-prototype/
       checklist.md
       examples.md
@@ -66,6 +72,7 @@ toolsite-agent-factory/
     safety-and-permissions.md
     shared-templates.md
     starter-site-engineering.md
+    ui-design-generation-runbook.md
     ui-reference-guidelines.md
     workflow.md
   examples/
@@ -99,6 +106,10 @@ toolsite-agent-factory/
       indexnow-submit.mjs
       indexnow-submit.sh
       indexnow-submit.test.mjs
+    design/
+      README.md
+      import-generated-ui.mjs
+      import-generated-ui.test.mjs
     qa/
       README.md
       check-basic-seo.mjs
@@ -122,10 +133,12 @@ toolsite-agent-factory/
     templates/
       agent-output.template.md
       approval.template.md
+      design-generation-input.template.md
       launch-report.template.md
       qa-report.template.md
       run-input.template.md
       site-brief.template.md
+      ui-reference-dossier.template.md
       ui-reference.template.md
   starter-site/
     .env.example

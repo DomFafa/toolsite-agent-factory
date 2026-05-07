@@ -2,18 +2,26 @@
 
 ## Input format
 
-A UI reference object contains:
+A UI reference object may contain:
 
 - URL
 - Desktop screenshot
 - Mobile screenshot
 - Short explanation of what to borrow
+- Component or illustration image
+- Reference type: mood, component, layout, illustration, or interaction
+
+References are optional. Their absence never skips Agent 2.5. When no references are provided, Agent 2 must write an open-exploration dossier and Agent 2.5 must still generate UI directions through the external design model.
 
 ## Allowed reference strength
 
-V1 uses medium reference only.
+Use reference strength labels:
 
-Agent 3 may extract:
+- `mood`: color, atmosphere, illustration feeling, softness/sharpness.
+- `component`: button, card, form, navigation, panel, or control styling.
+- `layout`: page rhythm, density, major region arrangement, or mobile ergonomics.
+
+Agent 2 organizes these references. Agent 2.5 may extract:
 
 - General color direction
 - Card density
@@ -21,8 +29,9 @@ Agent 3 may extract:
 - Illustration mood
 - Section rhythm
 - Overall whitespace feel
+- Component interaction feel
 
-Agent 3 must not copy:
+Agents must not copy:
 
 - Exact page composition
 - Brand-specific assets
@@ -31,8 +40,8 @@ Agent 3 must not copy:
 - Logos
 - Distinctive interaction patterns
 
-## Code-first rule
+## Design generation rule
 
-Agent 3 must generate frontend code first, then capture screenshots from the browser. These screenshots are the final design effect images.
+Agent 2.5 must generate design targets and corresponding frontend code through the external design model. The source of truth for implementation is not only the generated image; it is the runnable code screenshot that closely matches the generated design target.
 
-This prevents a mismatch between design mockup and implementation.
+Agent 3 then cleans the approved code without redesigning it.

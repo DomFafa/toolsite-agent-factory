@@ -6,7 +6,7 @@ Agents must not delete existing projects, domains, Cloudflare zones, DNS records
 
 For Agent 6 Cloudflare Pages launches, replacing DNS records is allowed only when all of these are true:
 
-- Agent 5 QA passed and `approval.md` authorizes production launch.
+- Agent 5 Final QA passed and `approval.md` authorizes production launch.
 - The domain belongs to the current run.
 - The Cloudflare zone is active.
 - The existing DNS records directly conflict with the Pages custom domain binding.
@@ -50,7 +50,9 @@ After production deploy and custom-domain verification, GSC and Bing Webmaster s
 
 ## UI reference safety
 
-Reference URLs and screenshots are used for inspiration only. Agent 3 must not copy brand assets, exact layouts, copyrighted illustrations, trademarks, or distinctive protected designs.
+Reference URLs and screenshots are used for inspiration only. Agent 2.5 and Agent 3 must not copy brand assets, exact layouts, copyrighted illustrations, trademarks, distinctive protected designs, or reference copywriting.
+
+Agent 2.5 may send user-approved reference assets to the external design model through `web-access`, but must not send secrets, `.env.local`, Cloudflare tokens, destination emails, or private credentials.
 
 ## Credential safety
 

@@ -5,7 +5,7 @@
 - Cloudflare account access is available locally.
 - Domain nameservers already point to Cloudflare.
 - Cloudflare zone is active.
-- Agent 5 QA passed.
+- Agent 5 Final QA passed.
 - `approval.md` is completed.
 - Root `.env.local` contains account-level values only:
 

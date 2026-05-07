@@ -11,5 +11,7 @@ This document indexes templates stored under `shared/templates/`.
 - `qa-report.template.md`
 - `launch-report.template.md`
 - `ui-reference.template.md`
+- `ui-reference-dossier.template.md`
+- `design-generation-input.template.md`
 
 Agents should copy templates into the current run folder and fill them rather than inventing new report structures.

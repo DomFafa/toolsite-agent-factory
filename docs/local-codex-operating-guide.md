@@ -34,4 +34,4 @@ Stop and write an issue note in `runs/<site-id>/issues.md` when:
 - Required input is missing.
 - The domain is not active in Cloudflare for Agent 6.
 - QA fails in a way that requires redesign or implementation changes.
-- The rendered UI does not match Agent 3 screenshots.
+- The rendered UI does not match Agent 2.5 selected design or Agent 3 screenshots.

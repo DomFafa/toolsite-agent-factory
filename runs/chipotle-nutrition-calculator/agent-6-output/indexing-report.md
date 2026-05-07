@@ -1,5 +1,17 @@
 # Indexing Report
 
+## UI Modification Resubmission
+
+Completed after the UI modification redeploy.
+
+- Custom domain remained indexable.
+- Meta robots remained `index,follow`.
+- Sitemap URL count remained 3.
+- IndexNow was resubmitted for all sitemap URLs.
+- IndexNow HTTP status: 200.
+- Result: accepted.
+- Google Search Console and Bing Webmaster Tools setup gates remain completed for the same canonical URLs and unchanged sitemap.
+
 ## Production Index State
 
 The deployed Pages build was built with:

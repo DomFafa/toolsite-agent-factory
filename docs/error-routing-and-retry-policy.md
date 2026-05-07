@@ -4,6 +4,19 @@
 
 Route back to Agent 2 when the site brief is incomplete, unclear, or inconsistent with the keyword/domain.
 
+## Agent 2.5 / Design Gate errors
+
+Route back to Agent 2.5 when:
+
+- No runnable generated design code exists
+- No desktop/mobile design screenshots exist
+- Generated code screenshots do not match the design target
+- The selected design looks generic or template-like
+- The selected design ignores the tool workflow from Agent 2
+- The design copies protected reference material
+
+Agent 5 Design Gate must block Agent 3 until these are fixed.
+
 ## Agent 3 errors
 
 Route back to Agent 3 when:

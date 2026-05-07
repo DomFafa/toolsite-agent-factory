@@ -15,6 +15,8 @@ seo:
   sitemap: pass | fail
   structured_data: pass | fail
 ui:
+  design_gate: pass | fail | not_run
+  selected_design_match: pass | fail
   desktop_match: pass | fail
   mobile_match: pass | fail
   responsive: pass | fail
@@ -29,6 +31,6 @@ indexing:
   production_gate: pass | fail
 issues:
   - severity: blocker | major | minor
-    owner_agent: agent-2 | agent-3 | agent-4 | agent-5 | agent-6
+    owner_agent: agent-2 | agent-2.5 | agent-3 | agent-4 | agent-5 | agent-6
     description: string
 ```

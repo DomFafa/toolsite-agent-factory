@@ -10,6 +10,7 @@ runs/<site-id>/
   state.json
   approval.md
   issues.md
+  agent-2-5-output/
 ```
 
 ## Intermediate outputs
@@ -21,6 +22,9 @@ Each agent writes to its own output folder. Later agents may read earlier output
 Retries create subfolders:
 
 ```txt
+agent-2-5-output/
+  generated-designs/
+  selected-design/
 agent-3-output/
   attempt-001/
   attempt-002/
@@ -33,7 +37,7 @@ The accepted attempt should be referenced in `state.json`.
 
 A run is complete when:
 
-- Agent 5 QA passed
+- Agent 5 Final QA passed
 - Agent 6 launch report exists
 - Final production URL is recorded
 - Sitemap and indexing submissions are recorded

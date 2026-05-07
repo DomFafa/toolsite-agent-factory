@@ -2,7 +2,7 @@
 
 Production launch is blocked until every required checkbox is completed.
 
-- [ ] Agent 5 QA passed
+- [ ] Agent 5 Final QA passed
 - [ ] Final desktop UI accepted
 - [ ] Final mobile UI accepted
 - [ ] Domain confirmed

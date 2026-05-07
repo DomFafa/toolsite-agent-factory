@@ -8,4 +8,4 @@ Required outputs:
 - `final-screenshots/mobile.png`
 - `implementation-handoff.md`
 
-Each output should include decisions, assumptions, and next-agent handoff notes.
+Each output should include decisions, assumptions, visual deviations from the selected design, and next-agent handoff notes.

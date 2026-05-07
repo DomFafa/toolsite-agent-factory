@@ -2,7 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 
 const title = 'Chipotle Nutrition Calculator: Calories, Macros, Sodium';
-const description = 'Build a Chipotle bowl, burrito, salad, tacos, or side order and estimate calories, protein, carbs, fat, sodium, fiber, and sugar with light, extra, and double portions.';
+const description = 'Build a Chipotle-style bowl, burrito, salad, tacos, quesadilla, or side order and estimate calories, protein, carbs, fat, sodium, fiber, sugar, and saturated fat.';
 const siteUrl = import.meta.env.PUBLIC_SITE_URL || 'https://chipotlenutritioncalculator.app';
 
 const faq = [
@@ -16,7 +16,7 @@ const faq = [
   },
   {
     question: 'Can I calculate light or extra portions?',
-    answer: 'Yes. Selected ingredients can be adjusted to 0.5x, 1x, 1.5x, or 2x so you can model light, normal, extra, and double portions.',
+    answer: 'Yes. Selected ingredients can be adjusted to light, normal, extra, or double portions.',
   },
   {
     question: 'What adds the most calories?',
@@ -61,103 +61,155 @@ const structuredData = [
 <BaseLayout title={title} description={description}>
   <script is:inline slot="head" type="application/ld+json" set:html={JSON.stringify(structuredData)} />
 
-  <main class="app-shell">
-    <section class="intro-section" aria-labelledby="page-title">
-      <div class="intro-copy">
-        <p class="eyebrow">Independent meal estimator</p>
-        <h1 id="page-title">Chipotle Nutrition Calculator</h1>
-        <p class="lede">Build a bowl, burrito, salad, tacos, quesadilla, or side order and estimate calories, macros, sodium, fiber, and sugar before you order.</p>
-      </div>
-      <div class="source-ticket">
-        <span>Data basis</span>
-        <strong>Published US menu nutrition</strong>
-        <p>Use 0.5x, 1x, 1.5x, and 2x portions to model light, normal, extra, and double servings.</p>
-      </div>
-    </section>
+  <main class="food-app">
+    <section class="calculator-board" aria-labelledby="page-title">
+      <div class="doodle leaf-one" aria-hidden="true"></div>
+      <div class="doodle leaf-two" aria-hidden="true"></div>
 
-    <section class="calculator-grid" aria-label="Chipotle nutrition calculator">
-      <aside class="totals-panel" aria-live="polite">
-        <div class="panel-cap">Meal totals</div>
-        <div class="calorie-readout">
-          <strong id="total-calories">0</strong>
-          <span>calories</span>
+      <header class="board-header">
+        <div class="brand-mark" aria-hidden="true">◎</div>
+        <div class="header-copy">
+          <p class="eyebrow">Independent meal estimator</p>
+          <h1 id="page-title">Chipotle Nutrition Calculator</h1>
+          <p>Build your meal, see your nutrition, make smarter choices before you order.</p>
         </div>
-        <dl class="macro-grid">
-          <div><dt>Protein</dt><dd id="total-protein">0g</dd></div>
-          <div><dt>Carbs</dt><dd id="total-carbs">0g</dd></div>
-          <div><dt>Fat</dt><dd id="total-fat">0g</dd></div>
-          <div><dt>Sodium</dt><dd id="total-sodium">0mg</dd></div>
-          <div><dt>Fiber</dt><dd id="total-fiber">0g</dd></div>
-          <div><dt>Sugar</dt><dd id="total-sugar">0g</dd></div>
-          <div><dt>Sat fat</dt><dd id="total-sat-fat">0g</dd></div>
-          <div><dt>Net carbs</dt><dd id="total-net-carbs">0g</dd></div>
-        </dl>
-        <div class="selected-summary" id="selected-summary">Start by choosing a format and ingredients.</div>
-        <button type="button" id="copy-summary" class="primary-button">Copy summary</button>
-        <button type="button" id="clear-all" class="ghost-button">Clear all</button>
-        <p class="privacy-note">Runs locally in your browser. No login or upload.</p>
-      </aside>
+        <div class="header-actions" aria-label="Meal actions">
+          <button type="button" class="text-action" id="copy-summary">Copy meal</button>
+          <button type="button" class="text-action" id="share-meal">Share</button>
+          <button type="button" class="clear-action" id="clear-all">Clear all</button>
+        </div>
+      </header>
 
-      <div class="builder-panel">
-        <div class="section-head">
+      <section class="nutrition-ribbon" aria-label="Live meal totals" aria-live="polite">
+        <div class="ribbon-cell featured">
+          <span>Calories</span>
+          <strong id="total-calories">0</strong>
+          <em>kcal</em>
+        </div>
+        <div class="ribbon-cell">
+          <span>Protein</span>
+          <strong id="total-protein">0g</strong>
+        </div>
+        <div class="ribbon-cell">
+          <span>Carbs</span>
+          <strong id="total-carbs">0g</strong>
+        </div>
+        <div class="ribbon-cell">
+          <span>Fat</span>
+          <strong id="total-fat">0g</strong>
+        </div>
+        <div class="ribbon-cell">
+          <span>Sodium</span>
+          <strong id="total-sodium">0mg</strong>
+        </div>
+        <div class="ribbon-cell">
+          <span>Fiber</span>
+          <strong id="total-fiber">0g</strong>
+        </div>
+        <div class="ribbon-cell">
+          <span>Sugar</span>
+          <strong id="total-sugar">0g</strong>
+        </div>
+        <div class="ribbon-cell">
+          <span>Sat fat</span>
+          <strong id="total-sat-fat">0g</strong>
+        </div>
+      </section>
+
+      <section class="meal-step" aria-labelledby="meal-format-title">
+        <div class="step-title">
+          <span>1</span>
           <div>
-            <p class="panel-cap">Step 1</p>
-            <h2>Choose meal format</h2>
+            <h2 id="meal-format-title">Choose your meal</h2>
+            <p>Start with the format. Tortillas and shells count before any fillings.</p>
           </div>
         </div>
         <div class="format-grid" id="format-grid"></div>
+      </section>
 
-        <div class="section-head with-note">
-          <div>
-            <p class="panel-cap">Step 2</p>
-            <h2>Add ingredients</h2>
+      <section class="builder-zone" aria-labelledby="builder-title">
+        <div class="builder-heading">
+          <div class="step-title">
+            <span>2</span>
+            <div>
+              <h2 id="builder-title">Build your meal</h2>
+              <p>Select ingredients and adjust each portion.</p>
+            </div>
           </div>
-          <p>Tap an ingredient, then adjust its portion.</p>
+          <button type="button" class="portion-guide" id="portion-guide">Portion guide</button>
         </div>
         <div class="ingredient-groups" id="ingredient-groups"></div>
-      </div>
+      </section>
 
-      <aside class="action-panel">
-        <section class="mini-panel">
-          <p class="panel-cap">Quick presets</p>
-          <div class="preset-list" id="preset-list"></div>
-        </section>
+      <section class="preset-strip" aria-labelledby="presets-title">
+        <div>
+          <h2 id="presets-title">Quick presets</h2>
+          <p>Popular builds to get you started.</p>
+        </div>
+        <div class="preset-list" id="preset-list"></div>
+      </section>
 
-        <section class="compare-panel">
-          <p class="panel-cap">Compare</p>
-          <div class="compare-card">
+      <section class="compare-strip" aria-labelledby="compare-title">
+        <div class="section-kicker">
+          <h2 id="compare-title">Compare your choices</h2>
+          <p>Small changes can move the numbers fast.</p>
+        </div>
+        <div class="compare-grid">
+          <article>
             <span>Bowl vs burrito</span>
-            <strong>+320 cal</strong>
-            <p>A flour tortilla also adds about 50g carbs before fillings.</p>
-          </div>
-          <div class="compare-card">
-            <span>Chips add-on</span>
+            <strong id="compare-burrito">+320 cal</strong>
+            <p>Same fillings, flour tortilla added.</p>
+          </article>
+          <article>
+            <span>Normal vs extra rice</span>
+            <strong>+105 cal</strong>
+            <p>Extra rice is roughly half a serving more.</p>
+          </article>
+          <article>
+            <span>With vs without chips</span>
             <strong>+540 cal</strong>
-            <p>Chips can add more calories than many complete lean bowls.</p>
-          </div>
-        </section>
-      </aside>
+            <p>Chips can outweigh many lean toppings.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="summary-dock" aria-label="Current meal summary">
+        <div>
+          <span>Total</span>
+          <strong><b id="dock-calories">0</b> cal</strong>
+        </div>
+        <p id="selected-summary">Bowl: no ingredients selected yet.</p>
+        <button type="button" id="dock-copy" class="dock-button">Copy / Share Meal Summary</button>
+      </section>
+
+      <section class="source-band" aria-labelledby="source-title">
+        <div class="illustration-note" aria-hidden="true">✦</div>
+        <div>
+          <h2 id="source-title">Source & accuracy</h2>
+          <p>Nutrition estimates use published US menu nutrition data and standard portions. Values vary by location, availability, recipe changes, and how a meal is prepared.</p>
+        </div>
+      </section>
     </section>
 
     <section class="content-band" aria-labelledby="how-it-works">
       <div class="content-grid">
         <article>
-          <p class="panel-cap">Method</p>
+          <p class="eyebrow">Method</p>
           <h2 id="how-it-works">How the calculator works</h2>
           <p>The calculator adds published nutrition values for each selected format, ingredient, side, and drink. Portion buttons multiply each selected item so you can estimate light, normal, extra, or double servings without opening a spreadsheet.</p>
         </article>
         <article>
-          <p class="panel-cap">Ordering reality</p>
+          <p class="eyebrow">Ordering reality</p>
           <h2>Bowl vs burrito calories</h2>
-          <p>A bowl starts with no shell. A burrito starts with the flour tortilla, which adds 320 calories, 50g carbs, and 600mg sodium before rice, beans, protein, salsa, or toppings.</p>
+          <p>A bowl starts with no shell. A burrito starts with a flour tortilla, which adds calories, carbohydrates, and sodium before rice, beans, protein, salsa, or toppings.</p>
         </article>
         <article>
-          <p class="panel-cap">Macro planning</p>
+          <p class="eyebrow">Macro planning</p>
           <h2>High-protein and lower-calorie levers</h2>
-          <p>Chicken, steak, beans, fajita vegetables, salsa, and greens are useful planning levers. Cheese, sour cream, queso, guacamole, chips, and vinaigrette are easy to underestimate because they add calories quickly.</p>
+          <p>Chicken, steak, beans, fajita vegetables, salsa, and greens are useful planning levers. Cheese, sour cream, queso, guacamole, chips, and vinaigrette are easy to underestimate.</p>
         </article>
         <article>
-          <p class="panel-cap">Accuracy note</p>
+          <p class="eyebrow">Accuracy note</p>
           <h2>Why results are estimates</h2>
           <p>Published nutrition data uses standard portions. Actual servings can vary by store, staff, ingredient source, recipe changes, and whether you ask for light, extra, or double portions.</p>
         </article>
@@ -167,7 +219,7 @@ const structuredData = [
     <section class="nutrition-table-section" aria-labelledby="ingredient-table-title">
       <div class="section-title-row">
         <div>
-          <p class="panel-cap">Reference</p>
+          <p class="eyebrow">Reference</p>
           <h2 id="ingredient-table-title">Common ingredient calories</h2>
         </div>
         <p>Use the calculator above for full macros, sodium, fiber, sugar, and portion multipliers.</p>
@@ -190,7 +242,7 @@ const structuredData = [
     </section>
 
     <section class="faq-section" aria-labelledby="faq-title">
-      <p class="panel-cap">FAQ</p>
+      <p class="eyebrow">FAQ</p>
       <h2 id="faq-title">Chipotle nutrition calculator questions</h2>
       <div class="faq-list">
         {faq.map((item) => (
@@ -214,60 +266,59 @@ const structuredData = [
 
   <script is:inline>
     const formats = [
-      { id: "bowl", name: "Bowl", note: "No shell", portion: "1 entree", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
-      { id: "burrito", name: "Burrito", note: "Flour tortilla", portion: "1 tortilla", calories: 320, protein: 8, carbs: 50, fat: 9, sodium: 600, fiber: 3, sugar: 0, saturatedFat: 0.5 },
-      { id: "salad", name: "Salad", note: "Supergreens", portion: "1 base", calories: 15, protein: 1, carbs: 3, fat: 0, sodium: 20, fiber: 2, sugar: 1, saturatedFat: 0 },
-      { id: "tacos", name: "Tacos", note: "3 crispy shells", portion: "3 shells", calories: 210, protein: 3, carbs: 30, fat: 9, sodium: 0, fiber: 3, sugar: 0, saturatedFat: 0 },
-      { id: "quesadilla", name: "Quesadilla", note: "Tortilla + cheese", portion: "1 base", calories: 430, protein: 14, carbs: 51, fat: 17, sodium: 790, fiber: 3, sugar: 1, saturatedFat: 8.5 }
+      { id: "bowl", name: "Bowl", icon: "🥗", note: "No shell", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
+      { id: "burrito", name: "Burrito", icon: "🌯", note: "Flour tortilla", calories: 320, protein: 8, carbs: 50, fat: 9, sodium: 600, fiber: 3, sugar: 0, saturatedFat: 0.5 },
+      { id: "salad", name: "Salad", icon: "🥬", note: "Supergreens", calories: 15, protein: 1, carbs: 3, fat: 0, sodium: 20, fiber: 2, sugar: 1, saturatedFat: 0 },
+      { id: "tacos", name: "Tacos", icon: "🌮", note: "3 crispy shells", calories: 210, protein: 3, carbs: 30, fat: 9, sodium: 0, fiber: 3, sugar: 0, saturatedFat: 0 },
+      { id: "quesadilla", name: "Quesadilla", icon: "◐", note: "Tortilla + cheese", calories: 430, protein: 14, carbs: 51, fat: 17, sodium: 790, fiber: 3, sugar: 1, saturatedFat: 8.5 }
     ];
 
     const items = [
-      { id: "white-rice", group: "Rice and beans", name: "Cilantro-lime white rice", portion: "4 oz", calories: 210, protein: 4, carbs: 40, fat: 4, sodium: 350, fiber: 1, sugar: 0, saturatedFat: 1 },
-      { id: "brown-rice", group: "Rice and beans", name: "Cilantro-lime brown rice", portion: "4 oz", calories: 210, protein: 4, carbs: 36, fat: 6, sodium: 190, fiber: 2, sugar: 0, saturatedFat: 0 },
-      { id: "black-beans", group: "Rice and beans", name: "Black beans", portion: "4 oz", calories: 130, protein: 8, carbs: 22, fat: 1.5, sodium: 210, fiber: 7, sugar: 2, saturatedFat: 0 },
-      { id: "pinto-beans", group: "Rice and beans", name: "Pinto beans", portion: "4 oz", calories: 130, protein: 8, carbs: 21, fat: 1.5, sodium: 210, fiber: 8, sugar: 1, saturatedFat: 0 },
-      { id: "fajita", group: "Vegetables", name: "Fajita vegetables", portion: "2 oz", calories: 20, protein: 1, carbs: 5, fat: 0, sodium: 150, fiber: 1, sugar: 2, saturatedFat: 0 },
-      { id: "chicken", group: "Protein", name: "Chicken", portion: "4 oz", calories: 180, protein: 32, carbs: 0, fat: 7, sodium: 310, fiber: 0, sugar: 0, saturatedFat: 3 },
-      { id: "steak", group: "Protein", name: "Steak", portion: "4 oz", calories: 150, protein: 21, carbs: 1, fat: 6, sodium: 330, fiber: 1, sugar: 0, saturatedFat: 2.5 },
-      { id: "barbacoa", group: "Protein", name: "Barbacoa", portion: "4 oz", calories: 170, protein: 24, carbs: 2, fat: 7, sodium: 530, fiber: 1, sugar: 0, saturatedFat: 2.5 },
-      { id: "carnitas", group: "Protein", name: "Carnitas", portion: "4 oz", calories: 210, protein: 23, carbs: 0, fat: 12, sodium: 450, fiber: 0, sugar: 0, saturatedFat: 7 },
-      { id: "sofritas", group: "Protein", name: "Sofritas", portion: "4 oz", calories: 150, protein: 8, carbs: 9, fat: 10, sodium: 560, fiber: 3, sugar: 5, saturatedFat: 1.5 },
-      { id: "fresh-salsa", group: "Salsas", name: "Fresh tomato salsa", portion: "4 oz", calories: 25, protein: 0, carbs: 4, fat: 0, sodium: 550, fiber: 1, sugar: 1, saturatedFat: 0 },
-      { id: "corn-salsa", group: "Salsas", name: "Roasted chili-corn salsa", portion: "4 oz", calories: 80, protein: 3, carbs: 16, fat: 1.5, sodium: 330, fiber: 3, sugar: 4, saturatedFat: 0 },
-      { id: "green-salsa", group: "Salsas", name: "Tomatillo-green chili salsa", portion: "2 fl oz", calories: 15, protein: 0, carbs: 4, fat: 0, sodium: 260, fiber: 0, sugar: 2, saturatedFat: 0 },
-      { id: "red-salsa", group: "Salsas", name: "Tomatillo-red chili salsa", portion: "2 fl oz", calories: 30, protein: 0, carbs: 4, fat: 0, sodium: 500, fiber: 1, sugar: 0, saturatedFat: 0 },
-      { id: "sour-cream", group: "Toppings", name: "Sour cream", portion: "2 oz", calories: 110, protein: 2, carbs: 2, fat: 9, sodium: 30, fiber: 0, sugar: 1, saturatedFat: 7 },
-      { id: "cheese", group: "Toppings", name: "Cheese", portion: "1 oz", calories: 110, protein: 6, carbs: 1, fat: 8, sodium: 190, fiber: 0, sugar: 0, saturatedFat: 5 },
-      { id: "queso", group: "Toppings", name: "Queso blanco", portion: "2 oz", calories: 120, protein: 5, carbs: 4, fat: 9, sodium: 540, fiber: 0, sugar: 2, saturatedFat: 6 },
-      { id: "guac", group: "Toppings", name: "Guacamole", portion: "4 oz", calories: 230, protein: 2, carbs: 8, fat: 22, sodium: 370, fiber: 6, sugar: 1, saturatedFat: 3.5 },
-      { id: "lettuce", group: "Toppings", name: "Romaine lettuce", portion: "1 oz", calories: 5, protein: 0, carbs: 1, fat: 0, sodium: 0, fiber: 1, sugar: 0, saturatedFat: 0 },
-      { id: "vinaigrette", group: "Toppings", name: "Chipotle-honey vinaigrette", portion: "2 fl oz", calories: 220, protein: 1, carbs: 18, fat: 16, sodium: 850, fiber: 1, sugar: 12, saturatedFat: 2.5 },
-      { id: "chips", group: "Sides", name: "Chips", portion: "4 oz", calories: 540, protein: 7, carbs: 73, fat: 25, sodium: 390, fiber: 7, sugar: 1, saturatedFat: 3.5 },
-      { id: "chips-guac", group: "Sides", name: "Chips and guacamole", portion: "1 order", calories: 770, protein: 9, carbs: 81, fat: 47, sodium: 760, fiber: 13, sugar: 2, saturatedFat: 7 },
-      { id: "side-tortilla", group: "Sides", name: "Side tortilla", portion: "1 tortilla", calories: 320, protein: 8, carbs: 50, fat: 9, sodium: 600, fiber: 3, sugar: 0, saturatedFat: 0.5 },
-      { id: "apple-juice", group: "Drinks", name: "Apple juice", portion: "6.75 fl oz", calories: 100, protein: 0, carbs: 25, fat: 0, sodium: 15, fiber: 0, sugar: 22, saturatedFat: 0 },
-      { id: "iced-tea", group: "Drinks", name: "Iced tea", portion: "22 fl oz", calories: 10, protein: 0, carbs: 3, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 }
+      { id: "white-rice", group: "Rice", icon: "🍚", name: "White rice", portion: "4 oz", calories: 210, protein: 4, carbs: 40, fat: 4, sodium: 350, fiber: 1, sugar: 0, saturatedFat: 1 },
+      { id: "brown-rice", group: "Rice", icon: "🌾", name: "Brown rice", portion: "4 oz", calories: 210, protein: 4, carbs: 36, fat: 6, sodium: 190, fiber: 2, sugar: 0, saturatedFat: 0 },
+      { id: "cauli-rice", group: "Rice", icon: "✺", name: "Cauliflower rice", portion: "4 oz", calories: 40, protein: 3, carbs: 7, fat: 1, sodium: 210, fiber: 3, sugar: 2, saturatedFat: 0 },
+      { id: "black-beans", group: "Beans", icon: "⚫", name: "Black beans", portion: "4 oz", calories: 130, protein: 8, carbs: 22, fat: 1.5, sodium: 210, fiber: 7, sugar: 2, saturatedFat: 0 },
+      { id: "pinto-beans", group: "Beans", icon: "🫘", name: "Pinto beans", portion: "4 oz", calories: 130, protein: 8, carbs: 21, fat: 1.5, sodium: 210, fiber: 8, sugar: 1, saturatedFat: 0 },
+      { id: "chicken", group: "Protein", icon: "🍗", name: "Chicken", portion: "4 oz", calories: 180, protein: 32, carbs: 0, fat: 7, sodium: 310, fiber: 0, sugar: 0, saturatedFat: 3 },
+      { id: "steak", group: "Protein", icon: "🥩", name: "Steak", portion: "4 oz", calories: 150, protein: 21, carbs: 1, fat: 6, sodium: 330, fiber: 1, sugar: 0, saturatedFat: 2.5 },
+      { id: "barbacoa", group: "Protein", icon: "🍖", name: "Barbacoa", portion: "4 oz", calories: 170, protein: 24, carbs: 2, fat: 7, sodium: 530, fiber: 1, sugar: 0, saturatedFat: 2.5 },
+      { id: "carnitas", group: "Protein", icon: "♨", name: "Carnitas", portion: "4 oz", calories: 210, protein: 23, carbs: 0, fat: 12, sodium: 450, fiber: 0, sugar: 0, saturatedFat: 7 },
+      { id: "sofritas", group: "Protein", icon: "◒", name: "Sofritas", portion: "4 oz", calories: 150, protein: 8, carbs: 9, fat: 10, sodium: 560, fiber: 3, sugar: 5, saturatedFat: 1.5 },
+      { id: "fresh-salsa", group: "Salsa", icon: "🍅", name: "Fresh tomato salsa", portion: "4 oz", calories: 25, protein: 0, carbs: 4, fat: 0, sodium: 550, fiber: 1, sugar: 1, saturatedFat: 0 },
+      { id: "corn-salsa", group: "Salsa", icon: "🌽", name: "Roasted chili-corn salsa", portion: "4 oz", calories: 80, protein: 3, carbs: 16, fat: 1.5, sodium: 330, fiber: 3, sugar: 4, saturatedFat: 0 },
+      { id: "green-salsa", group: "Salsa", icon: "🫑", name: "Tomatillo-green chili salsa", portion: "2 fl oz", calories: 15, protein: 0, carbs: 4, fat: 0, sodium: 260, fiber: 0, sugar: 2, saturatedFat: 0 },
+      { id: "red-salsa", group: "Salsa", icon: "🌶", name: "Tomatillo-red chili salsa", portion: "2 fl oz", calories: 30, protein: 0, carbs: 4, fat: 0, sodium: 500, fiber: 1, sugar: 0, saturatedFat: 0 },
+      { id: "fajita", group: "Toppings", icon: "🫑", name: "Fajita vegetables", portion: "2 oz", calories: 20, protein: 1, carbs: 5, fat: 0, sodium: 150, fiber: 1, sugar: 2, saturatedFat: 0 },
+      { id: "lettuce", group: "Toppings", icon: "🥬", name: "Romaine lettuce", portion: "1 oz", calories: 5, protein: 0, carbs: 1, fat: 0, sodium: 0, fiber: 1, sugar: 0, saturatedFat: 0 },
+      { id: "cheese", group: "Toppings", icon: "🧀", name: "Cheese", portion: "1 oz", calories: 110, protein: 6, carbs: 1, fat: 8, sodium: 190, fiber: 0, sugar: 0, saturatedFat: 5 },
+      { id: "sour-cream", group: "Toppings", icon: "◌", name: "Sour cream", portion: "2 oz", calories: 110, protein: 2, carbs: 2, fat: 9, sodium: 30, fiber: 0, sugar: 1, saturatedFat: 7 },
+      { id: "queso", group: "Toppings", icon: "◍", name: "Queso blanco", portion: "2 oz", calories: 120, protein: 5, carbs: 4, fat: 9, sodium: 540, fiber: 0, sugar: 2, saturatedFat: 6 },
+      { id: "guac", group: "Sides", icon: "🥑", name: "Guacamole", portion: "4 oz", calories: 230, protein: 2, carbs: 8, fat: 22, sodium: 370, fiber: 6, sugar: 1, saturatedFat: 3.5 },
+      { id: "chips", group: "Sides", icon: "▱", name: "Chips", portion: "4 oz", calories: 540, protein: 7, carbs: 73, fat: 25, sodium: 390, fiber: 7, sugar: 1, saturatedFat: 3.5 },
+      { id: "chips-guac", group: "Sides", icon: "▰", name: "Chips + guac", portion: "1 order", calories: 770, protein: 9, carbs: 81, fat: 47, sodium: 760, fiber: 13, sugar: 2, saturatedFat: 7 },
+      { id: "side-tortilla", group: "Sides", icon: "◔", name: "Side tortilla", portion: "1 tortilla", calories: 320, protein: 8, carbs: 50, fat: 9, sodium: 600, fiber: 3, sugar: 0, saturatedFat: 0.5 }
     ];
 
     const presets = [
-      { name: "Lean Chicken Bowl", note: "High protein, lighter rice", format: "bowl", items: { chicken: 1, "brown-rice": 0.5, "black-beans": 0.5, fajita: 1, "fresh-salsa": 1, lettuce: 1 } },
-      { name: "High Protein Double Chicken", note: "More protein, standard carbs", format: "bowl", items: { chicken: 2, "white-rice": 1, "black-beans": 1, fajita: 1, "red-salsa": 1 } },
-      { name: "Lower Carb Steak Salad", note: "Greens, steak, guac", format: "salad", items: { steak: 1, fajita: 1, "green-salsa": 1, cheese: 1, guac: 0.5 } },
-      { name: "Veggie Bowl", note: "Beans, rice, guac", format: "bowl", items: { "brown-rice": 1, "black-beans": 1, fajita: 1, "corn-salsa": 1, "fresh-salsa": 1, guac: 1 } },
-      { name: "Burrito Reality Check", note: "Classic burrito estimate", format: "burrito", items: { chicken: 1, "white-rice": 1, "pinto-beans": 1, cheese: 1, "sour-cream": 1, "fresh-salsa": 1 } },
-      { name: "Chips + Guac Add-on", note: "Side-order impact", format: "bowl", items: { chips: 1, guac: 1 } }
+      { name: "Lean Chicken Bowl", note: "480 cal · 40g protein", icon: "🥗", format: "bowl", items: { chicken: 1, "brown-rice": 0.5, "black-beans": 0.5, fajita: 1, "fresh-salsa": 1, lettuce: 1 } },
+      { name: "High Protein Double Chicken", note: "790 cal · 73g protein", icon: "🍗", format: "bowl", items: { chicken: 2, "white-rice": 1, "black-beans": 1, fajita: 1, "red-salsa": 1 } },
+      { name: "Lower Carb Steak Salad", note: "520 cal · 44g protein", icon: "🥩", format: "salad", items: { steak: 1, fajita: 1, "green-salsa": 1, cheese: 1, guac: 0.5 } },
+      { name: "Veggie Bowl", note: "520 cal · 18g protein", icon: "🥑", format: "bowl", items: { "brown-rice": 1, "black-beans": 1, fajita: 1, "corn-salsa": 1, "fresh-salsa": 1, guac: 1 } },
+      { name: "Burrito Reality Check", note: "970 cal · 42g protein", icon: "🌯", format: "burrito", items: { chicken: 1, "white-rice": 1, "pinto-beans": 1, cheese: 1, "sour-cream": 1, "fresh-salsa": 1 } },
+      { name: "Chips + Guac", note: "770 cal · side impact", icon: "▰", format: "bowl", items: { "chips-guac": 1 } }
     ];
 
+    const groupOrder = ["Rice", "Beans", "Protein", "Salsa", "Toppings", "Sides"];
     const keys = ["calories", "protein", "carbs", "fat", "sodium", "fiber", "sugar", "saturatedFat"];
     const portions = [
-      { label: "0.5x", value: 0.5, title: "Light" },
-      { label: "1x", value: 1, title: "Normal" },
-      { label: "1.5x", value: 1.5, title: "Extra" },
-      { label: "2x", value: 2, title: "Double" }
+      { label: "L", value: 0.5, title: "Light" },
+      { label: "N", value: 1, title: "Normal" },
+      { label: "X", value: 1.5, title: "Extra" },
+      { label: "2X", value: 2, title: "Double" }
     ];
 
     let selectedFormat = "bowl";
-    let selected = {};
+    let selected = { chicken: 1, "white-rice": 1, "black-beans": 1, "fresh-salsa": 1, fajita: 1, lettuce: 1 };
 
     const byId = Object.fromEntries(items.map((item) => [item.id, item]));
     const formatById = Object.fromEntries(formats.map((item) => [item.id, item]));
@@ -281,7 +332,17 @@ const structuredData = [
     }
 
     function totalMeal() {
-      const totals = { ...formatById[selectedFormat] };
+      const base = formatById[selectedFormat];
+      const totals = {
+        calories: base.calories,
+        protein: base.protein,
+        carbs: base.carbs,
+        fat: base.fat,
+        sodium: base.sodium,
+        fiber: base.fiber,
+        sugar: base.sugar,
+        saturatedFat: base.saturatedFat
+      };
       Object.entries(selected).forEach(([id, multiplier]) => {
         const item = byId[id];
         if (!item) return;
@@ -307,52 +368,63 @@ const structuredData = [
       const target = document.querySelector("#format-grid");
       target.innerHTML = formats.map((format) => `
         <button type="button" class="format-button ${format.id === selectedFormat ? "active" : ""}" data-format="${format.id}" aria-pressed="${format.id === selectedFormat}">
+          <span class="food-thumb">${format.icon}</span>
           <strong>${format.name}</strong>
-          <span>${format.note}</span>
-          <em>${format.calories} cal</em>
+          <em>${format.note}</em>
         </button>
       `).join("");
     }
 
     function renderIngredients() {
       const target = document.querySelector("#ingredient-groups");
-      const groups = [...new Set(items.map((item) => item.group))];
-      target.innerHTML = groups.map((group) => `
-        <section class="ingredient-group">
-          <h3>${group}</h3>
-          <div class="ingredient-list">
-            ${items.filter((item) => item.group === group).map((item) => {
-              const multiplier = selected[item.id];
-              return `
-                <div class="ingredient-card ${multiplier ? "active" : ""}">
-                  <button type="button" class="item-toggle" data-item="${item.id}" aria-pressed="${Boolean(multiplier)}">
-                    <strong>${item.name}</strong>
-                    <span>${item.portion} | ${item.calories} cal | ${item.protein}g protein</span>
-                  </button>
-                  <div class="portion-row" aria-label="${item.name} portion">
-                    ${portions.map((portion) => `
-                      <button type="button" data-portion="${item.id}:${portion.value}" class="${multiplier === portion.value ? "active" : ""}" title="${portion.title} portion">${portion.label}</button>
-                    `).join("")}
+      target.innerHTML = groupOrder.map((group) => {
+        const groupItems = items.filter((item) => item.group === group);
+        const activeItem = groupItems.find((item) => selected[item.id]) || groupItems[0];
+        return `
+          <section class="ingredient-panel">
+            <div class="ingredient-panel-head">
+              <div class="panel-photo" aria-hidden="true">${activeItem.icon}</div>
+              <div>
+                <h3>${group}</h3>
+                <p>${activeItem.name}</p>
+              </div>
+            </div>
+            <div class="ingredient-options">
+              ${groupItems.map((item) => {
+                const multiplier = selected[item.id];
+                return `
+                  <div class="ingredient-row ${multiplier ? "active" : ""}">
+                    <button type="button" class="item-toggle" data-item="${item.id}" aria-pressed="${Boolean(multiplier)}">
+                      <span class="item-dot" aria-hidden="true">${item.icon}</span>
+                      <span>${item.name}</span>
+                      <small>${item.calories} cal</small>
+                    </button>
+                    <div class="portion-row" aria-label="${item.name} portion">
+                      ${portions.map((portion) => `
+                        <button type="button" data-portion="${item.id}:${portion.value}" class="${multiplier === portion.value ? "active" : ""}" title="${portion.title} portion">${portion.label}</button>
+                      `).join("")}
+                    </div>
                   </div>
-                </div>
-              `;
-            }).join("")}
-          </div>
-        </section>
-      `).join("");
+                `;
+              }).join("")}
+            </div>
+          </section>
+        `;
+      }).join("");
     }
 
     function renderPresets() {
       document.querySelector("#preset-list").innerHTML = presets.map((preset, index) => `
         <button type="button" class="preset-button" data-preset="${index}">
+          <span class="food-thumb small">${preset.icon}</span>
           <strong>${preset.name}</strong>
-          <span>${preset.note}</span>
+          <em>${preset.note}</em>
         </button>
       `).join("");
     }
 
     function renderReferenceTable() {
-      const featured = ["white-rice", "brown-rice", "black-beans", "chicken", "steak", "sofritas", "fresh-salsa", "cheese", "guac", "vinaigrette", "chips", "side-tortilla"];
+      const featured = ["white-rice", "brown-rice", "black-beans", "chicken", "steak", "sofritas", "fresh-salsa", "cheese", "guac", "chips", "side-tortilla"];
       document.querySelector("#reference-table").innerHTML = featured.map((id) => {
         const item = byId[id];
         return `<tr><td>${item.name}</td><td>${item.portion}</td><td>${item.calories}</td><td>${item.protein}g</td><td>${item.carbs}g</td><td>${item.fat}g</td></tr>`;
@@ -362,6 +434,7 @@ const structuredData = [
     function updateTotals() {
       const totals = totalMeal();
       document.querySelector("#total-calories").textContent = rounded(totals.calories);
+      document.querySelector("#dock-calories").textContent = rounded(totals.calories);
       document.querySelector("#total-protein").textContent = formatMacro(totals.protein);
       document.querySelector("#total-carbs").textContent = formatMacro(totals.carbs);
       document.querySelector("#total-fat").textContent = formatMacro(totals.fat);
@@ -369,8 +442,8 @@ const structuredData = [
       document.querySelector("#total-fiber").textContent = formatMacro(totals.fiber);
       document.querySelector("#total-sugar").textContent = formatMacro(totals.sugar);
       document.querySelector("#total-sat-fat").textContent = formatMacro(totals.saturatedFat);
-      document.querySelector("#total-net-carbs").textContent = formatMacro(totals.netCarbs);
       document.querySelector("#selected-summary").textContent = selectedText();
+      document.querySelector("#compare-burrito").textContent = selectedFormat === "burrito" ? "included" : "+320 cal";
     }
 
     function applyPreset(index) {
@@ -412,6 +485,36 @@ const structuredData = [
       });
     }
 
+    function mealSummary() {
+      const totals = totalMeal();
+      return `Chipotle-style meal estimate: ${rounded(totals.calories)} calories, ${formatMacro(totals.protein)} protein, ${formatMacro(totals.carbs)} carbs, ${formatMacro(totals.fat)} fat, ${rounded(totals.sodium)}mg sodium. ${selectedText()}`;
+    }
+
+    async function copySummary(button) {
+      const summary = mealSummary();
+      try {
+        await navigator.clipboard.writeText(summary);
+        const original = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => {
+          button.textContent = original;
+        }, 1400);
+      } catch {
+        document.querySelector("#selected-summary").textContent = summary;
+      }
+    }
+
+    async function shareMeal() {
+      const text = mealSummary();
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: "Chipotle Nutrition Calculator", text, url: window.location.href });
+          return;
+        } catch {}
+      }
+      await copySummary(document.querySelector("#share-meal"));
+    }
+
     function render() {
       renderFormats();
       renderIngredients();
@@ -427,18 +530,11 @@ const structuredData = [
       render();
     });
 
-    document.querySelector("#copy-summary").addEventListener("click", async () => {
-      const totals = totalMeal();
-      const summary = `Chipotle meal estimate: ${rounded(totals.calories)} calories, ${formatMacro(totals.protein)} protein, ${formatMacro(totals.carbs)} carbs, ${formatMacro(totals.fat)} fat, ${rounded(totals.sodium)}mg sodium. ${selectedText()}`;
-      try {
-        await navigator.clipboard.writeText(summary);
-        document.querySelector("#copy-summary").textContent = "Copied";
-        window.setTimeout(() => {
-          document.querySelector("#copy-summary").textContent = "Copy summary";
-        }, 1400);
-      } catch {
-        document.querySelector("#selected-summary").textContent = summary;
-      }
+    document.querySelector("#copy-summary").addEventListener("click", (event) => copySummary(event.currentTarget));
+    document.querySelector("#dock-copy").addEventListener("click", (event) => copySummary(event.currentTarget));
+    document.querySelector("#share-meal").addEventListener("click", shareMeal);
+    document.querySelector("#portion-guide").addEventListener("click", () => {
+      document.querySelector("#selected-summary").textContent = "Portion guide: L = light half portion, N = normal portion, X = extra 1.5x portion, 2X = double portion.";
     });
 
     const params = new URLSearchParams(window.location.search);

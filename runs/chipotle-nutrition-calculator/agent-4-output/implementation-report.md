@@ -1,5 +1,30 @@
 # Implementation Report
 
+## UI Modification Update
+
+Status: completed.
+
+The production Astro site has been updated to follow the Agent 2.5 selected Option B direction:
+
+- Bright food-utility board with a yellow live nutrition ribbon.
+- First viewport remains the calculator experience.
+- Meal format selector uses original non-official visual tokens.
+- Ingredient groups are grouped as rice, beans, protein, salsa, toppings, and sides.
+- Portion controls are available for light, normal, extra, and double.
+- Quick presets, compare cards, source note, copy, share, and reset actions are preserved.
+
+Build verification after the UI modification:
+
+```bash
+npm run build
+```
+
+Result:
+
+- `astro check`: 0 errors, 0 warnings, 0 hints.
+- `astro build`: passed.
+- Output directory: `site/dist/`.
+
 ## Summary
 
 Implemented the production Astro site in `runs/chipotle-nutrition-calculator/site/`.

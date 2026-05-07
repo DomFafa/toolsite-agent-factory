@@ -10,6 +10,7 @@
   "agent_outputs": {
     "agent_1": null,
     "agent_2": null,
+    "agent_2_5": null,
     "agent_3": null,
     "agent_4": null,
     "agent_5": null,

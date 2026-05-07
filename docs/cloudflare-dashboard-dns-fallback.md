@@ -10,7 +10,7 @@ This fallback uses the user's authenticated Cloudflare Dashboard session through
 
 Use this fallback when all are true:
 
-- Agent 5 QA passed.
+- Agent 5 Final QA passed.
 - `approval.md` authorizes production launch.
 - The Cloudflare zone is active.
 - Pages project creation or deployment succeeded.

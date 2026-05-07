@@ -25,26 +25,35 @@ Agent 2 receives:
 - Primary keyword
 - Target domain
 - Brief requirements
-- Optional UI reference object
+- Optional UI reference objects
 
-It produces a complete site brief for Agent 3 and Agent 4.
+It produces product, SEO, content, tool specs, and a UI reference dossier for Agent 2.5.
 
-## Phase 3: Code-first UI
+## Phase 2.5: UI design generation
 
-Agent 3 writes UI code first, runs it locally, and captures desktop/mobile screenshots from the actual rendered page. The browser screenshots are the final effect images.
+Agent 2.5 uses `web-access` to generate UI design directions and corresponding frontend code through the ChatGPT web UI or another approved design generation surface.
 
-If a UI reference is provided, Agent 3 uses it as medium reference only: color direction, card feeling, illustration tone, or layout rhythm. It must not clone or copy the reference site.
+This step is mandatory even when no UI references are provided.
+
+## Phase 2.6: Design Gate
+
+Agent 5 runs in Design Gate mode. It reviews the selected design before implementation. Agent 3 cannot start until this gate passes.
+
+## Phase 3: Approved UI prototype
+
+Agent 3 cleans the Agent 5-approved design code, runs it locally, and captures desktop/mobile screenshots from the actual rendered page. It must not freely redesign.
 
 ## Phase 4: Astro implementation
 
-Agent 4 implements the site in Astro using Agent 3 output. It must not redesign the UI.
+Agent 4 implements the site in Astro using Agent 3 output. It must not redesign the approved UI.
 
 ## Phase 5: QA
 
-Agent 5 checks:
+Agent 5 runs again in Final QA mode and checks:
 
 - Desktop UI screenshot vs actual implementation
 - Mobile UI screenshot vs actual implementation
+- Agent 2.5 selected design vs actual implementation
 - SEO metadata
 - Structured data
 - Tool behavior
@@ -58,7 +67,7 @@ Agent 5 checks:
 
 Agent 6 runs only after:
 
-- Agent 5 passed
+- Agent 5 Final QA passed
 - `approval.md` is completed
 - Cloudflare zone is active
 - Domain nameservers already point to Cloudflare
