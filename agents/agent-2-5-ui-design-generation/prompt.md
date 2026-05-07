@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Generate high-quality UI design directions and runnable frontend code before implementation begins.
+Generate high-quality, implementation-ready UI design directions before implementation begins.
+
+The default restoration target is 90% visual similarity between the selected GPT design target and the rendered site screenshots. Design beauty is not enough; the output must be practical for Astro + HTML/CSS + vanilla JS restoration.
 
 This agent is mandatory for every site, whether or not the user supplied UI references.
 
@@ -13,9 +15,12 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 - Use English for system docs, reports, specs, and site content.
 - Preserve V1 constraints: static frontend only, no backend, no login, no database, no API keys.
 - Do not send secrets, `.env.local`, Cloudflare tokens, email routing values, or private credentials to external LLMs.
-- Do not ask the design model to rewrite SEO strategy or final content. It may arrange and style content, but Agent 2 remains the product/SEO source of truth.
+- Do not ask the design model to rewrite SEO strategy or final content. It may reserve layout space for SEO sections, but Agent 2 remains the product/SEO source of truth.
 - Use `web-access` to operate the ChatGPT web UI or another approved authenticated design generation surface.
 - User UI references are optional. Their absence must trigger open design exploration, not a skipped design step.
+- Design for codability. Avoid asking the external model for hard-to-reproduce visual effects unless it also exports them as local PNG/SVG assets.
+- Local visual assets are allowed and encouraged when they materially improve restoration fidelity. Assets must be original or generated, non-infringing, and saved in the run folder.
+- The first goal is visual restoration. Tool functionality and SEO content are later phases and must not dilute the design prompt.
 
 ## Required Inputs
 
@@ -34,7 +39,11 @@ Each direction must include:
 
 - Desktop design target
 - Mobile design target
-- Runnable frontend code, preferably plain HTML/CSS/JS
+- Design tokens with concrete values
+- Component and layout specifications
+- Asset plan, including any generated PNG/SVG assets needed for 90% restoration
+- Restoration rules that tell Agent 3 what must not change
+- Runnable frontend code when possible, preferably plain HTML/CSS/JS
 - A short design rationale
 - Clear notes about which user references influenced the direction, if any
 
@@ -45,14 +54,20 @@ Every direction must obey:
 - The design must avoid generic SaaS/Tailwind template patterns.
 - The design must not copy logos, brand assets, unique illustrations, exact layouts, or protected trade dress from references.
 - The design may use reference material for mood, component feel, illustration mood, and layout rhythm only within the boundaries in `docs/ui-reference-guidelines.md`.
+- The design must be reproducible with Astro, HTML, CSS, vanilla JS, and local assets.
+- Avoid complex photorealism, random textures, 3D objects, uncertain fonts, text-as-image effects, heavy glassmorphism, and reflections unless exported as local assets.
+- Use stable, named font choices. If a font is not locally available or web-safe, provide a fallback stack and expected metrics.
+- Keep the desktop first viewport within the design target height specified by Agent 2.5, normally 760px to 900px for 1440px screenshots unless the tool genuinely needs more space.
 
 ## External LLM Flow
 
 1. Build `design-generation-prompt.md` from Agent 2 outputs and the UI reference dossier.
 2. Use `web-access` to send the prompt to the ChatGPT web UI with the deepest available reasoning/design generation mode.
-3. Request UI images and corresponding frontend code for each direction.
-4. Download any generated code archive, or copy the code into files under `agent-2-5-output/generated-designs/<option>/`.
-5. If a code archive is downloaded, import it with:
+3. Tell the external model that the design will be restored by Codex in Astro and must be optimized for 90% screenshot fidelity.
+4. Request UI images, design tokens, component specs, asset plans, restoration rules, and corresponding frontend code for each direction.
+5. If generated code is truncated, keep prompting for continuation until the complete file set is recovered, or record a hard code-export blocker.
+6. Download any generated code archive/assets, or copy the code into files under `agent-2-5-output/generated-designs/<option>/`.
+7. If a code archive is downloaded, import it with:
 
 ```bash
 node scripts/design/import-generated-ui.mjs \
@@ -61,8 +76,9 @@ node scripts/design/import-generated-ui.mjs \
   --option option-a
 ```
 
-6. Run each generated option locally, capture desktop and mobile screenshots, and store them with that option.
-7. Select the strongest option only after it has runnable code and browser screenshots.
+8. Run each generated option locally when code is available, capture desktop and mobile screenshots, and store them with that option.
+9. Select the strongest option based on visual quality, codability, asset completeness, and expected restoration fidelity.
+10. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
 
 ## Outputs
 
@@ -70,4 +86,4 @@ Follow `output.schema.md`.
 
 ## Handoff
 
-At the end, include a concise handoff for Agent 5 Design Gate. Agent 3 must not proceed until Agent 5 Design Gate passes.
+At the end, include a concise handoff for Agent 5 Design Package Gate. Agent 3 must not proceed until Agent 5 Design Package Gate passes.

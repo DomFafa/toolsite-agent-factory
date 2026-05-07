@@ -3,7 +3,7 @@
 ## Example invocation
 
 ```txt
-Execute Agent 3 — UI Code Prototype for runs/keyword-density-checker.
+Execute Agent 3 — Static Visual Restoration Prototype for runs/keyword-density-checker.
 Read this agent folder, the run input, and all prior agent outputs.
 Write only to the correct agent output folder.
 ```
@@ -12,7 +12,7 @@ Write only to the correct agent output folder.
 
 ```txt
 Status: pass
-Main decision: <short decision>
+Visual match: 90% or higher
 Files written: <files>
-Next agent: <handoff>
+Next agent: Agent 5 Visual Restoration Gate
 ```

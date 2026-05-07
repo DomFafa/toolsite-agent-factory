@@ -1,8 +1,12 @@
 # Implementation Handoff
 
-## Accepted Prototype
+## Accepted Visual Restoration
 
-The code prototype in `prototype-code/` defines the accepted UI direction.
+The Astro implementation in `site/` now defines the accepted UI direction for the next step. The old `prototype-code/` remains historical context, but the current visual lock is captured by:
+
+- `final-screenshots/ui-restore-desktop.png`
+- `final-screenshots/ui-restore-mobile.png`
+- `visual-lock.md`
 
 ## Required Carryover
 
@@ -10,15 +14,16 @@ The code prototype in `prototype-code/` defines the accepted UI direction.
 - Use the nutrition totals panel as the primary visual anchor.
 - Keep ingredient groups compact.
 - Keep portion controls embedded in selected ingredient chips.
-- Add production SEO, structured data, legal notes, privacy/terms pages, sitemap, and robots handling in Agent 4.
+- Preserve the local UI artwork in `site/public/ui-assets/`.
+- Add or refine functionality inside the locked shell. Do not redesign the shell.
 
 ## Known Gaps For Agent 4
 
-- Prototype has representative data only; production should include a broader core data set.
-- Prototype lacks structured data and SEO metadata.
-- Prototype copy action has no visible success state.
-- Prototype is plain HTML, not Astro.
+- Visual match is estimated at 89%, so Agent 5 should keep the 90% visual gate active.
+- Mobile currently locks the Rice panel as the visible first group. Group switching can be added later without changing the shell.
+- Compare cards are simplified versus the exact GPT mock.
+- SEO expansion must wait until after the visual gate is accepted.
 
 ## Handoff To Agent 4
 
-Build the production Astro site in `runs/chipotle-nutrition-calculator/site/` using this prototype direction. Do not redesign the interface.
+Continue from `runs/chipotle-nutrition-calculator/site/` and keep the current UI as the visual lock. Do not redesign the interface when adding functionality or SEO.

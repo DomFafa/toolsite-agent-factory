@@ -12,9 +12,10 @@ Write only to runs/chipotle-nutrition-calculator/agent-2-5-output.
 ## Example output summary
 
 ```txt
-Status: design gate ready
+Status: design package gate ready
 Mode: open-exploration
 Options generated: option-a, option-b, option-c
 Selected option: option-b
-Next agent: Agent 5 Design Gate
+Visual target: 90%
+Next agent: Agent 5 Design Package Gate
 ```

@@ -2,15 +2,15 @@
 
 ## Concept
 
-The final interface should feel like a precise nutrition ticket for a custom fast-casual order. The calculator is the product, so it starts in the first viewport with live totals, meal format controls, ingredient groups, and preset orders.
+The final interface should match GPT Option B: playful, fresh, food-first, and calculator-led. The calculator is the product, so it starts in the first viewport with live totals, meal format controls, ingredient groups, presets, comparison cards, and source note.
 
 ## Visual System
 
-- Tone: clean, practical, food-counter utility.
-- Layout: dense desktop grid with a sticky totals rail; single-column mobile layout with the totals panel first.
-- Color: warm paper base, dark ink, fresh green actions, tomato red warnings, muted corn/yellow accents.
-- Typography: characterful sans-serif for interface labels, mono numerals for nutrition totals.
-- Components: segmented meal selector, ingredient chips, compact portion controls, nutrition-label total panel, comparison strips.
+- Tone: playful, fresh, reassuring, still utility-first.
+- Layout: rounded desktop calculator board; app-like mobile calculator shell.
+- Color: warm paper base, dark brown ink, fresh green actions, tomato red action accents, bright yellow nutrition ribbon.
+- Typography: serif title, heavy compact interface labels, bold nutrition numerals.
+- Components: segmented meal selector, photo-led ingredient panels, compact portion pills, yellow nutrition totals, preset cards, comparison cards, source band.
 
 ## UX Priorities
 
@@ -22,4 +22,4 @@ The final interface should feel like a precise nutrition ticket for a custom fas
 
 ## Handoff To Agent 4
 
-Implement this direction in Astro as a static site with local browser JavaScript. Do not add backend calls or external data fetching.
+Continue this direction in Astro with local browser JavaScript. Preserve the visual lock before adding functionality, SEO, or deployment changes.

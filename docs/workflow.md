@@ -31,21 +31,33 @@ It produces product, SEO, content, tool specs, and a UI reference dossier for Ag
 
 ## Phase 2.5: UI design generation
 
-Agent 2.5 uses `web-access` to generate UI design directions and corresponding frontend code through the ChatGPT web UI or another approved design generation surface.
+Agent 2.5 uses `web-access` to generate UI design directions and implementation-ready design packages through the ChatGPT web UI or another approved design generation surface.
 
 This step is mandatory even when no UI references are provided.
 
-## Phase 2.6: Design Gate
+The default restoration target is 90%. Agent 2.5 must request codable UI output: target screenshots, design tokens, component specs, asset plans, restoration rules, forbidden deviations, and frontend code when available.
 
-Agent 5 runs in Design Gate mode. It reviews the selected design before implementation. Agent 3 cannot start until this gate passes.
+## Phase 2.6: Design Package Gate
 
-## Phase 3: Approved UI prototype
+Agent 5 runs in Design Package Gate mode. It reviews the selected design package before implementation. Agent 3 cannot start until this gate passes.
 
-Agent 3 cleans the Agent 5-approved design code, runs it locally, and captures desktop/mobile screenshots from the actual rendered page. It must not freely redesign.
+## Phase 3: Static visual restoration
+
+Agent 3 creates a static visual restoration prototype from the approved design package, runs it locally, and captures desktop/mobile screenshots from the actual rendered page.
+
+Agent 3 must not implement calculator functionality, SEO sections, FAQ, schema, sitemap, production indexing, or deployment. The only goal is to make the rendered screenshots match the selected design target at 90% or higher.
+
+## Phase 3.5: Visual Restoration Gate
+
+Agent 5 runs in Visual Restoration Gate mode. It compares Agent 3 rendered screenshots against the Agent 2.5 selected design target.
+
+Agent 4 cannot start until desktop and mobile visual match scores are at least 90%, unless the user explicitly approves an exception.
 
 ## Phase 4: Astro implementation
 
 Agent 4 implements the site in Astro using Agent 3 output. It must not redesign the approved UI.
+
+Functionality is added after the visual gate. SEO metadata, SEO content sections, FAQ, schema, sitemap, and robots logic are added after the visual gate and must not disturb the visual lock.
 
 ## Phase 5: QA
 

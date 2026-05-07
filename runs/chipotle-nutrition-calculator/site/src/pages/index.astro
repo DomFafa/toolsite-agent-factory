@@ -67,50 +67,57 @@ const structuredData = [
       <div class="doodle leaf-two" aria-hidden="true"></div>
 
       <header class="board-header">
-        <div class="brand-mark" aria-hidden="true">◎</div>
+        <div class="brand-mark" aria-hidden="true"></div>
         <div class="header-copy">
           <p class="eyebrow">Independent meal estimator</p>
-          <h1 id="page-title">Chipotle Nutrition Calculator</h1>
-          <p>Build your meal, see your nutrition, make smarter choices before you order.</p>
+          <h1 id="page-title">Chipotle<span class="mobile-title-break"><br /></span> Nutrition Calculator</h1>
+          <p>Build your meal, see your nutrition, make choices you'll feel good about.</p>
         </div>
         <div class="header-actions" aria-label="Meal actions">
-          <button type="button" class="text-action" id="copy-summary">Copy meal</button>
-          <button type="button" class="text-action" id="share-meal">Share</button>
           <button type="button" class="clear-action" id="clear-all">Clear all</button>
+          <button type="button" class="text-action" id="share-meal">Share meal</button>
         </div>
       </header>
 
       <section class="nutrition-ribbon" aria-label="Live meal totals" aria-live="polite">
         <div class="ribbon-cell featured">
+          <i aria-hidden="true">♨</i>
           <span>Calories</span>
           <strong id="total-calories">0</strong>
           <em>kcal</em>
         </div>
         <div class="ribbon-cell">
+          <i aria-hidden="true">◔</i>
           <span>Protein</span>
           <strong id="total-protein">0g</strong>
         </div>
         <div class="ribbon-cell">
+          <i aria-hidden="true">♧</i>
           <span>Carbs</span>
           <strong id="total-carbs">0g</strong>
         </div>
         <div class="ribbon-cell">
+          <i aria-hidden="true">◌</i>
           <span>Fat</span>
           <strong id="total-fat">0g</strong>
         </div>
         <div class="ribbon-cell">
+          <i aria-hidden="true">▥</i>
           <span>Sodium</span>
           <strong id="total-sodium">0mg</strong>
         </div>
         <div class="ribbon-cell">
+          <i aria-hidden="true">♮</i>
           <span>Fiber</span>
           <strong id="total-fiber">0g</strong>
         </div>
         <div class="ribbon-cell">
+          <i aria-hidden="true">✣</i>
           <span>Sugar</span>
           <strong id="total-sugar">0g</strong>
         </div>
         <div class="ribbon-cell">
+          <i aria-hidden="true">♡</i>
           <span>Sat fat</span>
           <strong id="total-sat-fat">0g</strong>
         </div>
@@ -118,10 +125,9 @@ const structuredData = [
 
       <section class="meal-step" aria-labelledby="meal-format-title">
         <div class="step-title">
-          <span>1</span>
+          <span>1.</span>
           <div>
             <h2 id="meal-format-title">Choose your meal</h2>
-            <p>Start with the format. Tortillas and shells count before any fillings.</p>
           </div>
         </div>
         <div class="format-grid" id="format-grid"></div>
@@ -130,19 +136,18 @@ const structuredData = [
       <section class="builder-zone" aria-labelledby="builder-title">
         <div class="builder-heading">
           <div class="step-title">
-            <span>2</span>
+            <span>2.</span>
             <div>
               <h2 id="builder-title">Build your meal</h2>
-              <p>Select ingredients and adjust each portion.</p>
             </div>
           </div>
-          <button type="button" class="portion-guide" id="portion-guide">Portion guide</button>
+          <button type="button" class="portion-guide" id="portion-guide">Portion size guide</button>
         </div>
         <div class="ingredient-groups" id="ingredient-groups"></div>
       </section>
 
       <section class="preset-strip" aria-labelledby="presets-title">
-        <div>
+        <div class="strip-title">
           <h2 id="presets-title">Quick presets</h2>
           <p>Popular builds to get you started.</p>
         </div>
@@ -156,16 +161,19 @@ const structuredData = [
         </div>
         <div class="compare-grid">
           <article>
+            <img src="/ui-assets/compare-bowl.png" alt="" loading="lazy" />
             <span>Bowl vs burrito</span>
             <strong id="compare-burrito">+320 cal</strong>
             <p>Same fillings, flour tortilla added.</p>
           </article>
           <article>
+            <img src="/ui-assets/compare-rice.png" alt="" loading="lazy" />
             <span>Normal vs extra rice</span>
             <strong>+105 cal</strong>
             <p>Extra rice is roughly half a serving more.</p>
           </article>
           <article>
+            <img src="/ui-assets/compare-chips.png" alt="" loading="lazy" />
             <span>With vs without chips</span>
             <strong>+540 cal</strong>
             <p>Chips can outweigh many lean toppings.</p>
@@ -183,12 +191,20 @@ const structuredData = [
       </section>
 
       <section class="source-band" aria-labelledby="source-title">
-        <div class="illustration-note" aria-hidden="true">✦</div>
+        <div class="illustration-note" aria-hidden="true"></div>
         <div>
           <h2 id="source-title">Source & accuracy</h2>
           <p>Nutrition estimates use published US menu nutrition data and standard portions. Values vary by location, availability, recipe changes, and how a meal is prepared.</p>
         </div>
+        <p class="source-hand">Good choices.<br />Real results.</p>
       </section>
+
+      <nav class="mobile-tabbar" aria-label="Mobile calculator sections">
+        <a href="#presets-title">Presets</a>
+        <a class="active" href="#builder-title">Build</a>
+        <a href="#compare-title">Compare</a>
+        <a href="#source-title">About</a>
+      </nav>
     </section>
 
     <section class="content-band" aria-labelledby="how-it-works">
@@ -266,24 +282,27 @@ const structuredData = [
 
   <script is:inline>
     const formats = [
-      { id: "bowl", name: "Bowl", icon: "🥗", note: "No shell", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
-      { id: "burrito", name: "Burrito", icon: "🌯", note: "Flour tortilla", calories: 320, protein: 8, carbs: 50, fat: 9, sodium: 600, fiber: 3, sugar: 0, saturatedFat: 0.5 },
-      { id: "salad", name: "Salad", icon: "🥬", note: "Supergreens", calories: 15, protein: 1, carbs: 3, fat: 0, sodium: 20, fiber: 2, sugar: 1, saturatedFat: 0 },
-      { id: "tacos", name: "Tacos", icon: "🌮", note: "3 crispy shells", calories: 210, protein: 3, carbs: 30, fat: 9, sodium: 0, fiber: 3, sugar: 0, saturatedFat: 0 },
-      { id: "quesadilla", name: "Quesadilla", icon: "◐", note: "Tortilla + cheese", calories: 430, protein: 14, carbs: 51, fat: 17, sodium: 790, fiber: 3, sugar: 1, saturatedFat: 8.5 }
+      { id: "bowl", name: "Bowl", image: "/ui-assets/format-bowl.png", note: "No shell", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
+      { id: "burrito", name: "Burrito", image: "/ui-assets/format-burrito.png", note: "Flour tortilla", calories: 320, protein: 8, carbs: 50, fat: 9, sodium: 600, fiber: 3, sugar: 0, saturatedFat: 0.5 },
+      { id: "salad", name: "Salad", image: "/ui-assets/format-salad.png", note: "Supergreens", calories: 15, protein: 1, carbs: 3, fat: 0, sodium: 20, fiber: 2, sugar: 1, saturatedFat: 0 },
+      { id: "tacos", name: "Tacos", image: "/ui-assets/format-tacos.png", note: "3 crispy shells", calories: 210, protein: 3, carbs: 30, fat: 9, sodium: 0, fiber: 3, sugar: 0, saturatedFat: 0 },
+      { id: "quesadilla", name: "Quesadilla", image: "/ui-assets/format-quesadilla.png", note: "Tortilla + cheese", calories: 430, protein: 14, carbs: 51, fat: 17, sodium: 790, fiber: 3, sugar: 1, saturatedFat: 8.5 }
     ];
 
     const items = [
       { id: "white-rice", group: "Rice", icon: "🍚", name: "White rice", portion: "4 oz", calories: 210, protein: 4, carbs: 40, fat: 4, sodium: 350, fiber: 1, sugar: 0, saturatedFat: 1 },
       { id: "brown-rice", group: "Rice", icon: "🌾", name: "Brown rice", portion: "4 oz", calories: 210, protein: 4, carbs: 36, fat: 6, sodium: 190, fiber: 2, sugar: 0, saturatedFat: 0 },
       { id: "cauli-rice", group: "Rice", icon: "✺", name: "Cauliflower rice", portion: "4 oz", calories: 40, protein: 3, carbs: 7, fat: 1, sodium: 210, fiber: 3, sugar: 2, saturatedFat: 0 },
+      { id: "no-rice", group: "Rice", icon: "○", name: "No rice", portion: "0 oz", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
       { id: "black-beans", group: "Beans", icon: "⚫", name: "Black beans", portion: "4 oz", calories: 130, protein: 8, carbs: 22, fat: 1.5, sodium: 210, fiber: 7, sugar: 2, saturatedFat: 0 },
       { id: "pinto-beans", group: "Beans", icon: "🫘", name: "Pinto beans", portion: "4 oz", calories: 130, protein: 8, carbs: 21, fat: 1.5, sodium: 210, fiber: 8, sugar: 1, saturatedFat: 0 },
+      { id: "no-beans", group: "Beans", icon: "○", name: "No beans", portion: "0 oz", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
       { id: "chicken", group: "Protein", icon: "🍗", name: "Chicken", portion: "4 oz", calories: 180, protein: 32, carbs: 0, fat: 7, sodium: 310, fiber: 0, sugar: 0, saturatedFat: 3 },
       { id: "steak", group: "Protein", icon: "🥩", name: "Steak", portion: "4 oz", calories: 150, protein: 21, carbs: 1, fat: 6, sodium: 330, fiber: 1, sugar: 0, saturatedFat: 2.5 },
       { id: "barbacoa", group: "Protein", icon: "🍖", name: "Barbacoa", portion: "4 oz", calories: 170, protein: 24, carbs: 2, fat: 7, sodium: 530, fiber: 1, sugar: 0, saturatedFat: 2.5 },
       { id: "carnitas", group: "Protein", icon: "♨", name: "Carnitas", portion: "4 oz", calories: 210, protein: 23, carbs: 0, fat: 12, sodium: 450, fiber: 0, sugar: 0, saturatedFat: 7 },
       { id: "sofritas", group: "Protein", icon: "◒", name: "Sofritas", portion: "4 oz", calories: 150, protein: 8, carbs: 9, fat: 10, sodium: 560, fiber: 3, sugar: 5, saturatedFat: 1.5 },
+      { id: "no-protein", group: "Protein", icon: "○", name: "No protein", portion: "0 oz", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
       { id: "fresh-salsa", group: "Salsa", icon: "🍅", name: "Fresh tomato salsa", portion: "4 oz", calories: 25, protein: 0, carbs: 4, fat: 0, sodium: 550, fiber: 1, sugar: 1, saturatedFat: 0 },
       { id: "corn-salsa", group: "Salsa", icon: "🌽", name: "Roasted chili-corn salsa", portion: "4 oz", calories: 80, protein: 3, carbs: 16, fat: 1.5, sodium: 330, fiber: 3, sugar: 4, saturatedFat: 0 },
       { id: "green-salsa", group: "Salsa", icon: "🫑", name: "Tomatillo-green chili salsa", portion: "2 fl oz", calories: 15, protein: 0, carbs: 4, fat: 0, sodium: 260, fiber: 0, sugar: 2, saturatedFat: 0 },
@@ -300,15 +319,43 @@ const structuredData = [
     ];
 
     const presets = [
-      { name: "Lean Chicken Bowl", note: "480 cal · 40g protein", icon: "🥗", format: "bowl", items: { chicken: 1, "brown-rice": 0.5, "black-beans": 0.5, fajita: 1, "fresh-salsa": 1, lettuce: 1 } },
-      { name: "High Protein Double Chicken", note: "790 cal · 73g protein", icon: "🍗", format: "bowl", items: { chicken: 2, "white-rice": 1, "black-beans": 1, fajita: 1, "red-salsa": 1 } },
-      { name: "Lower Carb Steak Salad", note: "520 cal · 44g protein", icon: "🥩", format: "salad", items: { steak: 1, fajita: 1, "green-salsa": 1, cheese: 1, guac: 0.5 } },
-      { name: "Veggie Bowl", note: "520 cal · 18g protein", icon: "🥑", format: "bowl", items: { "brown-rice": 1, "black-beans": 1, fajita: 1, "corn-salsa": 1, "fresh-salsa": 1, guac: 1 } },
-      { name: "Burrito Reality Check", note: "970 cal · 42g protein", icon: "🌯", format: "burrito", items: { chicken: 1, "white-rice": 1, "pinto-beans": 1, cheese: 1, "sour-cream": 1, "fresh-salsa": 1 } },
-      { name: "Chips + Guac", note: "770 cal · side impact", icon: "▰", format: "bowl", items: { "chips-guac": 1 } }
+      { name: "Lean Chicken Bowl", note: "480 cal · 40g protein", image: "/ui-assets/preset-bowl.png", format: "bowl", items: { chicken: 1, "brown-rice": 0.5, "black-beans": 0.5, fajita: 1, "fresh-salsa": 1, lettuce: 1 } },
+      { name: "High Protein Double Chicken", note: "790 cal · 73g protein", image: "/ui-assets/preset-chicken.png", format: "bowl", items: { chicken: 2, "white-rice": 1, "black-beans": 1, fajita: 1, "red-salsa": 1 } },
+      { name: "Lower Carb Steak Salad", note: "520 cal · 44g protein", image: "/ui-assets/preset-salad.png", format: "salad", items: { steak: 1, fajita: 1, "green-salsa": 1, cheese: 1, guac: 0.5 } },
+      { name: "Veggie Bowl", note: "520 cal · 18g protein", image: "/ui-assets/preset-veggie.png", format: "bowl", items: { "brown-rice": 1, "black-beans": 1, fajita: 1, "corn-salsa": 1, "fresh-salsa": 1, guac: 1 } },
+      { name: "Burrito Reality Check", note: "970 cal · 42g protein", image: "/ui-assets/preset-burrito.png", format: "burrito", items: { chicken: 1, "white-rice": 1, "pinto-beans": 1, cheese: 1, "sour-cream": 1, "fresh-salsa": 1 } },
+      { name: "Chips + Guac", note: "770 cal · side impact", image: "/ui-assets/preset-chips.png", format: "bowl", items: { "chips-guac": 1 } }
     ];
 
     const groupOrder = ["Rice", "Beans", "Protein", "Salsa", "Toppings", "Sides"];
+    const groupArt = {
+      Rice: "/ui-assets/group-rice.png",
+      Beans: "/ui-assets/group-beans.png",
+      Protein: "/ui-assets/group-protein.png",
+      Salsa: "/ui-assets/group-salsa.png",
+      Toppings: "/ui-assets/group-toppings.png",
+      Sides: "/ui-assets/group-sides.png"
+    };
+    const compactLabels = {
+      "white-rice": "White rice",
+      "brown-rice": "Brown rice",
+      "cauli-rice": "Cauli rice",
+      "no-rice": "No rice",
+      "black-beans": "Black beans",
+      "pinto-beans": "Pinto beans",
+      "no-beans": "No beans",
+      "no-protein": "No protein",
+      "fresh-salsa": "Fresh salsa",
+      "corn-salsa": "Corn salsa",
+      "green-salsa": "Green salsa",
+      "red-salsa": "Red salsa",
+      fajita: "Fajita",
+      lettuce: "Romaine",
+      "sour-cream": "Sour cream",
+      guac: "Guacamole",
+      "chips-guac": "Chips + guac",
+      "side-tortilla": "Tortilla"
+    };
     const keys = ["calories", "protein", "carbs", "fat", "sodium", "fiber", "sugar", "saturatedFat"];
     const portions = [
       { label: "L", value: 0.5, title: "Light" },
@@ -318,7 +365,7 @@ const structuredData = [
     ];
 
     let selectedFormat = "bowl";
-    let selected = { chicken: 1, "white-rice": 1, "black-beans": 1, "fresh-salsa": 1, fajita: 1, lettuce: 1 };
+    let selected = { chicken: 1, "white-rice": 1, "black-beans": 1, "green-salsa": 1, cheese: 1, lettuce: 1 };
 
     const byId = Object.fromEntries(items.map((item) => [item.id, item]));
     const formatById = Object.fromEntries(formats.map((item) => [item.id, item]));
@@ -327,8 +374,16 @@ const structuredData = [
       return Math.round(value);
     }
 
+    function formatWholeNumber(value) {
+      return Math.round(value).toLocaleString("en-US");
+    }
+
     function formatMacro(value) {
       return `${Math.round(value * 10) / 10}g`;
+    }
+
+    function displayName(item) {
+      return compactLabels[item.id] || item.name;
     }
 
     function totalMeal() {
@@ -368,9 +423,8 @@ const structuredData = [
       const target = document.querySelector("#format-grid");
       target.innerHTML = formats.map((format) => `
         <button type="button" class="format-button ${format.id === selectedFormat ? "active" : ""}" data-format="${format.id}" aria-pressed="${format.id === selectedFormat}">
-          <span class="food-thumb">${format.icon}</span>
+          <span class="food-thumb"><img src="${format.image}" alt=""></span>
           <strong>${format.name}</strong>
-          <em>${format.note}</em>
         </button>
       `).join("");
     }
@@ -379,15 +433,11 @@ const structuredData = [
       const target = document.querySelector("#ingredient-groups");
       target.innerHTML = groupOrder.map((group) => {
         const groupItems = items.filter((item) => item.group === group);
-        const activeItem = groupItems.find((item) => selected[item.id]) || groupItems[0];
         return `
           <section class="ingredient-panel">
             <div class="ingredient-panel-head">
-              <div class="panel-photo" aria-hidden="true">${activeItem.icon}</div>
-              <div>
-                <h3>${group}</h3>
-                <p>${activeItem.name}</p>
-              </div>
+              <h3>${group}</h3>
+              <img class="panel-photo" src="${groupArt[group]}" alt="" loading="lazy">
             </div>
             <div class="ingredient-options">
               ${groupItems.map((item) => {
@@ -396,7 +446,7 @@ const structuredData = [
                   <div class="ingredient-row ${multiplier ? "active" : ""}">
                     <button type="button" class="item-toggle" data-item="${item.id}" aria-pressed="${Boolean(multiplier)}">
                       <span class="item-dot" aria-hidden="true">${item.icon}</span>
-                      <span>${item.name}</span>
+                      <span>${displayName(item)}</span>
                       <small>${item.calories} cal</small>
                     </button>
                     <div class="portion-row" aria-label="${item.name} portion">
@@ -416,7 +466,7 @@ const structuredData = [
     function renderPresets() {
       document.querySelector("#preset-list").innerHTML = presets.map((preset, index) => `
         <button type="button" class="preset-button" data-preset="${index}">
-          <span class="food-thumb small">${preset.icon}</span>
+          <span class="food-thumb small"><img src="${preset.image}" alt="" loading="lazy"></span>
           <strong>${preset.name}</strong>
           <em>${preset.note}</em>
         </button>
@@ -438,11 +488,14 @@ const structuredData = [
       document.querySelector("#total-protein").textContent = formatMacro(totals.protein);
       document.querySelector("#total-carbs").textContent = formatMacro(totals.carbs);
       document.querySelector("#total-fat").textContent = formatMacro(totals.fat);
-      document.querySelector("#total-sodium").textContent = `${rounded(totals.sodium)}mg`;
+      document.querySelector("#total-sodium").textContent = `${formatWholeNumber(totals.sodium)}mg`;
       document.querySelector("#total-fiber").textContent = formatMacro(totals.fiber);
       document.querySelector("#total-sugar").textContent = formatMacro(totals.sugar);
       document.querySelector("#total-sat-fat").textContent = formatMacro(totals.saturatedFat);
-      document.querySelector("#selected-summary").textContent = selectedText();
+      const summary = document.querySelector("#selected-summary");
+      summary.textContent = window.matchMedia("(max-width: 640px)").matches
+        ? `P ${formatMacro(totals.protein)}   C ${formatMacro(totals.carbs)}   F ${formatMacro(totals.fat)}   Sodium ${formatWholeNumber(totals.sodium)}mg`
+        : selectedText();
       document.querySelector("#compare-burrito").textContent = selectedFormat === "burrito" ? "included" : "+320 cal";
     }
 
@@ -487,7 +540,7 @@ const structuredData = [
 
     function mealSummary() {
       const totals = totalMeal();
-      return `Chipotle-style meal estimate: ${rounded(totals.calories)} calories, ${formatMacro(totals.protein)} protein, ${formatMacro(totals.carbs)} carbs, ${formatMacro(totals.fat)} fat, ${rounded(totals.sodium)}mg sodium. ${selectedText()}`;
+      return `Chipotle-style meal estimate: ${rounded(totals.calories)} calories, ${formatMacro(totals.protein)} protein, ${formatMacro(totals.carbs)} carbs, ${formatMacro(totals.fat)} fat, ${formatWholeNumber(totals.sodium)}mg sodium. ${selectedText()}`;
     }
 
     async function copySummary(button) {
@@ -530,7 +583,6 @@ const structuredData = [
       render();
     });
 
-    document.querySelector("#copy-summary").addEventListener("click", (event) => copySummary(event.currentTarget));
     document.querySelector("#dock-copy").addEventListener("click", (event) => copySummary(event.currentTarget));
     document.querySelector("#share-meal").addEventListener("click", shareMeal);
     document.querySelector("#portion-guide").addEventListener("click", () => {

@@ -15,7 +15,12 @@ seo:
   sitemap: pass | fail
   structured_data: pass | fail
 ui:
+  design_package_gate: pass | fail | not_run
   design_gate: pass | fail | not_run
+  visual_restoration_gate: pass | fail | not_run
+  visual_match_target: number
+  desktop_visual_score: number
+  mobile_visual_score: number
   selected_design_match: pass | fail
   desktop_match: pass | fail
   mobile_match: pass | fail

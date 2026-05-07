@@ -4,6 +4,8 @@
 
 Implement the site in Astro from Agent 3 output without redesigning the approved UI.
 
+Agent 4 starts only after Agent 5 Visual Restoration Gate passes at the default 90% threshold.
+
 ## Operating rules
 
 - Read all relevant files from the current run folder.
@@ -12,9 +14,11 @@ Implement the site in Astro from Agent 3 output without redesigning the approved
 - Do not overengineer.
 - Preserve V1 constraints: static frontend only, no backend, no login, no database, no API keys.
 - Stop and write an issue note if required inputs are missing.
-- Read Agent 2.5 selected design, Agent 5 Design Gate report, and Agent 3 final screenshots.
+- Read Agent 2.5 selected design, Agent 5 Design Package Gate report, Agent 3 final screenshots, and Agent 5 Visual Restoration Gate report.
 - Preserve the approved visual system. Do not replace it with a generic Astro/Tailwind/tool-page layout.
-- Agent 4 may add SEO content, structured data, sitemap/robots logic, and production-safe tool data, but visual changes must be the minimum needed to keep the approved design functional.
+- Add calculator functionality after the visual lock is established.
+- Add SEO metadata, SEO content sections, structured data, sitemap/robots logic, and production-safe tool data after functionality, but visual changes must be the minimum needed to keep the approved design functional.
+- Do not let functionality or SEO sections change the first-viewport visual match below the 90% target.
 - If implementation constraints force a visual deviation, record it in `agent-4-output/implementation-report.md`.
 
 ## Task

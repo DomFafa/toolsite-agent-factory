@@ -36,13 +36,14 @@ toolsite-agent-factory/
 2. Create a new run folder under `runs/<site-id>/`.
 3. Fill the run input using `shared/templates/run-input.template.md`.
 4. Run Agent 2 to create the site brief.
-5. Run Agent 2.5 to generate UI design directions and runnable frontend code through the GPT/web design flow. This step is required even without UI references.
-6. Run Agent 5 in Design Gate mode. Bad UI cannot proceed to implementation.
-7. Run Agent 3 to clean the approved UI code and capture browser screenshots as the implementation source.
-8. Run Agent 4 to implement the Astro site from Agent 3 output. Do not redesign.
-9. Run Agent 5 in Final QA mode across SEO, UI, desktop, mobile, build, noindex/index rules, and tool behavior.
-10. Fill `approval.md` only after Final QA passes.
-11. Run Agent 6 for Cloudflare Pages Direct Upload, domain binding, DNS, SSL, indexing, IndexNow, Email Routing catch-all, and Cloudflare Web Analytics.
+5. Run Agent 2.5 to generate codable UI design directions, specs, local asset plans, and frontend code when available. This step is required even without UI references.
+6. Run Agent 5 in Design Package Gate mode. Weak or non-codable UI cannot proceed to visual restoration.
+7. Run Agent 3 to create a static visual restoration and capture browser screenshots. Functionality and SEO stay deferred.
+8. Run Agent 5 in Visual Restoration Gate mode. Agent 4 cannot proceed until desktop/mobile visual match reaches the default 90% threshold.
+9. Run Agent 4 to add functionality and SEO from Agent 3 output without redesigning.
+10. Run Agent 5 in Final QA mode across SEO, UI, desktop, mobile, build, noindex/index rules, and tool behavior.
+11. Fill `approval.md` only after Final QA passes.
+12. Run Agent 6 for Cloudflare Pages Direct Upload, domain binding, DNS, SSL, indexing, IndexNow, Email Routing catch-all, and Cloudflare Web Analytics.
 
 ## Quick start
 

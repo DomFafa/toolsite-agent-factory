@@ -4,18 +4,21 @@
 
 Route back to Agent 2 when the site brief is incomplete, unclear, or inconsistent with the keyword/domain.
 
-## Agent 2.5 / Design Gate errors
+## Agent 2.5 / Design Package Gate errors
 
 Route back to Agent 2.5 when:
 
-- No runnable generated design code exists
-- No desktop/mobile design screenshots exist
-- Generated code screenshots do not match the design target
+- No desktop/mobile design targets exist
+- Design tokens, component spec, asset plan, restoration rules, or forbidden deviations are missing
+- No runnable generated design code exists and no fallback path is recorded
+- Generated code screenshots do not match the design target when generated code exists
 - The selected design looks generic or template-like
 - The selected design ignores the tool workflow from Agent 2
 - The design copies protected reference material
+- The design is not practical for 90% restoration in Astro + HTML/CSS/vanilla JS
+- Required local visual assets are missing or unsafe
 
-Agent 5 Design Gate must block Agent 3 until these are fixed.
+Agent 5 Design Package Gate must block Agent 3 until these are fixed.
 
 ## Agent 3 errors
 
@@ -26,6 +29,9 @@ Route back to Agent 3 when:
 - Desktop and mobile layouts are not both provided
 - Reference was copied too closely
 - Code screenshot and actual UI are not the same artifact
+- Visual diff report is missing
+- Desktop or mobile visual match is below 90%
+- Functionality or SEO was implemented before visual restoration passed
 
 ## Agent 4 errors
 
@@ -35,6 +41,7 @@ Route back to Agent 4 when:
 - Tool logic is broken
 - Build fails
 - SEO fields are missing
+- Functionality or SEO changes disturb the 90% visual lock
 
 ## Agent 5 errors
 

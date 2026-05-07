@@ -9,3 +9,9 @@
 - Run constraints
 
 UI references are optional input. GPT-powered UI design generation is mandatory.
+
+Default fidelity policy:
+
+- Visual restoration target: 90%.
+- Local generated PNG/SVG assets are allowed.
+- SEO content and final tool functionality are downstream phases and should not be mixed into the design-generation objective.
