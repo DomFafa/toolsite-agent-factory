@@ -35,13 +35,13 @@ Agent 2.5 uses `web-access` to generate UI design directions and implementation-
 
 This step is mandatory even when no UI references are provided.
 
-The default restoration target is 90%. Agent 2.5 must request codable and usable UI output: target screenshots, design tokens, component specs, usability contract, dynamic data fit notes, UX self-audit, asset plans, asset-quality contract, restoration rules, forbidden deviations, and frontend code when available.
+The default restoration target is 90%. Agent 2.5 must request codable and usable UI output: target screenshots, design tokens, component specs, usability contract, interaction-state model, dynamic data fit notes, UX self-audit, asset plans, asset-quality contract, restoration rules, forbidden deviations, and frontend code when available.
 
 After the winning option is selected, Agent 2.5 must continue the external GPT/design-model interaction and obtain `selected-option-assets.zip` for every selected image slot. The zip, `asset-manifest.json`, extracted assets, retry evidence, and any fallback/waiver must be recorded before Design Package Gate.
 
 ## Phase 2.6: Design Package Gate
 
-Agent 5 runs in Design Package Gate mode. It reviews the selected design package before implementation and runs Usability QA before visual approval. It must also verify post-selection high-resolution asset acquisition evidence and the executable asset quality gate. Agent 3 cannot start until this gate passes.
+Agent 5 runs in Design Package Gate mode. It reviews the selected design package before implementation and runs Usability QA before visual approval. It must verify interaction state semantics, post-selection high-resolution asset acquisition evidence, and the executable asset quality gate. Agent 3 cannot start until this gate passes.
 
 ## Phase 3: Static visual restoration
 
@@ -55,7 +55,7 @@ Agent 5 runs in Visual Restoration Gate mode. It compares Agent 3 rendered scree
 
 Agent 4 cannot start until desktop and mobile visual match scores are at least 90%, unless the user explicitly approves an exception.
 
-The 90% visual match gate does not override usability. If a selected design creates numeric overflow, unreadable build rows, dirty thumbnails, cropped food images, or unusable controls, Agent 5 must route back to Agent 2.5 instead of approving restoration.
+The 90% visual match gate does not override usability. If a selected design creates numeric overflow, unreadable build rows, dirty thumbnails, cropped food images, no-op controls, `No` clearing actions with portion/size controls, impossible mutually exclusive states, meal-format behavior that conflicts with quick presets, or unusable controls, Agent 5 must route back to Agent 2.5 instead of approving restoration.
 
 ## Phase 4: Astro implementation
 
@@ -73,6 +73,7 @@ Agent 5 runs again in Final QA mode and checks:
 - SEO metadata
 - Structured data
 - Tool behavior
+- Primary task-flow interaction behavior
 - Accessibility basics
 - Build success
 - Noindex/index rules

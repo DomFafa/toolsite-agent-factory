@@ -7,19 +7,24 @@
 - [ ] External prompt states the default visual restoration target is 90%
 - [ ] External prompt asks for codable UI, not only a beautiful image
 - [ ] External prompt states usability comes before visual polish for real calculator workflows
+- [ ] External prompt requires a concrete interaction state model for primary user flows
+- [ ] External prompt forbids no-op controls and requires `No` clearing actions to be mutually exclusive without portion/size controls
+- [ ] External prompt requires meal-format actions and quick presets to have consistent visible state semantics
+- [ ] External prompt requires optional portion/size controls to be reversible or to provide a clear undo path
 - [ ] External prompt includes realistic dynamic data examples and overflow stress values
 - [ ] External prompt forbids text embedded inside preset thumbnails, food photos, ingredient thumbnails, and decorative assets
 - [ ] External prompt requires production-quality image assets with minimum source size, aspect ratio fit, subject fill, and white-margin limits
 - [ ] External prompt requires readable ingredient/preset labels and practical click/tap targets
 - [ ] External prompt requires complete food imagery or responsive fallback layouts when dense grids would make cards unreadable
 - [ ] External prompt asks for design tokens, component specs, asset plan, restoration rules, and forbidden deviations
-- [ ] External prompt asks for `usability-contract.md`, `asset-quality-contract.md`, `dynamic-data-fit.md`, and `ux-self-audit.md`
+- [ ] External prompt asks for `usability-contract.md`, `asset-quality-contract.md`, `interaction-state-model.md`, `dynamic-data-fit.md`, and `ux-self-audit.md`
 - [ ] External prompt avoids hard-to-reproduce effects unless exported as local assets
 - [ ] Missing UI references handled as open exploration, not a skip
 - [ ] At least three design directions generated or hard blocker recorded
 - [ ] Each design direction includes desktop and mobile targets
 - [ ] Each design direction includes codability notes and implementation risk
 - [ ] Each design direction includes usability notes, dynamic-data fit, overflow handling, and thumbnail-cleanliness notes
+- [ ] Each design direction includes interaction state notes for meal formats, presets, clearing, and mutually exclusive choices
 - [ ] Each design direction includes image asset source-size, aspect-ratio, subject-fill, and white-margin notes
 - [ ] Each design direction includes complete generated code, or a code-export blocker is recorded
 - [ ] Local generated PNG/SVG assets are saved when they are needed for 90% restoration

@@ -13,9 +13,14 @@
 - SVG image assets must not contain `<text>` labels or embed raster `<image>` files.
 - After the selected UI option is confirmed, Agent 2.5 must obtain a high-resolution `selected-option-assets.zip` from the external design model for every image slot. Fallback vector/local placeholders are allowed only after a recorded blocker or user waiver.
 - Build/tool panels must keep primary labels readable and controls clickable. If a dense grid makes the UI too small, the design must choose a more usable layout.
+- Primary controls must visibly change selected state, calculated results, or both. Do not design no-op or zero-effect controls.
+- Mutually exclusive states must not be able to coexist. If a `No` option is needed, model it as a clearing action or exclusive state without portion/size controls, not as another additive ingredient.
+- Meal-format choices, quick presets, ingredient toggles, portion buttons, and clearing actions must use consistent, predictable interaction state semantics.
+- Optional active portion/size buttons should be reversible by clicking the active choice again, unless the UI provides an obvious alternative undo path.
 - Local generated PNG/SVG assets are allowed when they improve restoration fidelity and are safe to use.
 - Agent 5 Design Package Gate must reject weak or non-codable visual concepts before Agent 3 starts.
 - Agent 5 Design Package Gate must reject visually attractive but unusable concepts before Agent 3 starts.
+- Agent 5 must run primary task-flow interaction review with evidence, not only static visual review.
 - Agent 3 must restore the static visual UI first and defer functionality and SEO.
 - Agent 5 Visual Restoration Gate must reject Agent 3 output below 90% desktop/mobile visual match.
 - If Agent 3 generates screenshots from an approved design, Agent 4 must preserve the visual lock while adding functionality and SEO.

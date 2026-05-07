@@ -23,6 +23,7 @@ generated-designs/
     component-spec.md
     usability-contract.md
     asset-quality-contract.md
+    interaction-state-model.md
     dynamic-data-fit.md
     ux-self-audit.md
     asset-plan.md
@@ -49,6 +50,7 @@ generated-designs/
 - `asset-plan.md`
 - `usability-contract.md`
 - `asset-quality-contract.md`
+- `interaction-state-model.md`
 - `dynamic-data-fit.md`
 - `ux-self-audit.md`
 - `restoration-rules.md`
@@ -81,6 +83,7 @@ generated-designs/
 - Visual restoration target, default `90%`
 - Codability assessment
 - Usability assessment
+- Interaction state assessment, including starter defaults, clearing behavior, mutually exclusive options, and no-op controls
 - Dynamic data fit and overflow risk assessment
 - Thumbnail/image text assessment
 - Asset quality assessment, including source sizes, aspect ratio fit, subject fill, white-margin risk, and `asset-quality-gate` result when assets are wired

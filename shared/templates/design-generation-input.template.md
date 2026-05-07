@@ -29,6 +29,10 @@ Describe the intended product feel and the first-viewport user workflow.
 - Preset thumbnails and food/ingredient thumbnails must be clean images with no embedded text, mini labels, nutrition numbers, or screenshot fragments.
 - Build/tool controls must remain readable and clickable. If dense columns make labels or images too small, use a wider card, 3x2 grid, tabs, accordion, or horizontal scrolling fallback.
 - Food imagery must keep the primary subject visible; do not crop the ingredient so tightly that users cannot recognize it.
+- Primary controls must have clear state semantics. Meal format choices, quick presets, ingredient toggles, portion buttons, and clearing actions must update selected state, calculated totals, or both.
+- Do not include no-op or zero-effect `No` options unless they are implemented as mutually exclusive clearing actions without portion/size controls.
+- Mutually exclusive choices must not be able to coexist in the designed state model.
+- Optional active portion/size buttons should be reversible by clicking the active choice again, or the design must provide an obvious alternative undo path.
 - After an option is selected, you must provide a downloadable high-resolution asset pack for every image slot. Do not crop these assets from the UI mockup screenshot.
 
 ## Visual Restoration Policy
@@ -50,6 +54,7 @@ Describe the intended product feel and the first-viewport user workflow.
 - Design tokens with concrete values
 - Component and layout specs
 - Usability contract
+- Interaction state model
 - Dynamic data fit notes
 - UX self-audit
 - Asset plan

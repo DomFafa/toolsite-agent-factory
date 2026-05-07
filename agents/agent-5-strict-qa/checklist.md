@@ -18,6 +18,10 @@
 - [ ] Usability QA checks build/tool label readability and minimum practical font sizes
 - [ ] Usability QA checks that food images are complete enough to identify
 - [ ] Usability QA checks desktop click targets and mobile tap targets
+- [ ] UX Interaction QA checks that primary controls visibly change state and totals
+- [ ] UX Interaction QA checks meal-format choices and quick presets have consistent state semantics
+- [ ] UX Interaction QA rejects no-op controls, impossible `No` plus positive-selection states, and portion/size controls on `No` clearing actions
+- [ ] UX Interaction QA verifies active optional portion buttons can be clicked again to undo, or have a clear alternative undo path
 - [ ] Usability QA verifies dense layouts use responsive fallbacks instead of making the tool unreadable
 - [ ] Local visual assets are original/generated and safe to use when required
 - [ ] First viewport is the usable tool
@@ -50,6 +54,7 @@
 - [ ] Mobile UI matches
 - [ ] Final UI matches Agent 2.5 selected design without visual regression
 - [ ] Tool behavior passes
+- [ ] Primary task flow interaction review passes for meal formats, presets, toggles, portions, and clearing behavior
 - [ ] Dynamic values do not overflow the UI
 - [ ] Preset thumbnails and food assets remain clean and readable
 - [ ] Referenced local UI assets pass `scripts/design/asset-quality-gate.mjs`

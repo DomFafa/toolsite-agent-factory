@@ -25,6 +25,7 @@ Design Package Gate outputs must record:
 - Usability score
 - Data-fit score
 - Mobile usability score
+- UX interaction flow score
 - Numeric overflow assessment
 - Thumbnail and preset image text assessment
 - Asset quality gate result
@@ -34,6 +35,7 @@ Design Package Gate outputs must record:
 - Build/tool panel readability assessment
 - Food image crop assessment
 - Click/tap target assessment
+- Primary interaction state assessment, including meal formats, presets, toggles, clearing behavior, and impossible states
 - Reference usage assessment
 - Copy/brand safety assessment
 - Pass/fail decision
@@ -50,6 +52,7 @@ Visual Restoration Gate outputs must record:
 - Pass/fail decision
 - Visual deviations by module
 - Usability deviations by module, including overflow, readability, thumbnail cleanliness, image cropping, and control sizing
+- Interaction deviations by module, including no-op controls, inconsistent presets vs meal formats, and mutually exclusive state failures
 - Asset quality deviations by module, including low source resolution, blurred upscaling, white gutters, or embedded raster SVGs
 - Whether functionality remains deferred
 - Required changes if failed

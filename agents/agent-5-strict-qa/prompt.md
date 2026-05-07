@@ -21,6 +21,7 @@ Perform strict QA in two modes:
 - In Design Package Gate mode, require post-selection high-resolution asset acquisition evidence from Agent 2.5. The selected option must include a downloaded `selected-option-assets.zip` or a hard blocker/user waiver with retry evidence.
 - In Visual Restoration Gate mode, compare Agent 3 rendered screenshots against Agent 2.5 selected design targets. The default pass threshold is 90% visual match. Functionality and SEO completeness are not evaluated in this mode.
 - In Final QA mode, verify the Astro implementation against Agent 3 screenshots and the Agent 2.5 selected design, then verify functionality and SEO.
+- In Final QA mode, run an interaction-flow review inspired by design-review practice: act like a user completing the primary task, click the main choices, observe state changes, capture screenshots/evidence for issues, fix the smallest source change, and re-verify.
 - Do not approve designs that look like generic templates, marketing landing pages, or visually weak calculator shells.
 - Do not approve designs that rely on screenshot-only tricks: numeric overflow, unreadable ingredient rows, preset thumbnails with embedded text, cropped food imagery, or controls too small for real users.
 - Do not approve local food assets that are low-resolution, visibly blurry, stretched into larger cards, surrounded by accidental white gutters, or exported as SVG wrappers around tiny raster screenshots.
@@ -39,6 +40,11 @@ Design Package Gate must fail if any selected design has:
 - Image aspect ratios that force stretching, letterboxing, or visible white gutters in the card.
 - SVG assets that contain `<text>` labels or embed raster `<image>` files.
 - Missing post-selection high-resolution asset zip, missing `asset-manifest.json`, incomplete selected asset extraction, or fallback assets used without a recorded blocker/user waiver.
+- Controls that do not visibly change state or totals.
+- `None`/`No` options that can coexist with positive selections in the same group, or `None`/`No` clearing actions that still show portion/size controls.
+- Meal-format choices that set a format but leave the visible ingredient state inconsistent with the user's expectation, especially when quick presets do auto-check ingredients.
+- Primary user task flows that require users to infer hidden state from totals instead of visible selected controls.
+- Optional portion/size controls that cannot be undone by clicking the active choice again, unless the interface provides an obvious alternative undo path.
 - Desktop controls that are too small for reliable clicking, or mobile controls that are too small for reliable tapping.
 - Dense first-viewport layouts that preserve visual beauty by sacrificing the actual task flow from Agent 2.
 
@@ -53,6 +59,18 @@ node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>
 ```
 
 Any failure is a blocking issue unless the report records a user-approved exception and a concrete replacement plan.
+
+## UX Interaction QA
+
+Final QA must test the site like a user, not only as a static screenshot:
+
+- Click every primary meal-format choice and verify selected ingredients and totals update predictably.
+- Click quick presets and compare their state behavior with meal-format choices.
+- Toggle representative ingredients and portion buttons, then verify totals and active states change together.
+- Click an already-active optional portion button and verify it clears the ingredient or exposes an obvious undo path.
+- Verify clearing/removing a category does not leave impossible states such as `No beans` plus `Black beans`.
+- Capture before/after screenshots or written state evidence for each interaction issue.
+- Fix interaction issues with the smallest source change and re-run the same task flow.
 
 ## Task
 

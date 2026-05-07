@@ -308,16 +308,16 @@ const structuredData = [
       { id: "white-rice", group: "Rice", icon: "🍚", name: "White rice", portion: "4 oz", calories: 210, protein: 4, carbs: 40, fat: 4, sodium: 350, fiber: 1, sugar: 0, saturatedFat: 1 },
       { id: "brown-rice", group: "Rice", icon: "🌾", name: "Brown rice", portion: "4 oz", calories: 210, protein: 4, carbs: 36, fat: 6, sodium: 190, fiber: 2, sugar: 0, saturatedFat: 0 },
       { id: "cauli-rice", group: "Rice", icon: "✺", name: "Cauliflower rice", portion: "4 oz", calories: 40, protein: 3, carbs: 7, fat: 1, sodium: 210, fiber: 3, sugar: 2, saturatedFat: 0 },
-      { id: "no-rice", group: "Rice", icon: "○", name: "No rice", portion: "0 oz", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
+      { id: "no-rice", group: "Rice", icon: "○", name: "No rice", portion: "0 oz", clearGroup: true, calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
       { id: "black-beans", group: "Beans", icon: "⚫", name: "Black beans", portion: "4 oz", calories: 130, protein: 8, carbs: 22, fat: 1.5, sodium: 210, fiber: 7, sugar: 2, saturatedFat: 0 },
       { id: "pinto-beans", group: "Beans", icon: "🫘", name: "Pinto beans", portion: "4 oz", calories: 130, protein: 8, carbs: 21, fat: 1.5, sodium: 210, fiber: 8, sugar: 1, saturatedFat: 0 },
-      { id: "no-beans", group: "Beans", icon: "○", name: "No beans", portion: "0 oz", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
+      { id: "no-beans", group: "Beans", icon: "○", name: "No beans", portion: "0 oz", clearGroup: true, calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
       { id: "chicken", group: "Protein", icon: "🍗", name: "Chicken", portion: "4 oz", calories: 180, protein: 32, carbs: 0, fat: 7, sodium: 310, fiber: 0, sugar: 0, saturatedFat: 3 },
       { id: "steak", group: "Protein", icon: "🥩", name: "Steak", portion: "4 oz", calories: 150, protein: 21, carbs: 1, fat: 6, sodium: 330, fiber: 1, sugar: 0, saturatedFat: 2.5 },
       { id: "barbacoa", group: "Protein", icon: "🍖", name: "Barbacoa", portion: "4 oz", calories: 170, protein: 24, carbs: 2, fat: 7, sodium: 530, fiber: 1, sugar: 0, saturatedFat: 2.5 },
       { id: "carnitas", group: "Protein", icon: "♨", name: "Carnitas", portion: "4 oz", calories: 210, protein: 23, carbs: 0, fat: 12, sodium: 450, fiber: 0, sugar: 0, saturatedFat: 7 },
       { id: "sofritas", group: "Protein", icon: "◒", name: "Sofritas", portion: "4 oz", calories: 150, protein: 8, carbs: 9, fat: 10, sodium: 560, fiber: 3, sugar: 5, saturatedFat: 1.5 },
-      { id: "no-protein", group: "Protein", icon: "○", name: "No protein", portion: "0 oz", calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
+      { id: "no-protein", group: "Protein", icon: "○", name: "No protein", portion: "0 oz", clearGroup: true, calories: 0, protein: 0, carbs: 0, fat: 0, sodium: 0, fiber: 0, sugar: 0, saturatedFat: 0 },
       { id: "fresh-salsa", group: "Salsa", icon: "🍅", name: "Fresh tomato salsa", portion: "4 oz", calories: 25, protein: 0, carbs: 4, fat: 0, sodium: 550, fiber: 1, sugar: 1, saturatedFat: 0 },
       { id: "corn-salsa", group: "Salsa", icon: "🌽", name: "Roasted chili-corn salsa", portion: "4 oz", calories: 80, protein: 3, carbs: 16, fat: 1.5, sodium: 330, fiber: 3, sugar: 4, saturatedFat: 0 },
       { id: "green-salsa", group: "Salsa", icon: "🫑", name: "Tomatillo-green chili salsa", portion: "2 fl oz", calories: 15, protein: 0, carbs: 4, fat: 0, sodium: 260, fiber: 0, sugar: 2, saturatedFat: 0 },
@@ -379,11 +379,20 @@ const structuredData = [
       { label: "2X", value: 2, title: "Double" }
     ];
 
+    const formatDefaults = {
+      bowl: { chicken: 1, "white-rice": 1, "black-beans": 1, "green-salsa": 1, cheese: 1, lettuce: 1 },
+      burrito: { chicken: 1, "white-rice": 1, "pinto-beans": 1, "fresh-salsa": 1, cheese: 1, "sour-cream": 1 },
+      salad: { chicken: 1, fajita: 1, "fresh-salsa": 1, lettuce: 1, guac: 0.5 },
+      tacos: { steak: 1, "black-beans": 1, "fresh-salsa": 1, lettuce: 1, cheese: 1 },
+      quesadilla: { chicken: 1, "fresh-salsa": 1, "sour-cream": 1, guac: 0.5 }
+    };
+
     let selectedFormat = "bowl";
-    let selected = { chicken: 1, "white-rice": 1, "black-beans": 1, "green-salsa": 1, cheese: 1, lettuce: 1 };
+    let selected = { ...formatDefaults[selectedFormat] };
 
     const byId = Object.fromEntries(items.map((item) => [item.id, item]));
     const formatById = Object.fromEntries(formats.map((item) => [item.id, item]));
+    const clearItemByGroup = Object.fromEntries(items.filter((item) => item.clearGroup).map((item) => [item.group, item.id]));
 
     function rounded(value) {
       return Math.round(value);
@@ -428,10 +437,47 @@ const structuredData = [
       const format = formatById[selectedFormat].name;
       const names = Object.entries(selected).map(([id, multiplier]) => {
         const item = byId[id];
+        if (item.clearGroup) return item.name;
         const label = portions.find((portion) => portion.value === multiplier)?.title || `${multiplier}x`;
         return `${item.name} (${label})`;
       });
       return names.length ? `${format}: ${names.join(", ")}` : `${format}: no ingredients selected yet.`;
+    }
+
+    function clearGroupSelection(group) {
+      items.filter((item) => item.group === group).forEach((item) => {
+        delete selected[item.id];
+      });
+    }
+
+    function toggleItem(id) {
+      const item = byId[id];
+      if (!item) return;
+      if (item.clearGroup) {
+        if (selected[id]) {
+          delete selected[id];
+          return;
+        }
+        clearGroupSelection(item.group);
+        selected[id] = 1;
+        return;
+      }
+      const clearItemId = clearItemByGroup[item.group];
+      if (clearItemId) delete selected[clearItemId];
+      selected[id] ? delete selected[id] : selected[id] = 1;
+    }
+
+    function applyPortion(id, value) {
+      const item = byId[id];
+      if (!item || item.clearGroup) return;
+      const numericValue = Number(value);
+      if (selected[id] === numericValue) {
+        delete selected[id];
+        return;
+      }
+      const clearItemId = clearItemByGroup[item.group];
+      if (clearItemId) delete selected[clearItemId];
+      selected[id] = numericValue;
     }
 
     function renderFormats() {
@@ -448,6 +494,8 @@ const structuredData = [
       const target = document.querySelector("#ingredient-groups");
       target.innerHTML = groupOrder.map((group) => {
         const groupItems = items.filter((item) => item.group === group);
+        const clearItemId = clearItemByGroup[group];
+        const clearSelected = Boolean(clearItemId && selected[clearItemId]);
         return `
           <section class="ingredient-panel" id="group-${group.toLowerCase()}">
             <div class="ingredient-panel-head">
@@ -457,18 +505,20 @@ const structuredData = [
             <div class="ingredient-options">
               ${groupItems.map((item) => {
                 const multiplier = selected[item.id];
+                const isClearOption = Boolean(item.clearGroup);
+                const portionsDisabled = clearSelected && !isClearOption;
                 return `
-                  <div class="ingredient-row ${multiplier ? "active" : ""}">
+                  <div class="ingredient-row ${multiplier ? "active" : ""} ${isClearOption ? "clear-option" : ""} ${portionsDisabled ? "portion-disabled" : ""}">
                     <button type="button" class="item-toggle" data-item="${item.id}" aria-pressed="${Boolean(multiplier)}">
                       <span class="item-dot" aria-hidden="true">${item.icon}</span>
                       <span>${displayName(item)}</span>
                       <small>${item.calories} cal</small>
                     </button>
-                    <div class="portion-row" aria-label="${item.name} portion">
+                    ${isClearOption ? "" : `<div class="portion-row" aria-label="${item.name} portion">
                       ${portions.map((portion) => `
-                        <button type="button" data-portion="${item.id}:${portion.value}" class="${multiplier === portion.value ? "active" : ""}" title="${portion.title} portion">${portion.label}</button>
+                        <button type="button" data-portion="${item.id}:${portion.value}" class="${multiplier === portion.value ? "active" : ""}" title="${portion.title} portion" ${portionsDisabled ? "disabled aria-disabled=\"true\"" : ""}>${portion.label}</button>
                       `).join("")}
-                    </div>
+                    </div>`}
                   </div>
                 `;
               }).join("")}
@@ -525,14 +575,14 @@ const structuredData = [
       document.querySelectorAll("[data-format]").forEach((button) => {
         button.addEventListener("click", () => {
           selectedFormat = button.dataset.format;
+          selected = { ...(formatDefaults[selectedFormat] || {}) };
           render();
         });
       });
 
       document.querySelectorAll("[data-item]").forEach((button) => {
         button.addEventListener("click", () => {
-          const id = button.dataset.item;
-          selected[id] ? delete selected[id] : selected[id] = 1;
+          toggleItem(button.dataset.item);
           render();
         });
       });
@@ -540,7 +590,7 @@ const structuredData = [
       document.querySelectorAll("[data-portion]").forEach((button) => {
         button.addEventListener("click", () => {
           const [id, value] = button.dataset.portion.split(":");
-          selected[id] = Number(value);
+          applyPortion(id, value);
           render();
         });
       });

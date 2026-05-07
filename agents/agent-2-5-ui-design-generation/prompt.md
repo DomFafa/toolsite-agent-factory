@@ -23,6 +23,7 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 - Large food/ingredient imagery must be designed as production assets, not cropped from screenshots. Each image slot must specify final display size, required source size, aspect ratio, subject fill, and white-margin limits before approval.
 - The first goal is visual restoration. Tool functionality and SEO content are later phases and must not dilute the design prompt.
 - The selected design must be a usable calculator interface, not only a polished static image. Realistic dynamic data, long labels, state changes, and touch targets must fit before the design can proceed.
+- The design must include interaction semantics for the real user task flow. Main choices, presets, empty states, and clearing actions must visibly update state and results in predictable ways.
 - Do not put text inside food photos, preset thumbnails, ingredient thumbnails, chart images, or decorative assets. Thumbnail images must be clean visual assets; labels, nutrition numbers, and UI copy must be rendered as real HTML text.
 - Selecting an option is not the end of Agent 2.5. After the selected option is confirmed, Agent 2.5 must continue interacting with the external design model until it obtains a high-resolution asset pack for every image slot in the selected design, or records a hard blocker with exact retry evidence.
 
@@ -48,6 +49,7 @@ Each direction must include:
 - Asset plan, including any generated PNG/SVG assets needed for 90% restoration
 - Usability contract covering realistic data ranges, overflow behavior, readable text sizes, and responsive fallbacks
 - Dynamic data fit notes covering worst-case values and long labels
+- Interaction state model covering primary task flows, starter defaults, clearing behavior, mutually exclusive choices, and controls that affect totals
 - UX self-audit explaining how the design avoids pretty-but-unusable calculator states
 - Restoration rules that tell Agent 3 what must not change
 - Runnable frontend code when possible, preferably plain HTML/CSS/JS
@@ -69,6 +71,10 @@ Every direction must obey:
 - Numeric fields must reserve enough width for realistic long values, including examples such as `1,090mg`, `1,240mg`, `2,400mg`, `1,250 cal`, `120g`, and `20.5g`.
 - Ingredient, preset, and option labels must remain readable with real menu names and localized long words. Minimum desktop body/control label target is 12px; minimum mobile label target is 14px unless the label is clearly secondary metadata.
 - Interactive controls must be large enough to click or tap: target at least 32px on desktop and 44px on mobile where space permits.
+- Do not include controls that have no visible or numeric effect. Zero-effect pseudo-options such as `No rice`, `No beans`, or `No protein` are allowed only when implemented as mutually exclusive clearing actions, cannot coexist with positive selections, and do not display portion/size controls.
+- Meal format choices must have explicit state semantics. If a user selects a bowl, burrito, salad, tacos, or quesadilla format, the design must define whether it applies a sensible starter build, clears ingredients, or preserves current ingredients; the UI must communicate and support that behavior.
+- Quick presets and primary meal-format actions must be audited together so they do not create inconsistent expectations. If presets auto-check ingredients, meal-format starter choices should also update the visible ingredient state or clearly explain why they do not.
+- Optional portion/size controls must be reversible. When a user clicks the already-active portion on an optional ingredient, the expected behavior must either clear that ingredient or explicitly explain a different undo path.
 - Food and ingredient images must show the food clearly. Do not crop the primary subject off the card. If six columns make the food or labels too small, choose a 3x2 layout, horizontal grouping, tabs, or another responsive fallback instead of squeezing the UI.
 - Preset thumbnails must not contain embedded text, mini nutrition labels, tiny badges, or screenshot fragments. Use clean food-only images and place preset names/numbers beside them as HTML.
 - Asset quality contract is mandatory for every local image asset:
@@ -105,9 +111,9 @@ Fallback vector illustrations or locally generated placeholders are allowed only
 1. Build `design-generation-prompt.md` from Agent 2 outputs and the UI reference dossier.
 2. Use `web-access` to send the prompt to the ChatGPT web UI with the deepest available reasoning/design generation mode.
 3. Tell the external model that the design will be restored by Codex in Astro and must be optimized for 90% screenshot fidelity.
-4. Give the external model the actual tool workflow, expected inputs, dynamic output ranges, and long-label examples from Agent 2. Tell it to design for real use before visual polish.
+4. Give the external model the actual tool workflow, expected inputs, dynamic output ranges, long-label examples, and state transition expectations from Agent 2. Tell it to design for real use before visual polish.
 5. Request UI images, design tokens, component specs, usability contracts, dynamic data fit notes, UX self-audits, asset plans, restoration rules, and corresponding frontend code for each direction.
-6. Explicitly ask the model to reject its own beautiful-but-unusable choices, including numeric overflow, tiny ingredient text, cropped food cards, preset thumbnails with embedded text, and mobile controls that cannot be tapped.
+6. Explicitly ask the model to reject its own beautiful-but-unusable choices, including numeric overflow, tiny ingredient text, cropped food cards, preset thumbnails with embedded text, controls that do not affect state/results, inconsistent preset vs meal-format behavior, impossible mutually exclusive states, and mobile controls that cannot be tapped.
 7. Require a per-option `asset-quality-contract.md` that lists every image slot, rendered CSS size, required source size, source file path, aspect ratio, subject fill notes, and whether the asset is raster or vector.
 8. If generated code is truncated, keep prompting for continuation until the complete file set is recovered, or record a hard code-export blocker.
 9. Download any generated code archive/assets, or copy the code into files under `agent-2-5-output/generated-designs/<option>/`.

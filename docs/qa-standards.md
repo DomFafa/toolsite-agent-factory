@@ -7,7 +7,7 @@ Agent 5 must run once after Agent 2.5 and before Agent 3. It must check:
 - Agent 2.5 generated at least three design options or recorded a hard external blocker
 - Selected design has desktop and mobile target screenshots
 - Selected design has design tokens, component spec, asset plan, restoration rules, and forbidden deviations
-- Selected design has usability contract, dynamic data fit notes, and UX self-audit
+- Selected design has usability contract, interaction state model, dynamic data fit notes, and UX self-audit
 - Selected design has post-selection high-resolution asset acquisition evidence, including `selected-option-assets.zip` and `asset-manifest.json`, unless a hard blocker or user-approved waiver is recorded
 - Selected design has complete runnable frontend code, or the code-export blocker/fallback path is clearly recorded
 - Selected design is practical for 90% restoration in Astro + HTML/CSS + vanilla JS
@@ -20,6 +20,12 @@ Agent 5 must run once after Agent 2.5 and before Agent 3. It must check:
   - controls are large enough for click/tap use
   - food images are not cropped beyond recognition
   - dense layouts use responsive fallbacks rather than shrinking the actual workflow
+  - primary controls visibly change selected state, calculated results, or both
+  - no-op choices are removed or converted into clear mutually exclusive clearing actions
+  - `No` clearing actions do not display portion/size controls
+  - mutually exclusive states cannot coexist, such as `No beans` selected alongside `Black beans`
+  - meal-format choices and quick presets use consistent, predictable state semantics
+  - optional active portion/size buttons can be clicked again to undo, or the design provides an obvious alternative undo path
 - Required local visual assets are present and safe to use
 - Required local visual assets pass `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>`
 - First viewport is the usable tool, not a marketing hero
@@ -60,6 +66,12 @@ Agent 5 must run again after Agent 4. It must check:
 - Actual implementation matches Agent 2.5 selected design
 - Actual implementation matches Agent 3 screenshots
 - Tool works with normal and edge-case inputs
+- Primary task-flow interaction review passes for meal-format choices, quick presets, ingredient toggles, portion buttons, and clearing behavior
+- Primary controls visibly update the selected state and calculated totals
+- Mutually exclusive choices cannot coexist after any normal interaction
+- `No` clearing actions have no portion/size controls and cancel themselves when a positive option in the same group is selected
+- Active optional portion/size buttons can be clicked again to clear that ingredient, or an obvious alternative undo path exists
+- Meal-format choices and quick presets keep visible ingredient selections consistent with the calculated totals
 - Dynamic output values such as `1,090mg`, `1,240mg`, `2,400mg`, `1,250 cal`, `120g`, and `20.5g` fit without overflow
 - Preset thumbnails, food images, and ingredient thumbnails are clean images without embedded text
 - Referenced local UI assets pass the asset quality gate
@@ -84,3 +96,5 @@ agent-3-output/final-screenshots/
 against the actual Astro implementation rendered in browser.
 
 The implementation must not drift from Agent 3 UI.
+
+Agent 5 Final QA must also perform an interaction-flow review. It must click through the main user task flow, capture screenshot or written state evidence for before/after behavior, make the smallest fix for any interaction defect, and re-run the same flow after the fix.

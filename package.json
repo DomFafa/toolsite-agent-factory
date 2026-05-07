@@ -12,6 +12,7 @@
     "test:ui-import": "node --test scripts/design/import-generated-ui.test.mjs",
     "test:asset-quality": "node --test scripts/design/asset-quality-gate.test.mjs",
     "test:ui-ux-gates": "node --test scripts/design/ui-ux-gates.test.mjs",
+    "test:chipotle-ux": "node --test scripts/design/chipotle-ux-regression.test.mjs",
     "qa:starter": "bash scripts/qa/run-local-qa.sh starter-site",
     "tree": "find . -maxdepth 4 -not -path './.git/*' -not -path './starter-site/node_modules/*' | sort"
   }

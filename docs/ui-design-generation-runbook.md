@@ -14,8 +14,8 @@ The pipeline optimizes usable UI restoration before functionality and SEO. A sit
 2. Agent 2.5 builds `design-generation-prompt.md`.
 3. Agent 2.5 uses `web-access` to submit the prompt and any allowed reference assets to the ChatGPT web UI or another approved design generation surface.
 4. Agent 2.5 tells the external model that the design must be restored by Codex in Astro with HTML/CSS/vanilla JS and should be designed for 90% screenshot fidelity.
-5. Agent 2.5 gives the external model the real tool workflow, realistic dynamic data ranges, overflow stress values, long labels, and click/tap constraints before asking for visuals.
-6. Agent 2.5 requests at least three UI directions. Each direction must include desktop/mobile design targets, design tokens, component specs, usability contract, dynamic data fit notes, UX self-audit, an asset plan, restoration rules, forbidden deviations, and runnable frontend code when possible.
+5. Agent 2.5 gives the external model the real tool workflow, interaction state semantics, realistic dynamic data ranges, overflow stress values, long labels, and click/tap constraints before asking for visuals.
+6. Agent 2.5 requests at least three UI directions. Each direction must include desktop/mobile design targets, design tokens, component specs, usability contract, interaction state model, dynamic data fit notes, UX self-audit, an asset plan, restoration rules, forbidden deviations, and runnable frontend code when possible.
 7. Agent 2.5 downloads or extracts any original/generated PNG/SVG assets needed for faithful restoration.
 8. Agent 2.5 writes `asset-quality-contract.md` for every image slot, including rendered size, required source size, aspect ratio, subject fill, white-margin risk, file path, and raster/vector type.
 9. Agent 2.5 imports any downloaded code archive with `scripts/design/import-generated-ui.mjs`.
@@ -62,6 +62,10 @@ Agent 2.5 must tell the external model:
 - Avoid visible white gutters inside image files. Subject fill should usually be `75%-92%` of the visual area.
 - Reserve room for realistic dynamic values such as `1,090mg`, `1,240mg`, `2,400mg`, `1,250 cal`, `120g`, and `20.5g`.
 - Keep build/tool labels readable and controls clickable. If six columns make the tool too small, use a 3x2 grid, tabs, accordion, horizontal grouping, or another responsive fallback.
+- Define interaction state semantics before visualizing controls. Primary controls must visibly affect selected state, calculated results, or both.
+- Do not include no-op or zero-effect choices unless they are clearly modeled as mutually exclusive clearing actions without portion/size controls.
+- Mutually exclusive states must not be able to coexist. A `No beans` style action cannot stay selected alongside a positive beans choice.
+- Meal-format choices, quick presets, ingredient toggles, portion buttons, and clearing actions must use consistent, predictable state transitions.
 - Reserve locations for SEO sections, but do not make SEO content part of the first visual-restoration task.
 - The first viewport must be the usable tool.
 
@@ -148,6 +152,7 @@ Agent 5 Design Package Gate must fail if:
 - no desktop/mobile design targets exist
 - design tokens, component specs, asset plan, restoration rules, or forbidden deviations are missing
 - usability contract, dynamic data fit notes, or UX self-audit are missing
+- interaction state model is missing or does not cover primary task-flow controls
 - post-selection high-resolution asset acquisition evidence is missing, unless a hard external blocker or user-approved waiver is recorded
 - the selected design is not practical for 90% restoration in Astro + HTML/CSS/vanilla JS
 - first viewport is a marketing page instead of the tool
@@ -156,6 +161,7 @@ Agent 5 Design Package Gate must fail if:
 - preset thumbnails, food images, or ingredient images contain embedded text or screenshot fragments
 - food images are low-resolution, blurry, stretched into large cards, surrounded by accidental white gutters, or exported as SVG wrappers around tiny raster screenshots
 - build/tool rows are too small to read or controls are too small to click/tap
+- primary controls are no-ops, `No` clearing actions show portion/size controls, mutually exclusive states can coexist, or meal-format choices behave inconsistently with quick presets
 - food imagery is cropped so tightly that users cannot understand it
 - the result looks generic or template-like
 - protected assets, logos, exact layouts, or reference copy are copied

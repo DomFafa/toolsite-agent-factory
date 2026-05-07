@@ -547,6 +547,19 @@ h3 {
   background: #eef8e9;
 }
 
+.ingredient-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.ingredient-row.clear-option {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ingredient-row.portion-disabled .portion-row button {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .item-toggle {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
