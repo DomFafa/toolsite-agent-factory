@@ -36,8 +36,8 @@ toolsite-agent-factory/
 2. Create a new run folder under `runs/<site-id>/`.
 3. Fill the run input using `shared/templates/run-input.template.md`.
 4. Run Agent 2 to create the site brief.
-5. Run Agent 2.5 to generate codable UI design directions, specs, local asset plans, and frontend code when available. This step is required even without UI references.
-6. Run Agent 5 in Design Package Gate mode. Weak or non-codable UI cannot proceed to visual restoration.
+5. Run Agent 2.5 to generate codable and usable UI design directions, specs, usability contracts, local asset plans, and frontend code when available. This step is required even without UI references.
+6. Run Agent 5 in Design Package Gate mode. Weak, non-codable, or visually attractive but unusable UI cannot proceed to visual restoration.
 7. Run Agent 3 to create a static visual restoration and capture browser screenshots. Functionality and SEO stay deferred.
 8. Run Agent 5 in Visual Restoration Gate mode. Agent 4 cannot proceed until desktop/mobile visual match reaches the default 90% threshold.
 9. Run Agent 4 to add functionality and SEO from Agent 3 output without redesigning.

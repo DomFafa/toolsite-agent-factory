@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" role="img" aria-label="Veggie bowl illustration">
+  <rect width="360" height="240" fill="#f8efe2"/>
+  <ellipse cx="180" cy="140" rx="128" ry="56" fill="#d9c0a3"/>
+  <ellipse cx="180" cy="124" rx="112" ry="48" fill="#fffaf2"/>
+  <g fill="#5f7f35"><ellipse cx="118" cy="119" rx="35" ry="13"/><ellipse cx="176" cy="106" rx="38" ry="14"/><ellipse cx="222" cy="135" rx="38" ry="14"/></g>
+  <g fill="#f06a35"><rect x="119" y="137" width="40" height="25" rx="8" transform="rotate(-12 139 150)"/><rect x="180" y="129" width="39" height="25" rx="8" transform="rotate(13 200 142)"/></g>
+  <g fill="#2e1711"><ellipse cx="146" cy="99" rx="24" ry="14"/><ellipse cx="238" cy="105" rx="24" ry="14"/></g>
+</svg>

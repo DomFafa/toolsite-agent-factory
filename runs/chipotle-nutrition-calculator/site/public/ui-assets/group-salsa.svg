@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" role="img" aria-label="Fresh tomato salsa illustration">
+  <rect width="1200" height="440" fill="#f8efe2"/>
+  <ellipse cx="600" cy="262" rx="430" ry="142" fill="#d9c0a3"/>
+  <ellipse cx="600" cy="232" rx="388" ry="124" fill="#fffaf2"/>
+  <ellipse cx="600" cy="229" rx="330" ry="94" fill="#b63221"/>
+  <g>
+    <rect x="368" y="175" width="72" height="48" rx="13" fill="#e54d2f" transform="rotate(-14 404 199)"/>
+    <rect x="458" y="220" width="76" height="50" rx="13" fill="#f16b36" transform="rotate(8 496 245)"/>
+    <rect x="552" y="164" width="70" height="46" rx="13" fill="#dc3e27" transform="rotate(17 587 187)"/>
+    <rect x="645" y="229" width="76" height="48" rx="13" fill="#e9562b" transform="rotate(-13 683 253)"/>
+    <rect x="746" y="176" width="78" height="48" rx="13" fill="#f06a35" transform="rotate(12 785 200)"/>
+    <rect x="560" y="268" width="82" height="46" rx="13" fill="#d83b24" transform="rotate(-7 601 291)"/>
+  </g>
+  <g fill="#5d7f34">
+    <ellipse cx="468" cy="175" rx="24" ry="12" transform="rotate(-24 468 175)"/>
+    <ellipse cx="524" cy="259" rx="23" ry="11" transform="rotate(18 524 259)"/>
+    <ellipse cx="676" cy="186" rx="24" ry="12" transform="rotate(-8 676 186)"/>
+    <ellipse cx="735" cy="257" rx="22" ry="11" transform="rotate(20 735 257)"/>
+  </g>
+  <g fill="#f3d34b">
+    <circle cx="436" cy="249" r="13"/>
+    <circle cx="625" cy="214" r="12"/>
+    <circle cx="793" cy="238" r="13"/>
+  </g>
+</svg>

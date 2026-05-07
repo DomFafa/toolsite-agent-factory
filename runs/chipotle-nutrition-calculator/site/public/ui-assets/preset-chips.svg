@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" role="img" aria-label="Chips and guacamole illustration">
+  <rect width="360" height="240" fill="#f8efe2"/>
+  <g fill="#f3c95d" stroke="#bf7d20" stroke-width="4">
+    <path d="M76 133l52-48 15 67z"/><path d="M122 97l63 22-53 42z"/><path d="M185 99l58 37-65 24z"/><path d="M229 126l55 29-61 29z"/>
+  </g>
+  <ellipse cx="178" cy="163" rx="68" ry="30" fill="#d9c0a3"/>
+  <ellipse cx="178" cy="155" rx="58" ry="24" fill="#fffaf2"/>
+  <ellipse cx="178" cy="153" rx="45" ry="18" fill="#a7bd4f"/>
+</svg>

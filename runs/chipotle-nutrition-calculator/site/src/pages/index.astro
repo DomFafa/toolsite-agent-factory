@@ -79,107 +79,122 @@ const structuredData = [
         </div>
       </header>
 
-      <section class="nutrition-ribbon" aria-label="Live meal totals" aria-live="polite">
-        <div class="ribbon-cell featured">
-          <i aria-hidden="true">♨</i>
-          <span>Calories</span>
-          <strong id="total-calories">0</strong>
-          <em>kcal</em>
-        </div>
-        <div class="ribbon-cell">
-          <i aria-hidden="true">◔</i>
-          <span>Protein</span>
-          <strong id="total-protein">0g</strong>
-        </div>
-        <div class="ribbon-cell">
-          <i aria-hidden="true">♧</i>
-          <span>Carbs</span>
-          <strong id="total-carbs">0g</strong>
-        </div>
-        <div class="ribbon-cell">
-          <i aria-hidden="true">◌</i>
-          <span>Fat</span>
-          <strong id="total-fat">0g</strong>
-        </div>
-        <div class="ribbon-cell">
-          <i aria-hidden="true">▥</i>
-          <span>Sodium</span>
-          <strong id="total-sodium">0mg</strong>
-        </div>
-        <div class="ribbon-cell">
-          <i aria-hidden="true">♮</i>
-          <span>Fiber</span>
-          <strong id="total-fiber">0g</strong>
-        </div>
-        <div class="ribbon-cell">
-          <i aria-hidden="true">✣</i>
-          <span>Sugar</span>
-          <strong id="total-sugar">0g</strong>
-        </div>
-        <div class="ribbon-cell">
-          <i aria-hidden="true">♡</i>
-          <span>Sat fat</span>
-          <strong id="total-sat-fat">0g</strong>
-        </div>
-      </section>
-
-      <section class="meal-step" aria-labelledby="meal-format-title">
-        <div class="step-title">
-          <span>1.</span>
-          <div>
-            <h2 id="meal-format-title">Choose your meal</h2>
-          </div>
-        </div>
-        <div class="format-grid" id="format-grid"></div>
-      </section>
-
-      <section class="builder-zone" aria-labelledby="builder-title">
-        <div class="builder-heading">
-          <div class="step-title">
-            <span>2.</span>
-            <div>
-              <h2 id="builder-title">Build your meal</h2>
+      <div class="calculator-shell">
+        <aside class="summary-panel">
+          <section class="meal-step" aria-labelledby="meal-format-title">
+            <div class="step-title">
+              <span>Your meal</span>
+              <div>
+                <h2 id="meal-format-title">Meal format</h2>
+              </div>
             </div>
-          </div>
-          <button type="button" class="portion-guide" id="portion-guide">Portion size guide</button>
-        </div>
-        <div class="ingredient-groups" id="ingredient-groups"></div>
-      </section>
+            <div class="format-grid" id="format-grid"></div>
+          </section>
 
-      <section class="preset-strip" aria-labelledby="presets-title">
-        <div class="strip-title">
-          <h2 id="presets-title">Quick presets</h2>
-          <p>Popular builds to get you started.</p>
-        </div>
-        <div class="preset-list" id="preset-list"></div>
-      </section>
+          <section class="nutrition-ribbon" aria-label="Live meal totals" aria-live="polite">
+            <div class="ribbon-cell featured">
+              <i aria-hidden="true">♨</i>
+              <span>Calories</span>
+              <strong id="total-calories">0</strong>
+              <em>kcal</em>
+            </div>
+            <div class="ribbon-cell">
+              <i aria-hidden="true">◔</i>
+              <span>Protein</span>
+              <strong id="total-protein">0g</strong>
+            </div>
+            <div class="ribbon-cell">
+              <i aria-hidden="true">♧</i>
+              <span>Carbs</span>
+              <strong id="total-carbs">0g</strong>
+            </div>
+            <div class="ribbon-cell">
+              <i aria-hidden="true">◌</i>
+              <span>Fat</span>
+              <strong id="total-fat">0g</strong>
+            </div>
+            <div class="ribbon-cell">
+              <i aria-hidden="true">▥</i>
+              <span>Sodium</span>
+              <strong id="total-sodium">0mg</strong>
+            </div>
+            <div class="ribbon-cell">
+              <i aria-hidden="true">♮</i>
+              <span>Fiber</span>
+              <strong id="total-fiber">0g</strong>
+            </div>
+            <div class="ribbon-cell">
+              <i aria-hidden="true">✣</i>
+              <span>Sugar</span>
+              <strong id="total-sugar">0g</strong>
+            </div>
+            <div class="ribbon-cell">
+              <i aria-hidden="true">♡</i>
+              <span>Sat fat</span>
+              <strong id="total-sat-fat">0g</strong>
+            </div>
+          </section>
+        </aside>
 
-      <section class="compare-strip" aria-labelledby="compare-title">
-        <div class="section-kicker">
-          <h2 id="compare-title">Compare your choices</h2>
-          <p>Small changes can move the numbers fast.</p>
+        <div class="tool-main">
+          <nav class="category-tabs" aria-label="Ingredient groups">
+            <a href="#group-rice">Rice</a>
+            <a href="#group-beans">Beans</a>
+            <a href="#group-protein">Protein</a>
+            <a href="#group-salsa">Salsa</a>
+            <a href="#group-toppings">Toppings</a>
+            <a href="#group-sides">Sides</a>
+          </nav>
+
+          <section class="builder-zone" aria-labelledby="builder-title">
+            <div class="builder-heading">
+              <div class="step-title">
+                <span>Build</span>
+                <div>
+                  <h2 id="builder-title">Build your meal</h2>
+                </div>
+              </div>
+              <button type="button" class="portion-guide" id="portion-guide">Portion size guide</button>
+            </div>
+            <div class="ingredient-groups" id="ingredient-groups"></div>
+          </section>
+
+          <section class="preset-strip" aria-labelledby="presets-title">
+            <div class="strip-title">
+              <h2 id="presets-title">Quick presets</h2>
+              <p>Popular builds to get you started.</p>
+            </div>
+            <div class="preset-list" id="preset-list"></div>
+          </section>
+
+          <section class="compare-strip" aria-labelledby="compare-title">
+            <div class="section-kicker">
+              <h2 id="compare-title">Compare</h2>
+              <p>Small changes can move the numbers fast.</p>
+            </div>
+            <div class="compare-grid">
+              <article>
+                <img src="/ui-assets/compare-bowl.png" alt="" loading="lazy" />
+                <span>Bowl vs burrito</span>
+                <strong id="compare-burrito">+320 cal</strong>
+                <p>Same fillings, flour tortilla added.</p>
+              </article>
+              <article>
+                <img src="/ui-assets/compare-rice.png" alt="" loading="lazy" />
+                <span>Normal vs extra rice</span>
+                <strong>+105 cal</strong>
+                <p>Extra rice is roughly half a serving more.</p>
+              </article>
+              <article>
+                <img src="/ui-assets/compare-chips.png" alt="" loading="lazy" />
+                <span>With vs without chips</span>
+                <strong>+540 cal</strong>
+                <p>Chips can outweigh many lean toppings.</p>
+              </article>
+            </div>
+          </section>
         </div>
-        <div class="compare-grid">
-          <article>
-            <img src="/ui-assets/compare-bowl.png" alt="" loading="lazy" />
-            <span>Bowl vs burrito</span>
-            <strong id="compare-burrito">+320 cal</strong>
-            <p>Same fillings, flour tortilla added.</p>
-          </article>
-          <article>
-            <img src="/ui-assets/compare-rice.png" alt="" loading="lazy" />
-            <span>Normal vs extra rice</span>
-            <strong>+105 cal</strong>
-            <p>Extra rice is roughly half a serving more.</p>
-          </article>
-          <article>
-            <img src="/ui-assets/compare-chips.png" alt="" loading="lazy" />
-            <span>With vs without chips</span>
-            <strong>+540 cal</strong>
-            <p>Chips can outweigh many lean toppings.</p>
-          </article>
-        </div>
-      </section>
+      </div>
 
       <section class="summary-dock" aria-label="Current meal summary">
         <div>
@@ -319,22 +334,22 @@ const structuredData = [
     ];
 
     const presets = [
-      { name: "Lean Chicken Bowl", note: "480 cal · 40g protein", image: "/ui-assets/preset-bowl.png", format: "bowl", items: { chicken: 1, "brown-rice": 0.5, "black-beans": 0.5, fajita: 1, "fresh-salsa": 1, lettuce: 1 } },
-      { name: "High Protein Double Chicken", note: "790 cal · 73g protein", image: "/ui-assets/preset-chicken.png", format: "bowl", items: { chicken: 2, "white-rice": 1, "black-beans": 1, fajita: 1, "red-salsa": 1 } },
-      { name: "Lower Carb Steak Salad", note: "520 cal · 44g protein", image: "/ui-assets/preset-salad.png", format: "salad", items: { steak: 1, fajita: 1, "green-salsa": 1, cheese: 1, guac: 0.5 } },
-      { name: "Veggie Bowl", note: "520 cal · 18g protein", image: "/ui-assets/preset-veggie.png", format: "bowl", items: { "brown-rice": 1, "black-beans": 1, fajita: 1, "corn-salsa": 1, "fresh-salsa": 1, guac: 1 } },
-      { name: "Burrito Reality Check", note: "970 cal · 42g protein", image: "/ui-assets/preset-burrito.png", format: "burrito", items: { chicken: 1, "white-rice": 1, "pinto-beans": 1, cheese: 1, "sour-cream": 1, "fresh-salsa": 1 } },
-      { name: "Chips + Guac", note: "770 cal · side impact", image: "/ui-assets/preset-chips.png", format: "bowl", items: { "chips-guac": 1 } }
+      { name: "Lean Chicken Bowl", note: "480 cal · 40g protein", image: "/ui-assets/preset-bowl.svg", format: "bowl", items: { chicken: 1, "brown-rice": 0.5, "black-beans": 0.5, fajita: 1, "fresh-salsa": 1, lettuce: 1 } },
+      { name: "High Protein Double Chicken", note: "790 cal · 73g protein", image: "/ui-assets/preset-chicken.svg", format: "bowl", items: { chicken: 2, "white-rice": 1, "black-beans": 1, fajita: 1, "red-salsa": 1 } },
+      { name: "Lower Carb Steak Salad", note: "520 cal · 44g protein", image: "/ui-assets/preset-salad.svg", format: "salad", items: { steak: 1, fajita: 1, "green-salsa": 1, cheese: 1, guac: 0.5 } },
+      { name: "Veggie Bowl", note: "520 cal · 18g protein", image: "/ui-assets/preset-veggie.svg", format: "bowl", items: { "brown-rice": 1, "black-beans": 1, fajita: 1, "corn-salsa": 1, "fresh-salsa": 1, guac: 1 } },
+      { name: "Burrito Reality Check", note: "970 cal · 42g protein", image: "/ui-assets/preset-burrito.svg", format: "burrito", items: { chicken: 1, "white-rice": 1, "pinto-beans": 1, cheese: 1, "sour-cream": 1, "fresh-salsa": 1 } },
+      { name: "Chips + Guac", note: "770 cal · side impact", image: "/ui-assets/preset-chips.svg", format: "bowl", items: { "chips-guac": 1 } }
     ];
 
     const groupOrder = ["Rice", "Beans", "Protein", "Salsa", "Toppings", "Sides"];
     const groupArt = {
-      Rice: "/ui-assets/group-rice.png",
-      Beans: "/ui-assets/group-beans.png",
-      Protein: "/ui-assets/group-protein.png",
-      Salsa: "/ui-assets/group-salsa.png",
-      Toppings: "/ui-assets/group-toppings.png",
-      Sides: "/ui-assets/group-sides.png"
+      Rice: "/ui-assets/group-rice.svg",
+      Beans: "/ui-assets/group-beans.svg",
+      Protein: "/ui-assets/group-protein.svg",
+      Salsa: "/ui-assets/group-salsa.svg",
+      Toppings: "/ui-assets/group-toppings.svg",
+      Sides: "/ui-assets/group-sides.svg"
     };
     const compactLabels = {
       "white-rice": "White rice",
@@ -434,7 +449,7 @@ const structuredData = [
       target.innerHTML = groupOrder.map((group) => {
         const groupItems = items.filter((item) => item.group === group);
         return `
-          <section class="ingredient-panel">
+          <section class="ingredient-panel" id="group-${group.toLowerCase()}">
             <div class="ingredient-panel-head">
               <h3>${group}</h3>
               <img class="panel-photo" src="${groupArt[group]}" alt="" loading="lazy">

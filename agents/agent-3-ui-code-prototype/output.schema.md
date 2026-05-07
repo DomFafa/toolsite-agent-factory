@@ -21,5 +21,6 @@ Each output should include decisions, assumptions, visual deviations from the se
 - Whether the required 90% threshold passed
 - Evidence screenshot paths
 - Remaining deviations
+- Usability deviations, if any, including overflow, readability, dirty thumbnails, food crop issues, or control sizing issues
 
 `visual-lock.md` must explicitly state that functionality and SEO are still deferred unless the 90% visual restoration threshold passed.

@@ -7,8 +7,11 @@
     "create-run": "bash scripts/create-run.sh",
     "indexnow": "node scripts/deploy/indexnow-submit.mjs",
     "ui:import": "node scripts/design/import-generated-ui.mjs",
+    "asset-quality": "node scripts/design/asset-quality-gate.mjs",
     "test:indexnow": "node --test scripts/deploy/indexnow-submit.test.mjs",
     "test:ui-import": "node --test scripts/design/import-generated-ui.test.mjs",
+    "test:asset-quality": "node --test scripts/design/asset-quality-gate.test.mjs",
+    "test:ui-ux-gates": "node --test scripts/design/ui-ux-gates.test.mjs",
     "qa:starter": "bash scripts/qa/run-local-qa.sh starter-site",
     "tree": "find . -maxdepth 4 -not -path './.git/*' -not -path './starter-site/node_modules/*' | sort"
   }

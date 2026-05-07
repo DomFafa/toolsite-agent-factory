@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" role="img" aria-label="Steak salad illustration">
+  <rect width="360" height="240" fill="#f8efe2"/>
+  <ellipse cx="180" cy="140" rx="128" ry="56" fill="#d9c0a3"/>
+  <ellipse cx="180" cy="124" rx="112" ry="48" fill="#fffaf2"/>
+  <g fill="#69a44e"><ellipse cx="133" cy="119" rx="44" ry="18" transform="rotate(-12 133 119)"/><ellipse cx="194" cy="111" rx="48" ry="19" transform="rotate(14 194 111)"/><ellipse cx="221" cy="141" rx="45" ry="18" transform="rotate(-17 221 141)"/></g>
+  <g fill="#7b3e24"><rect x="112" y="134" width="42" height="24" rx="8" transform="rotate(-10 133 146)"/><rect x="175" y="132" width="42" height="24" rx="8" transform="rotate(12 196 144)"/></g>
+  <circle cx="242" cy="112" r="24" fill="#a7bd4f"/>
+</svg>

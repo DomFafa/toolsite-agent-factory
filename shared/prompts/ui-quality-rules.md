@@ -5,8 +5,17 @@
 - Desktop and mobile layouts must both be designed and checked.
 - Agent 2.5 must generate design options through the external design model for every site, even when no UI references are provided.
 - Agent 2.5 must optimize prompts for 90% Astro/HTML/CSS/vanilla JS restoration, not only image beauty.
+- Agent 2.5 must optimize for real calculator usability before visual beauty: dynamic values, long labels, readable controls, and responsive fallback layouts must fit.
+- UI must not allow numeric overflow for realistic values such as `1,090mg`, `1,240mg`, `2,400mg`, `1,250 cal`, `120g`, or `20.5g`.
+- Preset thumbnails, food images, ingredient thumbnails, and decorative assets must not contain embedded UI text, mini labels, nutrition numbers, or screenshot fragments.
+- Food and ingredient assets must be source-quality, not tiny screenshot crops. Ingredient hero images require at least `1000x360` raster or equivalent SVG/vector; preset thumbnails require at least `300x190` raster or equivalent SVG/vector.
+- Image assets must match their display slot aspect ratio, avoid visible white gutters, keep the food subject identifiable, and avoid browser upscaling that causes blur.
+- SVG image assets must not contain `<text>` labels or embed raster `<image>` files.
+- After the selected UI option is confirmed, Agent 2.5 must obtain a high-resolution `selected-option-assets.zip` from the external design model for every image slot. Fallback vector/local placeholders are allowed only after a recorded blocker or user waiver.
+- Build/tool panels must keep primary labels readable and controls clickable. If a dense grid makes the UI too small, the design must choose a more usable layout.
 - Local generated PNG/SVG assets are allowed when they improve restoration fidelity and are safe to use.
 - Agent 5 Design Package Gate must reject weak or non-codable visual concepts before Agent 3 starts.
+- Agent 5 Design Package Gate must reject visually attractive but unusable concepts before Agent 3 starts.
 - Agent 3 must restore the static visual UI first and defer functionality and SEO.
 - Agent 5 Visual Restoration Gate must reject Agent 3 output below 90% desktop/mobile visual match.
 - If Agent 3 generates screenshots from an approved design, Agent 4 must preserve the visual lock while adding functionality and SEO.

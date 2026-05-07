@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" role="img" aria-label="Black beans bowl illustration">
+  <rect width="1200" height="440" fill="#f8efe2"/>
+  <ellipse cx="600" cy="250" rx="455" ry="150" fill="#d9c0a3"/>
+  <ellipse cx="600" cy="222" rx="410" ry="132" fill="#fffaf2"/>
+  <ellipse cx="600" cy="220" rx="355" ry="103" fill="#4a2318"/>
+  <g fill="#2e1711">
+    <ellipse cx="377" cy="210" rx="42" ry="27" transform="rotate(-18 377 210)"/>
+    <ellipse cx="458" cy="174" rx="46" ry="28" transform="rotate(12 458 174)"/>
+    <ellipse cx="538" cy="222" rx="48" ry="29" transform="rotate(-10 538 222)"/>
+    <ellipse cx="628" cy="176" rx="44" ry="28" transform="rotate(16 628 176)"/>
+    <ellipse cx="715" cy="218" rx="49" ry="29" transform="rotate(-19 715 218)"/>
+    <ellipse cx="810" cy="191" rx="45" ry="28" transform="rotate(20 810 191)"/>
+    <ellipse cx="446" cy="270" rx="46" ry="28" transform="rotate(-7 446 270)"/>
+    <ellipse cx="594" cy="282" rx="49" ry="28" transform="rotate(12 594 282)"/>
+    <ellipse cx="746" cy="270" rx="46" ry="28" transform="rotate(-14 746 270)"/>
+  </g>
+  <g fill="#6b3526" opacity=".95">
+    <ellipse cx="398" cy="199" rx="18" ry="9"/>
+    <ellipse cx="470" cy="164" rx="19" ry="9"/>
+    <ellipse cx="555" cy="211" rx="18" ry="9"/>
+    <ellipse cx="642" cy="167" rx="18" ry="9"/>
+    <ellipse cx="730" cy="207" rx="19" ry="9"/>
+    <ellipse cx="823" cy="182" rx="18" ry="9"/>
+    <ellipse cx="611" cy="272" rx="20" ry="9"/>
+  </g>
+</svg>

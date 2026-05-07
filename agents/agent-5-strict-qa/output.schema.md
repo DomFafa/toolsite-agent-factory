@@ -22,7 +22,18 @@ Design Package Gate outputs must record:
 - Codability score
 - Visual quality score
 - Tool-fit score
+- Usability score
+- Data-fit score
 - Mobile usability score
+- Numeric overflow assessment
+- Thumbnail and preset image text assessment
+- Asset quality gate result
+- Post-selection high-resolution asset acquisition status
+- Selected option asset zip path, manifest status, retry evidence, and fallback/waiver status
+- Food image source size, aspect ratio, blur/upscaling, and white-gutter assessment
+- Build/tool panel readability assessment
+- Food image crop assessment
+- Click/tap target assessment
 - Reference usage assessment
 - Copy/brand safety assessment
 - Pass/fail decision
@@ -38,5 +49,7 @@ Visual Restoration Gate outputs must record:
 - Required threshold: 90
 - Pass/fail decision
 - Visual deviations by module
+- Usability deviations by module, including overflow, readability, thumbnail cleanliness, image cropping, and control sizing
+- Asset quality deviations by module, including low source resolution, blurred upscaling, white gutters, or embedded raster SVGs
 - Whether functionality remains deferred
 - Required changes if failed

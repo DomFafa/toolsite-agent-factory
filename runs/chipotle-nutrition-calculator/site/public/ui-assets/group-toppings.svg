@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" role="img" aria-label="Shredded cheese topping illustration">
+  <rect width="1200" height="440" fill="#f8efe2"/>
+  <ellipse cx="600" cy="262" rx="430" ry="142" fill="#d9c0a3"/>
+  <ellipse cx="600" cy="232" rx="388" ry="124" fill="#fffaf2"/>
+  <ellipse cx="600" cy="232" rx="335" ry="92" fill="#f5d45f"/>
+  <g fill="none" stroke="#f9ec9d" stroke-width="18" stroke-linecap="round">
+    <path d="M374 210c78-34 126 38 198-4s136-11 230 18"/>
+    <path d="M382 252c94-31 144 22 222-22 69-39 126 5 218 17"/>
+    <path d="M430 176c72 22 106 58 178 23 78-38 137-9 188 17"/>
+    <path d="M458 293c65-32 126-3 180-34 63-36 121 6 168 20"/>
+  </g>
+  <g fill="none" stroke="#d49d28" stroke-width="12" stroke-linecap="round" opacity=".85">
+    <path d="M415 220c75-18 122 31 174-1"/>
+    <path d="M545 269c86-38 139-4 229 5"/>
+    <path d="M501 186c72 24 126-22 205-3"/>
+  </g>
+</svg>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" role="img" aria-label="Double chicken bowl illustration">
+  <rect width="360" height="240" fill="#f8efe2"/>
+  <ellipse cx="180" cy="139" rx="128" ry="56" fill="#d9c0a3"/>
+  <ellipse cx="180" cy="124" rx="112" ry="48" fill="#fffaf2"/>
+  <g fill="#d98333" stroke="#924417" stroke-width="2.5">
+    <rect x="94" y="99" width="48" height="32" rx="10" transform="rotate(-10 118 115)"/>
+    <rect x="147" y="83" width="48" height="34" rx="10" transform="rotate(15 171 100)"/>
+    <rect x="199" y="100" width="50" height="32" rx="10" transform="rotate(-8 224 116)"/>
+    <rect x="129" y="132" width="48" height="32" rx="10" transform="rotate(7 153 148)"/>
+    <rect x="185" y="137" width="48" height="32" rx="10" transform="rotate(-12 209 153)"/>
+  </g>
+</svg>

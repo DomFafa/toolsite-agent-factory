@@ -4,7 +4,7 @@
 
 Generate high-quality, implementation-ready UI design directions before implementation begins.
 
-The default restoration target is 90% visual similarity between the selected GPT design target and the rendered site screenshots. Design beauty is not enough; the output must be practical for Astro + HTML/CSS + vanilla JS restoration.
+The default restoration target is 90% visual similarity between the selected GPT design target and the rendered site screenshots. Design beauty is not enough; the output must be practical for Astro + HTML/CSS + vanilla JS restoration and must pass usability constraints before restoration begins.
 
 This agent is mandatory for every site, whether or not the user supplied UI references.
 
@@ -20,7 +20,11 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 - User UI references are optional. Their absence must trigger open design exploration, not a skipped design step.
 - Design for codability. Avoid asking the external model for hard-to-reproduce visual effects unless it also exports them as local PNG/SVG assets.
 - Local visual assets are allowed and encouraged when they materially improve restoration fidelity. Assets must be original or generated, non-infringing, and saved in the run folder.
+- Large food/ingredient imagery must be designed as production assets, not cropped from screenshots. Each image slot must specify final display size, required source size, aspect ratio, subject fill, and white-margin limits before approval.
 - The first goal is visual restoration. Tool functionality and SEO content are later phases and must not dilute the design prompt.
+- The selected design must be a usable calculator interface, not only a polished static image. Realistic dynamic data, long labels, state changes, and touch targets must fit before the design can proceed.
+- Do not put text inside food photos, preset thumbnails, ingredient thumbnails, chart images, or decorative assets. Thumbnail images must be clean visual assets; labels, nutrition numbers, and UI copy must be rendered as real HTML text.
+- Selecting an option is not the end of Agent 2.5. After the selected option is confirmed, Agent 2.5 must continue interacting with the external design model until it obtains a high-resolution asset pack for every image slot in the selected design, or records a hard blocker with exact retry evidence.
 
 ## Required Inputs
 
@@ -42,6 +46,9 @@ Each direction must include:
 - Design tokens with concrete values
 - Component and layout specifications
 - Asset plan, including any generated PNG/SVG assets needed for 90% restoration
+- Usability contract covering realistic data ranges, overflow behavior, readable text sizes, and responsive fallbacks
+- Dynamic data fit notes covering worst-case values and long labels
+- UX self-audit explaining how the design avoids pretty-but-unusable calculator states
 - Restoration rules that tell Agent 3 what must not change
 - Runnable frontend code when possible, preferably plain HTML/CSS/JS
 - A short design rationale
@@ -51,6 +58,7 @@ Every direction must obey:
 
 - First viewport is the usable tool, not a marketing hero.
 - The interface must fit the actual tool workflow from Agent 2.
+- The interface must fit realistic calculator data, not only the values in the mock screenshot.
 - The design must avoid generic SaaS/Tailwind template patterns.
 - The design must not copy logos, brand assets, unique illustrations, exact layouts, or protected trade dress from references.
 - The design may use reference material for mood, component feel, illustration mood, and layout rhythm only within the boundaries in `docs/ui-reference-guidelines.md`.
@@ -58,16 +66,52 @@ Every direction must obey:
 - Avoid complex photorealism, random textures, 3D objects, uncertain fonts, text-as-image effects, heavy glassmorphism, and reflections unless exported as local assets.
 - Use stable, named font choices. If a font is not locally available or web-safe, provide a fallback stack and expected metrics.
 - Keep the desktop first viewport within the design target height specified by Agent 2.5, normally 760px to 900px for 1440px screenshots unless the tool genuinely needs more space.
+- Numeric fields must reserve enough width for realistic long values, including examples such as `1,090mg`, `1,240mg`, `2,400mg`, `1,250 cal`, `120g`, and `20.5g`.
+- Ingredient, preset, and option labels must remain readable with real menu names and localized long words. Minimum desktop body/control label target is 12px; minimum mobile label target is 14px unless the label is clearly secondary metadata.
+- Interactive controls must be large enough to click or tap: target at least 32px on desktop and 44px on mobile where space permits.
+- Food and ingredient images must show the food clearly. Do not crop the primary subject off the card. If six columns make the food or labels too small, choose a 3x2 layout, horizontal grouping, tabs, or another responsive fallback instead of squeezing the UI.
+- Preset thumbnails must not contain embedded text, mini nutrition labels, tiny badges, or screenshot fragments. Use clean food-only images and place preset names/numbers beside them as HTML.
+- Asset quality contract is mandatory for every local image asset:
+  - Ingredient hero images must be original/generated assets at least `1000x360` for raster, or SVG/vector with an equivalent `viewBox`.
+  - Preset thumbnails must be at least `300x190` for raster, or SVG/vector with an equivalent `viewBox`.
+  - Raster source size must be at least 2x the rendered CSS slot in both dimensions.
+  - Aspect ratio must match the intended slot closely enough to avoid stretching or visible white gutters.
+  - Primary food subject should fill roughly `75%-92%` of the visual area without being cropped beyond recognition.
+  - Avoid white/transparent edge padding larger than `8%` on any side unless the component intentionally provides that padding.
+  - SVG assets must not contain `<text>` labels or embed low-resolution raster `<image>` files.
+
+## Post-Selection High-Resolution Asset Acquisition
+
+After selecting the winning option, Agent 2.5 must run a mandatory asset acquisition loop through `web-access` in the same external design surface:
+
+1. Send the selected option name, selected target screenshot, component spec, and `asset-quality-contract.md` back to the external model.
+2. Ask the model to generate every image asset used by the selected design as separate high-resolution files, not as crops from the design screenshot.
+3. Require a downloadable `selected-option-assets.zip` containing:
+   - `asset-manifest.json`
+   - `asset-quality-contract.md`
+   - one file per image slot, using stable names such as `ingredient-rice.png`, `preset-lean-chicken-bowl.png`, `hero-food.png`, or equivalent SVG names
+   - optional source prompts in `asset-prompts.md`
+4. Require every file in the zip to match the selected option's style and composition.
+5. Require raster ingredient hero assets to be at least `1000x360`, raster preset thumbnails to be at least `300x190`, and any larger rendered slots to have at least 2x source pixels.
+6. Require images to contain no embedded UI text, mini labels, nutrition values, logos, watermarks, screenshot fragments, or accidental white gutters.
+7. Download the zip, import or extract the assets into `agent-2-5-output/selected-design/assets/`, and preserve the zip under `agent-2-5-output/selected-design/downloads/`.
+8. Run the asset quality gate after wiring those assets into the run. If the gate fails, return to the external model with the exact failures and request a corrected asset zip.
+9. Repeat until the high-resolution asset pack passes, or record a hard external blocker in `asset-acquisition-report.md`.
+
+Fallback vector illustrations or locally generated placeholders are allowed only after the asset acquisition loop fails or is explicitly waived by the user. They must be recorded as a fallback, not treated as the preferred path.
 
 ## External LLM Flow
 
 1. Build `design-generation-prompt.md` from Agent 2 outputs and the UI reference dossier.
 2. Use `web-access` to send the prompt to the ChatGPT web UI with the deepest available reasoning/design generation mode.
 3. Tell the external model that the design will be restored by Codex in Astro and must be optimized for 90% screenshot fidelity.
-4. Request UI images, design tokens, component specs, asset plans, restoration rules, and corresponding frontend code for each direction.
-5. If generated code is truncated, keep prompting for continuation until the complete file set is recovered, or record a hard code-export blocker.
-6. Download any generated code archive/assets, or copy the code into files under `agent-2-5-output/generated-designs/<option>/`.
-7. If a code archive is downloaded, import it with:
+4. Give the external model the actual tool workflow, expected inputs, dynamic output ranges, and long-label examples from Agent 2. Tell it to design for real use before visual polish.
+5. Request UI images, design tokens, component specs, usability contracts, dynamic data fit notes, UX self-audits, asset plans, restoration rules, and corresponding frontend code for each direction.
+6. Explicitly ask the model to reject its own beautiful-but-unusable choices, including numeric overflow, tiny ingredient text, cropped food cards, preset thumbnails with embedded text, and mobile controls that cannot be tapped.
+7. Require a per-option `asset-quality-contract.md` that lists every image slot, rendered CSS size, required source size, source file path, aspect ratio, subject fill notes, and whether the asset is raster or vector.
+8. If generated code is truncated, keep prompting for continuation until the complete file set is recovered, or record a hard code-export blocker.
+9. Download any generated code archive/assets, or copy the code into files under `agent-2-5-output/generated-designs/<option>/`.
+10. If a code archive is downloaded, import it with:
 
 ```bash
 node scripts/design/import-generated-ui.mjs \
@@ -76,9 +120,12 @@ node scripts/design/import-generated-ui.mjs \
   --option option-a
 ```
 
-8. Run each generated option locally when code is available, capture desktop and mobile screenshots, and store them with that option.
-9. Select the strongest option based on visual quality, codability, asset completeness, and expected restoration fidelity.
-10. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
+11. Run each generated option locally when code is available, capture desktop and mobile screenshots, and store them with that option.
+12. Select the strongest option based on visual quality, codability, asset completeness, usability, real-data fit, and expected restoration fidelity.
+13. After the selected option is confirmed, run the mandatory post-selection high-resolution asset acquisition loop and download `selected-option-assets.zip`.
+14. Extract selected high-resolution assets into `agent-2-5-output/selected-design/assets/` and preserve the original zip in `agent-2-5-output/selected-design/downloads/`.
+15. Run `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` when selected assets are wired into the run. Treat failures as design package blockers.
+16. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
 
 ## Outputs
 

@@ -7,9 +7,21 @@ Agent 5 must run once after Agent 2.5 and before Agent 3. It must check:
 - Agent 2.5 generated at least three design options or recorded a hard external blocker
 - Selected design has desktop and mobile target screenshots
 - Selected design has design tokens, component spec, asset plan, restoration rules, and forbidden deviations
+- Selected design has usability contract, dynamic data fit notes, and UX self-audit
+- Selected design has post-selection high-resolution asset acquisition evidence, including `selected-option-assets.zip` and `asset-manifest.json`, unless a hard blocker or user-approved waiver is recorded
 - Selected design has complete runnable frontend code, or the code-export blocker/fallback path is clearly recorded
 - Selected design is practical for 90% restoration in Astro + HTML/CSS + vanilla JS
+- Usability QA passes before visual approval:
+  - realistic dynamic values do not overflow metric/result cells
+  - preset thumbnails and food images do not contain embedded text or screenshot fragments
+  - food/ingredient images meet asset-quality requirements for source size, aspect ratio, subject fill, and white-margin risk
+  - SVG assets do not contain `<text>` labels or embed low-resolution raster `<image>` files
+  - build/tool labels are readable
+  - controls are large enough for click/tap use
+  - food images are not cropped beyond recognition
+  - dense layouts use responsive fallbacks rather than shrinking the actual workflow
 - Required local visual assets are present and safe to use
+- Required local visual assets pass `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>`
 - First viewport is the usable tool, not a marketing hero
 - UI fits Agent 2 tool behavior and information architecture
 - User references were used appropriately, or open exploration was performed when none were provided
@@ -30,6 +42,8 @@ Agent 5 must run after Agent 3 and before Agent 4. It must check:
 - Desktop screenshot matches Agent 2.5 selected design target at 90% or higher
 - Mobile screenshot matches Agent 2.5 selected design target at 90% or higher
 - Major modules match the selected design target: first viewport, typography, spacing, cards, controls, visual assets, background, and mobile structure
+- The restoration does not preserve or introduce usability defects: numeric overflow, unreadable text, dirty thumbnails, broken food crops, or unusable controls
+- The restoration does not preserve or introduce low-resolution, blurry, stretched, or white-gutter food assets
 - Functionality and SEO remain deferred until after the gate
 
 Agent 4 cannot start until Visual Restoration Gate passes.
@@ -46,6 +60,9 @@ Agent 5 must run again after Agent 4. It must check:
 - Actual implementation matches Agent 2.5 selected design
 - Actual implementation matches Agent 3 screenshots
 - Tool works with normal and edge-case inputs
+- Dynamic output values such as `1,090mg`, `1,240mg`, `2,400mg`, `1,250 cal`, `120g`, and `20.5g` fit without overflow
+- Preset thumbnails, food images, and ingredient thumbnails are clean images without embedded text
+- Referenced local UI assets pass the asset quality gate
 - Title and meta description are keyword aligned
 - Canonical URL is correct
 - Robots and sitemap are correct

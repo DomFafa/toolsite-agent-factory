@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" role="img" aria-label="Guacamole side illustration">
+  <rect width="1200" height="440" fill="#f8efe2"/>
+  <ellipse cx="600" cy="262" rx="430" ry="142" fill="#d9c0a3"/>
+  <ellipse cx="600" cy="232" rx="388" ry="124" fill="#fffaf2"/>
+  <ellipse cx="600" cy="231" rx="330" ry="94" fill="#a7bd4f"/>
+  <path d="M380 235c78-70 154 45 242-16 95-66 156 47 214-8" fill="none" stroke="#5e7d2d" stroke-width="42" stroke-linecap="round" opacity=".9"/>
+  <path d="M432 278c88-45 160 24 238-27 62-41 112 16 162 25" fill="none" stroke="#d6df85" stroke-width="32" stroke-linecap="round" opacity=".95"/>
+  <g fill="#ef6b32">
+    <circle cx="477" cy="202" r="14"/>
+    <circle cx="650" cy="196" r="13"/>
+    <circle cx="744" cy="251" r="14"/>
+  </g>
+  <g fill="#2f7153">
+    <ellipse cx="548" cy="259" rx="22" ry="10" transform="rotate(-22 548 259)"/>
+    <ellipse cx="700" cy="224" rx="22" ry="10" transform="rotate(18 700 224)"/>
+  </g>
+</svg>

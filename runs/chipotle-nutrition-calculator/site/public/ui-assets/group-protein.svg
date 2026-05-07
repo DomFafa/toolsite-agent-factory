@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" role="img" aria-label="Grilled chicken pieces illustration">
+  <rect width="1200" height="440" fill="#f8efe2"/>
+  <ellipse cx="600" cy="262" rx="430" ry="142" fill="#d9c0a3"/>
+  <ellipse cx="600" cy="232" rx="388" ry="124" fill="#fffaf2"/>
+  <g fill="#d98333" stroke="#924417" stroke-width="5">
+    <rect x="335" y="179" width="128" height="84" rx="26" transform="rotate(-10 399 221)"/>
+    <rect x="466" y="142" width="128" height="90" rx="27" transform="rotate(15 530 187)"/>
+    <rect x="596" y="182" width="132" height="86" rx="28" transform="rotate(-7 662 225)"/>
+    <rect x="730" y="145" width="126" height="90" rx="27" transform="rotate(14 793 190)"/>
+    <rect x="426" y="255" width="128" height="85" rx="26" transform="rotate(8 490 297)"/>
+    <rect x="564" y="264" width="128" height="86" rx="27" transform="rotate(-12 628 307)"/>
+    <rect x="704" y="250" width="128" height="86" rx="27" transform="rotate(11 768 293)"/>
+  </g>
+  <g stroke="#6f3115" stroke-width="8" stroke-linecap="round" opacity=".55">
+    <path d="M365 204l72 28M497 168l70 32M628 207l78 30M764 168l70 35M461 276l72 34M595 290l75 22M742 272l70 36"/>
+  </g>
+</svg>

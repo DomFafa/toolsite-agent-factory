@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" role="img" aria-label="Chicken bowl illustration">
+  <rect width="360" height="240" fill="#f8efe2"/>
+  <ellipse cx="180" cy="138" rx="128" ry="56" fill="#d9c0a3"/>
+  <ellipse cx="180" cy="124" rx="112" ry="48" fill="#fffaf2"/>
+  <path d="M96 124c41-35 71 23 112-8 35-27 60 10 76 24" fill="none" stroke="#5f7f35" stroke-width="18" stroke-linecap="round"/>
+  <g fill="#d98333"><rect x="115" y="100" width="44" height="29" rx="9" transform="rotate(-10 137 115)"/><rect x="168" y="85" width="43" height="30" rx="9" transform="rotate(15 190 100)"/></g>
+  <g fill="#f5e8ca"><ellipse cx="214" cy="139" rx="30" ry="11"/><ellipse cx="143" cy="141" rx="30" ry="11"/></g>
+</svg>

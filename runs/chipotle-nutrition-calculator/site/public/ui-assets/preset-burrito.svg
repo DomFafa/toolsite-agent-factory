@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" role="img" aria-label="Burrito illustration">
+  <rect width="360" height="240" fill="#f8efe2"/>
+  <path d="M87 138c29-49 109-71 189-23 12 7 17 22 11 35-7 16-29 23-45 16-52-25-100-18-134 11-12 10-31 1-28-15 1-8 3-16 7-24z" fill="#ead9bd" stroke="#b89971" stroke-width="5"/>
+  <path d="M115 137c31-27 83-33 136-10" fill="none" stroke="#c6a67f" stroke-width="8" stroke-linecap="round"/>
+  <g fill="#d98333"><circle cx="251" cy="123" r="13"/><circle cx="268" cy="138" r="11"/></g>
+  <g fill="#5f7f35"><ellipse cx="235" cy="139" rx="18" ry="8" transform="rotate(-20 235 139)"/><ellipse cx="260" cy="151" rx="17" ry="8" transform="rotate(24 260 151)"/></g>
+</svg>

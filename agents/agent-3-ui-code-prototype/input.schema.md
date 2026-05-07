@@ -5,6 +5,9 @@
 - Agent 2.5 selected design target images
 - Agent 2.5 selected design tokens
 - Agent 2.5 selected component spec
+- Agent 2.5 usability contract
+- Agent 2.5 dynamic data fit notes
+- Agent 2.5 UX self-audit
 - Agent 2.5 selected asset plan and local assets
 - Agent 2.5 restoration rules and forbidden deviations
 - Agent 2.5 selected design code when complete

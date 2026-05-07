@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" role="img" aria-label="Cilantro lime rice bowl illustration">
+  <rect width="1200" height="440" fill="#f8efe2"/>
+  <ellipse cx="600" cy="250" rx="455" ry="150" fill="#d9c0a3"/>
+  <ellipse cx="600" cy="224" rx="410" ry="135" fill="#fffaf2"/>
+  <ellipse cx="600" cy="217" rx="360" ry="104" fill="#f5e8ca"/>
+  <g fill="#f7f2de">
+    <ellipse cx="364" cy="207" rx="42" ry="17" transform="rotate(-18 364 207)"/>
+    <ellipse cx="444" cy="181" rx="46" ry="18" transform="rotate(17 444 181)"/>
+    <ellipse cx="525" cy="230" rx="45" ry="17" transform="rotate(-9 525 230)"/>
+    <ellipse cx="604" cy="187" rx="42" ry="16" transform="rotate(11 604 187)"/>
+    <ellipse cx="690" cy="238" rx="48" ry="17" transform="rotate(-14 690 238)"/>
+    <ellipse cx="785" cy="202" rx="42" ry="17" transform="rotate(20 785 202)"/>
+    <ellipse cx="482" cy="270" rx="46" ry="17" transform="rotate(-5 482 270)"/>
+    <ellipse cx="622" cy="285" rx="48" ry="18" transform="rotate(16 622 285)"/>
+    <ellipse cx="744" cy="278" rx="44" ry="17" transform="rotate(-17 744 278)"/>
+  </g>
+  <g fill="#5f7f35">
+    <ellipse cx="545" cy="179" rx="26" ry="12" transform="rotate(-24 545 179)"/>
+    <ellipse cx="594" cy="161" rx="24" ry="11" transform="rotate(19 594 161)"/>
+    <ellipse cx="635" cy="194" rx="25" ry="12" transform="rotate(-9 635 194)"/>
+    <ellipse cx="566" cy="225" rx="23" ry="11" transform="rotate(13 566 225)"/>
+  </g>
+  <g>
+    <circle cx="805" cy="158" r="76" fill="#cce06e"/>
+    <circle cx="805" cy="158" r="62" fill="#e8f3a0"/>
+    <path d="M805 96v124M743 158h124M760 116l90 88M851 116l-91 88" stroke="#789039" stroke-width="8" stroke-linecap="round"/>
+  </g>
+</svg>

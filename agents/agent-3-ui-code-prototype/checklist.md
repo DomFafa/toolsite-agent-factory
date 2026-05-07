@@ -2,10 +2,15 @@
 
 - [ ] Agent 2.5 selected design exists
 - [ ] Agent 2.5 selected target images, specs, tokens, asset plan, and restoration rules exist
+- [ ] Agent 2.5 usability contract, dynamic data fit notes, and UX self-audit exist
 - [ ] Local visual assets are copied or referenced when required by the selected design
+- [ ] Local visual assets satisfy the asset-quality contract and are not tiny screenshots stretched into large UI slots
+- [ ] `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` passes when the prototype references local UI assets
 - [ ] Static visual shell is implemented before calculator functionality
 - [ ] SEO sections, FAQ, schema, sitemap, production indexing, and deployment are not added in this agent
 - [ ] Selected design visual system is preserved
+- [ ] Approved usability constraints are preserved
+- [ ] Numeric overflow, unreadable text, dirty thumbnails, cropped images, or unusable controls are not introduced as part of restoration
 - [ ] Generated code is cleaned or recreated without redesigning
 - [ ] Desktop screenshot exists
 - [ ] Mobile screenshot exists
