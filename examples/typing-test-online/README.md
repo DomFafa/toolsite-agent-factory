@@ -14,6 +14,12 @@ It is not a project diary. It is the standard operating sample for:
 - final QA
 - production approval blocking
 
+## Non-Negotiable Gates
+
+- Run Start Gate: before any work, output flow files read, current phase, next Agent, and forbidden actions.
+- Agent 2.5 GPT Prompt Gate: GPT prompt must include Astro + HTML/CSS/vanilla JS restoration, 90% screenshot similarity, real-tool first viewport, no dynamic-data overflow, mobile usability, complete interaction states, no pretty-but-unusable UI, and no UX sacrifice for visual impact.
+- Post-Final-QA Launch Stop Gate: after Final QA passes, stop; without explicit `批准上线` in the current chat, do not enter Agent 6, deploy, push production, change Cloudflare/DNS/analytics/indexing, or make production changes.
+
 ## Use In New Runs
 
 Before starting a new tool site, read these files and mirror the sequence:
@@ -32,4 +38,3 @@ Before starting a new tool site, read these files and mirror the sequence:
 ## Hard Rule
 
 No Agent may treat a written report as enough when a mechanical gate exists.
-
