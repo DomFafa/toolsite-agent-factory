@@ -20,6 +20,7 @@ Perform strict QA in two modes:
 - Stop and write an issue note if required inputs are missing.
 - In Design Package Gate mode, review generated UI design quality and codability before implementation begins. Bad or non-codable UI must not proceed to Agent 3.
 - In Design Package Gate mode, run Usability QA before visual approval. A beautiful design that fails realistic calculator usability must not proceed to Agent 3.
+- In Design Package Gate mode, require `gate-results/agent25-external-design-proof.json` to pass. Missing raw/exported GPT response, real conversation screenshot, source-provenance map, selected-design lineage, explicit user selection, or evidence that options/targets were GPT-derived blocks Agent 3.
 - In Design Package Gate mode, require post-selection independent selected-asset evidence from Agent 2.5. The selected option must include `selected-design/image-slots.md`, `asset-manifest.json`, and a passing `gate-results/selected-assets.json`. If image slots exist, it must also include a downloaded `selected-option-assets.zip` or a hard blocker/user waiver with retry evidence.
 - In Design Package Gate mode, run the toolsite design-review subset gate. It is intentionally smaller than full `/design-review` and checks first impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel.
 - In Visual Restoration Gate mode, compare Agent 3 rendered screenshots against Agent 2.5 selected design targets. The default pass threshold is 90% visual match. Functionality and SEO completeness are not evaluated in this mode.
@@ -44,6 +45,7 @@ Design Package Gate must fail if any selected design has:
 - Image aspect ratios that force stretching, letterboxing, or visible white gutters in the card.
 - SVG assets that contain `<text>` labels or embed raster `<image>` files.
 - Missing `selected-design/image-slots.md`, missing or failing `gate-results/selected-assets.json`, missing `asset-manifest.json`, incomplete selected asset extraction, or fallback assets used without `selected-design/fallback-illustration-report.md` and a recorded blocker/user waiver.
+- Missing or failing `gate-results/agent25-external-design-proof.json`, local HTML/CSS option boards, manual mockups, reconstructed targets, locally generated targets, Codex-local selected design packages, or formal-project 3-minute defaults.
 - Selected image assets that were cropped, extracted, traced, or cut from option screenshots, target screenshots, final screenshots, or QA screenshots instead of generated/provided as independent standalone files.
 - Controls that do not visibly change state or totals.
 - `None`/`No` options that can coexist with positive selections in the same group, or `None`/`No` clearing actions that still show portion/size controls.

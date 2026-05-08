@@ -42,6 +42,7 @@ export async function runFinalQaEvidenceGate({ runDir }) {
   const failures = [];
   const requiredGateResults = [
     ['web-access-preflight.json', 'repo-local web-access preflight'],
+    ['agent25-external-design-proof.json', 'Agent 2.5 external GPT source proof'],
     ['agent25-lineage.json', 'Agent 2.5 lineage'],
     ['selected-assets.json', 'post-selection selected image assets'],
     ['toolsite-design-review.json', 'toolsite design-review subset'],

@@ -160,6 +160,21 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
     await writeFile(path.join(evidence, 'conversation-screenshot.png'), 'x'.repeat(10_001));
     await writeFile(path.join(evidence, 'source-provenance.md'), '# Source provenance\n\nDecision: PASS\n');
     await writeFile(path.join(evidence, 'selected-design-lineage.md'), '# Selected design lineage\n\nDecision: PASS\n');
+    await writeFile(
+      path.join(evidence, 'external-design-proof.json'),
+      JSON.stringify(
+        {
+          mode: 'production',
+          approvedDesignSurface: 'ChatGPT approved design surface',
+          externalResponse: { path: 'agent-2-5-output/external-design-evidence/external-response.md', kind: 'raw exported model response' },
+          conversationScreenshot: { path: 'agent-2-5-output/external-design-evidence/conversation-screenshot.png', surface: 'ChatGPT web UI' },
+          selection: { selectedOption: 'option-a', source: 'current-chat-user' },
+        },
+        null,
+        2,
+      ),
+    );
+    await writeGateResult(runDir, 'agent25-external-design-proof.json');
   }
 }
 

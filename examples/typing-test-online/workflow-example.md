@@ -42,8 +42,28 @@ Required:
 - Generate 3 GPT options
 - Save external provenance
 - Send 3-option board to current chat
-- Wait for user choice, or default after 3 minutes
+- Wait for explicit user choice in formal projects
 - Save selected design package
+
+## Agent 2.5 External GPT Source Gate
+
+Required before Agent 3:
+
+- `external-response.md` is raw/exported GPT output
+- `conversation-screenshot.png` is a real GPT/approved surface screenshot
+- `source-provenance.md` maps Option A/B/C, selected option, desktop target, and mobile target
+- `selected-design-lineage.md` proves the selected design came from the GPT option
+- `options-board.png` is built from GPT option sources
+- `option-selection.md` records explicit current-chat user selection for formal projects
+- `gate-results/agent25-external-design-proof.json` passes
+
+Blocks:
+
+- Codex-local option boards
+- Local HTML/CSS mock boards
+- Reconstructed or locally generated targets
+- Selected design packages not traced to GPT
+- Formal-project 3-minute defaults
 
 ## Agent 2.5 GPT Prompt Gate
 

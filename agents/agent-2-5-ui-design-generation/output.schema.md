@@ -69,15 +69,34 @@ generated-designs/
 - `external-response.md` with the verbatim or exported external model response used to create the design directions
 - `conversation-screenshot.png` or an equivalent screenshot of the external design surface showing the generated response
 - `source-provenance.md` mapping each generated option and the selected target screenshots/code to the external response, with any Codex normalization/local edits explicitly identified
+- `selected-design-lineage.md` proving the selected design package came from the selected GPT option
+- `external-design-proof.json` with:
+  - `mode`: `production`, `test`, or `dry-run`
+  - `approvedDesignSurface`: ChatGPT/GPT/OpenAI or another approved external design surface
+  - `externalResponse.path`, `kind`, and `sha256`
+  - `conversationScreenshot.path`, surface, and `sha256`
+  - three `options[]` entries for Option A/B/C with GPT source, option image path, and `sha256`
+  - `optionsBoard.path`, GPT source-image provenance, board `sha256`, and the three option image hashes used
+  - `selection.selectedOption` and current-chat user selection source
+  - `targets.desktop` and `targets.mobile` mapped to the selected GPT option
+  - `selectedDesignPackage.sourceOption`, GPT/external source, and `codexLocalCreation: false`
 
 Agent 3 must compare against target screenshots derived from the external design response. Locally fabricated targets without raw external provenance are not acceptable.
 
 `chat-delivery/` must contain the user-visible option selection record:
 
 - `options-board.png` showing all three GPT-generated options in one review image, or a side-by-side board assembled from the three GPT option screenshots.
-- `option-selection.md` with `Decision: PASS`, the three option names, evidence that the board was sent to the current chat, the user-selected option, or the exact 3-minute timeout/default decision.
+- `option-selection.md` with `Decision: PASS`, the three option names, evidence that the board was sent to the current chat, and the user-selected option.
 
-Agent 2.5 must stop after sending the three options to the current chat. It may proceed only after the user chooses an option, or after 3 minutes without a user response, in which case it must select the GPT-recommended option and record the timeout in `option-selection.md`.
+Agent 2.5 must stop after sending the three options to the current chat. Formal projects may proceed only after the user chooses an option in the current chat. A 3-minute timeout/default is allowed only in `test` or `dry-run` mode and must be recorded in `option-selection.md`.
+
+Run before Agent 3:
+
+```bash
+node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write
+```
+
+This writes `gate-results/agent25-external-design-proof.json`. Agent 3 is blocked unless it passes.
 
 `asset-acquisition-report.md` must record:
 

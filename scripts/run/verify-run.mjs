@@ -59,6 +59,7 @@ async function main() {
   }
 
   if (order >= 3) {
+    runCommand('node', ['scripts/run/check-agent25-external-design-proof.mjs', '--run-dir', runDir, '--write']);
     runCommand('node', ['scripts/run/check-agent25-lineage.mjs', '--run-dir', runDir, '--write']);
     runCommand('node', ['scripts/qa/check-selected-assets.mjs', '--run-dir', runDir, '--write']);
     runCommand('node', ['scripts/qa/check-toolsite-design-review.mjs', '--run-dir', runDir, '--write']);

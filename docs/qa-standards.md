@@ -7,6 +7,9 @@ Standard flow reference: before starting any new toolsite run, Codex must read `
 Agent 5 must run once after Agent 2.5 and before Agent 3. It must check:
 
 - Agent 2.5 generated at least three design options or recorded a hard external blocker
+- `gate-results/agent25-external-design-proof.json` passes
+- External GPT source proof includes raw/exported GPT response, real GPT/approved surface screenshot, source-provenance map for Option A/B/C, selected-design lineage, GPT option source images, and explicit current-chat user selection for formal projects
+- Option board, selected desktop/mobile targets, and selected design package are not Codex-local, local HTML/CSS, manual mock, reconstructed, or locally generated targets
 - Selected design has desktop and mobile target screenshots
 - Selected design has design tokens, component spec, asset plan, restoration rules, and forbidden deviations
 - Selected design has usability contract, interaction state model, dynamic data fit notes, and UX self-audit
@@ -72,6 +75,7 @@ Agent 5 must run again after Agent 4. It must check:
 - Mobile screenshot exists
 - Actual implementation matches Agent 2.5 selected design
 - Actual implementation matches Agent 3 screenshots
+- `gate-results/agent25-external-design-proof.json` still passes
 - `gate-results/toolsite-design-review.json` still passes
 - `gate-results/visual-restoration-similarity.json` still passes
 - Tool works with normal and edge-case inputs
