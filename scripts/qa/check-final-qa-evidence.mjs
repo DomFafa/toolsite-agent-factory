@@ -43,6 +43,9 @@ export async function runFinalQaEvidenceGate({ runDir }) {
   const requiredGateResults = [
     ['web-access-preflight.json', 'repo-local web-access preflight'],
     ['agent25-lineage.json', 'Agent 2.5 lineage'],
+    ['selected-assets.json', 'post-selection selected image assets'],
+    ['toolsite-design-review.json', 'toolsite design-review subset'],
+    ['visual-restoration-similarity.json', 'Agent 3 target-vs-restored visual similarity'],
     ['final-visual-lock.json', 'final visual lock'],
     ['final-visual-similarity.json', 'final target-vs-page visual similarity'],
     ['rendered-assets.json', 'rendered asset renderability'],
