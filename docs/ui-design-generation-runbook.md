@@ -12,6 +12,8 @@ The pipeline optimizes usable UI restoration before functionality and SEO. A sit
 
 Standard flow reference: before starting any new toolsite run, Codex must read `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
 
+Before any work starts in a run, Codex must output the flow files read, current run phase, next agent, and current-phase forbidden actions.
+
 1. Agent 2 writes product, SEO, content, tool specs, `ui-reference-dossier.md`, and `design-generation-input.md`.
 2. Agent 2.5 builds `design-generation-prompt.md`.
 3. Agent 2.5 cannot start until `node scripts/run/check-web-access.mjs --run-dir runs/<site-id> --write` passes against the repo-local `web-access/` skill.
@@ -38,6 +40,7 @@ Standard flow reference: before starting any new toolsite run, Codex must read `
 21. Agent 5 runs in Visual Restoration Gate mode. Agent 4 cannot start until the rendered screenshots match the selected design targets at 90% or higher and `gate-results/visual-restoration-similarity.json` passes.
 22. Agent 4 adds functionality and SEO after the visual restoration gate passes, while preserving the visual lock.
 23. Agent 5 captures final implementation screenshots, runs the final target-vs-page visual similarity gate at 90% or higher, and sends both the GPT target image and the final coded page screenshot to the current chat before production approval.
+24. After Final QA passes, Agent 5 stops. Agent 6, deployment, production push, Cloudflare/DNS/analytics/indexing work, and production environment changes are blocked until the user explicitly says `批准上线` in the current chat and `approval.md` is complete.
 
 ## Reference Modes
 
@@ -62,6 +65,7 @@ The design model may adjust UI hierarchy and interaction layout, but Agent 2 rem
 
 Agent 2.5 must tell the external model:
 
+- These are non-negotiable constraints: Astro + HTML/CSS/vanilla JS restoration, 90% screenshot similarity, first viewport as the real tool, no dynamic-data overflow, usable mobile layout, complete interaction states, no pretty-but-unusable UI, and no UX sacrifice for visual impact.
 - The output will be implemented in Astro with HTML, CSS, and vanilla JS.
 - The default restoration target is 90% visual similarity.
 - Prefer reproducible HTML/CSS/SVG/local-asset visuals over one-off image-model effects.

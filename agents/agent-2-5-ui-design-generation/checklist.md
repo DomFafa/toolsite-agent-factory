@@ -1,10 +1,12 @@
 # Checklist
 
 - [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
+- [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
 - [ ] Agent 2 brief, SEO plan, tool spec, content plan, and UI reference dossier read
 - [ ] Repo-local `web-access` preflight passed and wrote `gate-results/web-access-preflight.json`
 - [ ] No secrets or environment files sent to external LLM
 - [ ] GPT/web design generation attempted through `web-access`
+- [ ] External prompt includes the non-negotiable constraint block: Astro + HTML/CSS + vanilla JS, 90% screenshot similarity, first viewport as the real tool, no dynamic-data overflow, mobile usability, complete interaction states, no pretty-but-unusable UI, and no UX sacrifice for visual impact
 - [ ] External prompt says the design must be implementable in Astro + HTML/CSS + vanilla JS
 - [ ] External prompt states the default visual restoration target is 90%
 - [ ] External prompt asks for codable UI, not only a beautiful image
