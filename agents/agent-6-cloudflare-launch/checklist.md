@@ -2,6 +2,7 @@
 
 - [ ] Approval completed
 - [ ] QA passed
+- [ ] Repo-local `web-access` preflight passed and wrote `gate-results/web-access-preflight.json`
 - [ ] Zone ID discovered from target domain, not trusted from root `.env.local`
 - [ ] Cloudflare zone active
 - [ ] Pages project created or updated

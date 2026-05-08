@@ -12,22 +12,28 @@ The pipeline optimizes usable UI restoration before functionality and SEO. A sit
 
 1. Agent 2 writes product, SEO, content, tool specs, `ui-reference-dossier.md`, and `design-generation-input.md`.
 2. Agent 2.5 builds `design-generation-prompt.md`.
-3. Agent 2.5 uses `web-access` to submit the prompt and any allowed reference assets to the ChatGPT web UI or another approved design generation surface.
-4. Agent 2.5 tells the external model that the design must be restored by Codex in Astro with HTML/CSS/vanilla JS and should be designed for 90% screenshot fidelity.
-5. Agent 2.5 gives the external model the real tool workflow, interaction state semantics, realistic dynamic data ranges, overflow stress values, long labels, and click/tap constraints before asking for visuals.
-6. Agent 2.5 requests at least three UI directions. Each direction must include desktop/mobile design targets, design tokens, component specs, usability contract, interaction state model, dynamic data fit notes, UX self-audit, an asset plan, restoration rules, forbidden deviations, and runnable frontend code when possible.
-7. Agent 2.5 downloads or extracts any original/generated PNG/SVG assets needed for faithful restoration.
-8. Agent 2.5 writes `asset-quality-contract.md` for every image slot, including rendered size, required source size, aspect ratio, subject fill, white-margin risk, file path, and raster/vector type.
-9. Agent 2.5 imports any downloaded code archive with `scripts/design/import-generated-ui.mjs`.
-10. Agent 2.5 runs each option locally when complete code is available and captures desktop/mobile screenshots.
-11. Agent 2.5 selects one option and writes `design-manifest.md`.
-12. Agent 2.5 continues interacting with the external design model after option selection and requests `selected-option-assets.zip` for every image slot in the selected design.
-13. Agent 2.5 downloads the high-resolution asset zip, extracts assets into `agent-2-5-output/selected-design/assets/`, preserves the zip in `agent-2-5-output/selected-design/downloads/`, and writes `asset-acquisition-report.md`.
-14. Agent 5 runs in Design Package Gate mode with Usability QA first, including the asset quality gate and post-selection asset acquisition evidence. Agent 3 cannot start until this gate passes.
-15. Agent 3 builds a static visual restoration prototype only. It must not implement calculator functionality or SEO content yet.
-16. Agent 3 captures desktop/mobile screenshots and writes a visual diff report.
-17. Agent 5 runs in Visual Restoration Gate mode. Agent 4 cannot start until the rendered screenshots match the selected design targets at 90% or higher.
-18. Agent 4 adds functionality and SEO after the visual restoration gate passes, while preserving the visual lock.
+3. Agent 2.5 cannot start until `node scripts/run/check-web-access.mjs --run-dir runs/<site-id> --write` passes against the repo-local `web-access/` skill.
+4. Agent 2.5 uses `web-access` to submit the prompt and any allowed reference assets to the ChatGPT web UI or another approved design generation surface.
+   Agent 2.5 must preserve raw external provenance under `agent-2-5-output/external-design-evidence/`: the external response, a conversation screenshot/export, and a source-provenance map from the external response to the selected target screenshots/code.
+5. Agent 2.5 tells the external model that the design must be restored by Codex in Astro with HTML/CSS/vanilla JS and should be designed for 90% screenshot fidelity.
+6. Agent 2.5 gives the external model the real tool workflow, interaction state semantics, realistic dynamic data ranges, overflow stress values, long labels, and click/tap constraints before asking for visuals.
+7. Agent 2.5 requests at least three UI directions. Each direction must include desktop/mobile design targets, design tokens, component specs, usability contract, interaction state model, dynamic data fit notes, UX self-audit, an asset plan, restoration rules, forbidden deviations, and runnable frontend code when possible.
+8. Agent 2.5 downloads or extracts any original/generated PNG/SVG assets needed for faithful restoration.
+9. Agent 2.5 writes `asset-quality-contract.md` for every image slot, including rendered size, required source size, aspect ratio, subject fill, white-margin risk, file path, and raster/vector type.
+10. Agent 2.5 imports any downloaded code archive with `scripts/design/import-generated-ui.mjs`.
+11. Agent 2.5 runs each option locally when complete code is available and captures desktop/mobile screenshots.
+12. Agent 2.5 sends one comparison image containing all three GPT-generated options to the current chat and stops for user selection.
+    If the user does not respond within 3 minutes, Agent 2.5 may select the GPT-recommended option by timeout.
+    The option board and decision must be saved under `agent-2-5-output/chat-delivery/`.
+13. Agent 2.5 selects one option and writes `design-manifest.md`.
+14. Agent 2.5 continues interacting with the external design model after option selection and requests `selected-option-assets.zip` for every image slot in the selected design.
+15. Agent 2.5 downloads the high-resolution asset zip, extracts assets into `agent-2-5-output/selected-design/assets/`, preserves the zip in `agent-2-5-output/selected-design/downloads/`, and writes `asset-acquisition-report.md`.
+16. Agent 5 runs in Design Package Gate mode with Usability QA first, including the asset quality gate and post-selection asset acquisition evidence. Agent 3 cannot start until this gate passes.
+17. Agent 3 builds a static visual restoration prototype only. It must not implement calculator functionality or SEO content yet.
+18. Agent 3 captures desktop/mobile screenshots and writes a visual diff report.
+19. Agent 5 runs in Visual Restoration Gate mode. Agent 4 cannot start until the rendered screenshots match the selected design targets at 90% or higher.
+20. Agent 4 adds functionality and SEO after the visual restoration gate passes, while preserving the visual lock.
+21. Agent 5 captures final implementation screenshots, runs the final target-vs-page visual similarity gate at 90% or higher, and sends both the GPT target image and the final coded page screenshot to the current chat before production approval.
 
 ## Reference Modes
 
@@ -68,6 +74,21 @@ Agent 2.5 must tell the external model:
 - Meal-format choices, quick presets, ingredient toggles, portion buttons, and clearing actions must use consistent, predictable state transitions.
 - Reserve locations for SEO sections, but do not make SEO content part of the first visual-restoration task.
 - The first viewport must be the usable tool.
+
+## Chat Option Selection Gate
+
+Agent 2.5 must not silently select a design. It must:
+
+- Assemble a single comparison image with Option A, Option B, and Option C.
+- Send that comparison image to the current chat window.
+- Ask the user to choose one option.
+- Wait up to 3 minutes.
+- If the user replies, select the user's option.
+- If the user does not reply within 3 minutes, select GPT's recommended option.
+- Save `agent-2-5-output/chat-delivery/options-board.png`.
+- Save `agent-2-5-output/chat-delivery/option-selection.md` with `Decision: PASS`, all option names, whether the board was sent to chat, and whether the selected option came from the user or the 3-minute default.
+
+Agent 3 is blocked until this record exists and passes the mechanical gate.
 
 ## Allowed Visual Assets
 
@@ -150,6 +171,8 @@ runs/<site-id>/agent-2-5-output/selected-design/code/
 Agent 5 Design Package Gate must fail if:
 
 - no desktop/mobile design targets exist
+- raw external GPT/design-model provenance is missing, including `external-design-evidence/external-response.md`, `conversation-screenshot.png`, and `source-provenance.md`
+- the selected target screenshots/code cannot be traced back to the external design response
 - design tokens, component specs, asset plan, restoration rules, or forbidden deviations are missing
 - usability contract, dynamic data fit notes, or UX self-audit are missing
 - interaction state model is missing or does not cover primary task-flow controls
@@ -178,3 +201,22 @@ Agent 5 Visual Restoration Gate must fail if:
 - major visual modules drift from the selected design target
 - required local assets are missing or replaced with low-fidelity placeholders without approval
 - referenced local UI assets fail `scripts/design/asset-quality-gate.mjs`
+
+## Final Chat Delivery Gate
+
+Before production approval, Agent 5 must send the final comparison evidence to the current chat:
+
+- GPT/Agent 2.5 selected target screenshot.
+- Final coded page screenshot after Agent 4 implementation.
+
+The delivery must be recorded in `agent-5-output/chat-delivery/final-screenshot-delivery.md` with `Decision: PASS`. Agent 6 is blocked until this record exists.
+
+## Final Visual Similarity Gate
+
+Before Agent 6, Agent 5 must compare the GPT/Agent 2.5 selected target screenshots against the final coded page screenshots:
+
+- desktop target vs final desktop page must be at least 90% similar
+- mobile target vs final mobile page must be at least 90% similar
+- the gate must write `gate-results/final-visual-similarity.json`
+
+Agent 6 is blocked if this gate is missing or failing.

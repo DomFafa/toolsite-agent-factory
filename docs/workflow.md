@@ -31,6 +31,8 @@ It produces product, SEO, content, tool specs, and a UI reference dossier for Ag
 
 ## Phase 2.5: UI design generation
 
+Before Agent 2.5 starts, run `node scripts/run/check-web-access.mjs --run-dir runs/<site-id> --write`. The pipeline is blocked unless the repo-local `web-access/` skill files and relative script paths pass this preflight.
+
 Agent 2.5 uses `web-access` to generate UI design directions and implementation-ready design packages through the ChatGPT web UI or another approved design generation surface.
 
 This step is mandatory even when no UI references are provided.

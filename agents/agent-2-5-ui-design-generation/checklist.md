@@ -1,6 +1,7 @@
 # Checklist
 
 - [ ] Agent 2 brief, SEO plan, tool spec, content plan, and UI reference dossier read
+- [ ] Repo-local `web-access` preflight passed and wrote `gate-results/web-access-preflight.json`
 - [ ] No secrets or environment files sent to external LLM
 - [ ] GPT/web design generation attempted through `web-access`
 - [ ] External prompt says the design must be implementable in Astro + HTML/CSS + vanilla JS
@@ -21,6 +22,9 @@
 - [ ] External prompt avoids hard-to-reproduce effects unless exported as local assets
 - [ ] Missing UI references handled as open exploration, not a skip
 - [ ] At least three design directions generated or hard blocker recorded
+- [ ] The three generated options were sent to the current chat as one comparison image before proceeding
+- [ ] User selected an option in chat, or no reply was received for 3 minutes and GPT's recommended option was selected by timeout
+- [ ] `chat-delivery/options-board.png` and `chat-delivery/option-selection.md` exist and record the chat delivery/selection evidence
 - [ ] Each design direction includes desktop and mobile targets
 - [ ] Each design direction includes codability notes and implementation risk
 - [ ] Each design direction includes usability notes, dynamic-data fit, overflow handling, and thumbnail-cleanliness notes
