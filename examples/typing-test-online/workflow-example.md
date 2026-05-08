@@ -4,6 +4,19 @@
 
 Defines the Agent 2 to Agent 6 order for future tool sites.
 
+## Run Start Gate
+
+Required before any work:
+
+- Output flow files read
+- Output current run phase
+- Output next Agent
+- Output current-phase forbidden actions
+
+Blocks:
+
+- Silent start without phase or forbidden-action awareness
+
 ## Agent 2
 
 Outputs:
@@ -31,6 +44,19 @@ Required:
 - Send 3-option board to current chat
 - Wait for user choice, or default after 3 minutes
 - Save selected design package
+
+## Agent 2.5 GPT Prompt Gate
+
+Required:
+
+- GPT prompt includes Astro + HTML/CSS/vanilla JS restoration
+- GPT prompt includes 90% screenshot similarity
+- GPT prompt requires first viewport as the real tool
+- GPT prompt prevents dynamic-data overflow
+- GPT prompt requires mobile usability
+- GPT prompt requires complete interaction states
+- GPT prompt rejects pretty-but-unusable UI
+- GPT prompt forbids sacrificing UX for visual impact
 
 Blocks:
 
@@ -102,6 +128,21 @@ Blocks:
 - Missing tool behavior
 - Missing final evidence bundle
 
+## Post-Final-QA Launch Stop Gate
+
+Required after Final QA passes:
+
+- Stop before Agent 6
+- Wait for explicit `批准上线` in the current chat
+- Do not deploy
+- Do not push production
+- Do not change Cloudflare, DNS, analytics, or indexing
+- Do not make any production environment change
+
+Blocks:
+
+- Production launch without current-chat approval
+
 ## Agent 6
 
 Starts only after `approval.md` is fully checked.
@@ -110,4 +151,3 @@ Blocks:
 
 - Any unchecked production approval item
 - Cloudflare/domain/noindex uncertainty
-
