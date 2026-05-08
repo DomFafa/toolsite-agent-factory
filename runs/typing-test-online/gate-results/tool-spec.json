@@ -1,0 +1,28 @@
+{
+  "gate": "tool-spec",
+  "runDir": "/Users/dom/Desktop/库/toolsite-agent-factory/runs/typing-test-online",
+  "status": "pass",
+  "passed": true,
+  "failures": [],
+  "details": {
+    "checkedSections": [
+      {
+        "section": "Required Controls",
+        "itemCount": 5
+      },
+      {
+        "section": "Live metrics",
+        "itemCount": 6
+      },
+      {
+        "section": "Post-test results",
+        "itemCount": 11
+      }
+    ]
+  },
+  "evidence": {
+    "toolSpec": "agent-2-output/tool-spec.md",
+    "implementation": "site/src/pages/index.astro"
+  },
+  "generatedAt": "2026-05-08T10:40:01.388Z"
+}

@@ -1,0 +1,23 @@
+{
+  "gate": "final-qa-evidence",
+  "runDir": "/Users/dom/Desktop/库/toolsite-agent-factory/runs/typing-test-online",
+  "status": "pass",
+  "passed": true,
+  "failures": [],
+  "details": {
+    "gateResults": [
+      "web-access-preflight.json",
+      "agent25-lineage.json",
+      "final-visual-lock.json",
+      "final-visual-similarity.json",
+      "rendered-assets.json",
+      "tool-spec.json"
+    ]
+  },
+  "evidence": {
+    "qaReport": "agent-5-output/qa-report.md",
+    "chatDelivery": "agent-5-output/chat-delivery/final-screenshot-delivery.md",
+    "gateResults": "gate-results/"
+  },
+  "generatedAt": "2026-05-08T10:40:01.419Z"
+}

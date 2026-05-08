@@ -1,0 +1,45 @@
+{
+  "gate": "final-visual-similarity",
+  "runDir": "/Users/dom/Desktop/库/toolsite-agent-factory/runs/typing-test-online",
+  "status": "pass",
+  "passed": true,
+  "failures": [],
+  "details": {
+    "results": [
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900,
+        "finalWidth": 1440,
+        "finalHeight": 900,
+        "similarity": 0.9838
+      },
+      {
+        "name": "mobile",
+        "width": 390,
+        "height": 844,
+        "finalWidth": 390,
+        "finalHeight": 844,
+        "similarity": 0.9508
+      }
+    ],
+    "overall": 0.9673
+  },
+  "evidence": {
+    "threshold": 0.9,
+    "comparedPairs": [
+      {
+        "name": "desktop",
+        "target": "agent-2-5-output/selected-design/target/desktop.png",
+        "final": "agent-5-output/final-visual-lock/desktop.png"
+      },
+      {
+        "name": "mobile",
+        "target": "agent-2-5-output/selected-design/target/mobile.png",
+        "final": "agent-5-output/final-visual-lock/mobile.png"
+      }
+    ],
+    "comparePage": "agent-5-output/final-visual-similarity/compare.html"
+  },
+  "generatedAt": "2026-05-08T10:40:00.173Z"
+}

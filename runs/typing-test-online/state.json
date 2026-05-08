@@ -1,0 +1,25 @@
+{
+  "site_id": "typing-test-online",
+  "domain": "typing-test-online.com",
+  "status": "ready_for_user_review_pre_deploy",
+  "current_agent": null,
+  "approved_for_production": false,
+  "agent_outputs": {
+    "agent_1": "agent-1-output/keyword-research-report.md",
+    "agent_2": "agent-2-output/site-brief.md",
+    "agent_2_5": "agent-2-5-output/design-generation-report.md",
+    "agent_3": "agent-3-output/visual-lock.md",
+    "agent_4": "agent-4-output/implementation-report.md",
+    "agent_5": "agent-5-output/qa-report.md",
+    "agent_6": null
+  },
+  "qa": {
+    "passed": true,
+    "report": "agent-5-output/qa-report.md"
+  },
+  "launch": {
+    "cloudflare_project": "dom-tool-typing-test-online",
+    "production_url": "https://typing-test-online.com",
+    "sitemap_url": "https://typing-test-online.com/sitemap.xml"
+  }
+}

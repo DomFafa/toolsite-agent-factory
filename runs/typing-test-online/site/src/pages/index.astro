@@ -1,0 +1,612 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Faq from '../components/Faq.astro';
+
+const title = 'Typing Test Online - Free WPM Typing Speed Test';
+const description = 'Take a free typing test online and check your WPM, CPM, accuracy, mistakes, and progress. Start typing instantly with 30 second to 5 minute practice modes.';
+const canonicalPath = '/';
+
+const faq = [
+  {
+    question: 'What is a good WPM score?',
+    answer: 'A good WPM score depends on the task. Many everyday typists are comfortable around 40 WPM, while 60 WPM or higher is a strong practical benchmark when accuracy stays high.',
+  },
+  {
+    question: 'How is WPM calculated?',
+    answer: 'WPM means words per minute. This typing test uses the common standard of five typed characters as one word, then calculates the score from your elapsed time.',
+  },
+  {
+    question: 'What is CPM in a typing test?',
+    answer: 'CPM means characters per minute. It is useful when you want to measure raw character speed, especially for accuracy-focused typing practice and data-entry style work.',
+  },
+  {
+    question: 'Does accuracy affect my typing speed score?',
+    answer: 'Yes. Net WPM is based on correct characters, so mistakes reduce both accuracy and your final WPM. Raw WPM is shown separately after the test.',
+  },
+  {
+    question: 'How can I improve my typing speed?',
+    answer: 'Practice short timed tests, keep your rhythm steady, look ahead to the next word, and repeat passages that expose common mistakes before raising your speed.',
+  },
+  {
+    question: 'Is this typing test free?',
+    answer: 'Yes. The typing test is free to use and runs locally in your browser.',
+  },
+  {
+    question: 'Can I use the typing test without signing up?',
+    answer: 'Yes. There is no login, account, database, or server scoring. You can open the page and start typing immediately.',
+  },
+  {
+    question: 'What is the best duration for typing practice?',
+    answer: 'A 30 second or 1 minute test is useful for quick warmups. Two, three, and five minute tests give steadier practice data because they reward consistent pace.',
+  },
+];
+
+const webApplicationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'Typing Test Online',
+  url: 'https://typing-test-online.com/',
+  applicationCategory: 'EducationalApplication',
+  operatingSystem: 'Any',
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
+  description,
+};
+---
+<BaseLayout title={title} description={description} canonicalPath={canonicalPath}>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Typing Test Online home">
+      <span class="brand-mark">T</span>
+      <span>Typing Test Online</span>
+    </a>
+    <nav class="nav" aria-label="Page">
+      <a href="#how-it-works">How it works</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="tool-panel" aria-labelledby="page-title">
+          <div class="intro-row">
+            <div>
+              <p class="eyebrow">Browser benchmark</p>
+              <h1 id="page-title">Typing Test Online</h1>
+              <p class="support-line">Start typing to measure WPM, CPM, accuracy, and mistakes.</p>
+            </div>
+            <div class="run-status" id="runStatus">Ready</div>
+          </div>
+    
+          <div class="control-grid" aria-label="Typing test settings">
+            <div class="control-group">
+              <div class="control-label">Duration</div>
+              <div class="segmented" role="group" aria-label="Duration">
+                <button class="seg active" data-duration="30">30 sec</button>
+                <button class="seg" data-duration="60">1 min</button>
+                <button class="seg" data-duration="120">2 min</button>
+                <button class="seg" data-duration="180">3 min</button>
+                <button class="seg" data-duration="300">5 min</button>
+              </div>
+            </div>
+    
+            <div class="control-group">
+              <div class="control-label">Passage mode</div>
+              <div class="segmented" role="group" aria-label="Passage mode">
+                <button class="seg active" data-mode="Words">Words</button>
+                <button class="seg" data-mode="Sentences">Sentences</button>
+                <button class="seg" data-mode="Practice">Practice</button>
+                <button class="seg" data-mode="Numbers">Numbers</button>
+              </div>
+            </div>
+    
+            <div class="control-group">
+              <div class="control-label">Difficulty</div>
+              <div class="segmented" role="group" aria-label="Difficulty">
+                <button class="seg" data-difficulty="Easy">Easy</button>
+                <button class="seg active" data-difficulty="Standard">Standard</button>
+                <button class="seg" data-difficulty="Advanced">Advanced</button>
+              </div>
+            </div>
+          </div>
+    
+          <div class="metrics" aria-label="Live typing metrics">
+            <div class="metric">
+              <span class="metric-label">Time</span>
+              <strong id="timeMetric">00:30</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">WPM</span>
+              <strong id="wpmMetric">0 WPM</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">CPM</span>
+              <strong id="cpmMetric">0 CPM</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Accuracy</span>
+              <strong id="accuracyMetric">100%</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Mistakes</span>
+              <strong id="mistakesMetric">0 mistakes</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Progress</span>
+              <strong id="progressMetric">0%</strong>
+            </div>
+          </div>
+    
+          <div class="passage-shell">
+            <div class="passage-topline">
+              <span id="passageMeta">Words · Standard</span>
+              <span class="hint">Current character is underlined</span>
+            </div>
+            <div class="passage" id="passageDisplay" aria-label="Typing passage"></div>
+          </div>
+    
+          <label class="input-label" for="typingInput">Typing input</label>
+          <textarea
+            id="typingInput"
+            class="typing-input"
+            rows="4"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            placeholder="Start typing here..."
+          ></textarea>
+    
+          <div class="actions">
+            <button class="button secondary" id="restartButton">Restart</button>
+            <button class="button primary" id="newPassageButton">New passage</button>
+          </div>
+
+          <aside class="result-summary" id="resultPanel" aria-live="polite" hidden>
+            <div>
+              <h2>Your typing test result</h2>
+              <p id="resultSentence">You typed 0 WPM with 100% accuracy.</p>
+            </div>
+            <dl class="result-grid">
+              <div><dt>WPM</dt><dd id="finalWpm">0</dd></div>
+              <div><dt>Raw WPM</dt><dd id="finalRawWpm">0</dd></div>
+              <div><dt>CPM</dt><dd id="finalCpm">0</dd></div>
+              <div><dt>Accuracy</dt><dd id="finalAccuracy">100%</dd></div>
+              <div><dt>Correct characters</dt><dd id="finalCorrectCharacters">0</dd></div>
+              <div><dt>Incorrect characters</dt><dd id="finalIncorrectCharacters">0</dd></div>
+              <div><dt>Correct words</dt><dd id="finalCorrectWords">0</dd></div>
+              <div><dt>Mistakes</dt><dd id="finalMistakes">0</dd></div>
+              <div><dt>Duration</dt><dd id="finalDuration">30 sec</dd></div>
+              <div><dt>Passage mode</dt><dd id="finalPassageMode">Words</dd></div>
+            </dl>
+            <button class="button primary result-action" id="tryAgainButton">Try again</button>
+          </aside>
+        </section>
+
+    <section class="content-band" id="how-it-works">
+      <h2>How the typing test works</h2>
+      <p>Choose a duration, mode, and difficulty, then type the passage shown in the workbench. The timer starts on the first valid typed character, live metrics update as you type, and the final result appears when time runs out or the passage is completed.</p>
+    </section>
+
+    <section class="content-band">
+      <h2>What WPM and CPM mean</h2>
+      <p>WPM means words per minute. For standard typing tests, five characters count as one word, which keeps scores comparable across different passages. CPM means characters per minute and is useful when you want a more direct view of keyboard pace.</p>
+    </section>
+
+    <section class="content-band">
+      <h2>How accuracy is calculated</h2>
+      <p>Accuracy compares correct characters with everything you typed. Incorrect and extra characters count as mistakes, so clean typing improves both your accuracy and your net WPM result.</p>
+    </section>
+
+    <section class="content-band">
+      <h2>Typing practice tips</h2>
+      <ul>
+        <li>Keep your eyes on the next word instead of the keyboard.</li>
+        <li>Type at a steady pace before trying to raise your speed.</li>
+        <li>Repeat short tests to build consistency and reduce errors.</li>
+        <li>Practice punctuation and numbers separately when they slow you down.</li>
+        <li>Review mistakes after each test, then try again with a calmer rhythm.</li>
+      </ul>
+    </section>
+
+    <section class="content-band">
+      <h2>Common typing test durations</h2>
+      <p>Use 30 seconds for a quick warmup, 1 minute for a fast WPM check, 2 or 3 minutes for balanced practice, and 5 minutes when you want a steadier benchmark that rewards focus over a longer session.</p>
+    </section>
+
+    <div id="faq">
+      <Faq items={faq} />
+    </div>
+  </main>
+
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(webApplicationJsonLd)} />
+
+  <script>
+    // @ts-nocheck
+    const passageBank = {
+      Words: {
+        Easy: [
+          "green river bright window simple garden open morning soft paper clean light",
+          "fresh apple quiet table small flower warm summer happy pencil silver cloud"
+        ],
+        Standard: [
+          "Steady practice builds speed. Focus on each word, keep a calm rhythm, and correct mistakes before they become habits.",
+          "Clear typing begins with relaxed hands, steady eyes, and a patient rhythm that turns small gains into reliable speed."
+        ],
+        Advanced: [
+          "Accurate momentum develops when deliberate correction, consistent pacing, and focused attention work together under time pressure.",
+          "Professional typing rewards controlled movement, rapid recognition, and the discipline to recover smoothly after each error."
+        ]
+      },
+      Sentences: {
+        Easy: [
+          "The desk is clear. The timer is ready. Type each word with care.",
+          "A calm start helps your hands move well. Keep your eyes on the next word."
+        ],
+        Standard: [
+          "Typing speed improves when accuracy comes first. A smooth rhythm often beats a rushed and uneven pace.",
+          "Each short test gives useful feedback. Review your mistakes, restart with focus, and build control."
+        ],
+        Advanced: [
+          "The most useful benchmark is not only fast, but repeatable, readable, and calm under changing passage patterns.",
+          "When pressure rises, accurate typists maintain rhythm by scanning ahead while correcting small errors before they spread."
+        ]
+      },
+      Practice: {
+        Easy: [
+          "Practice slowly at first, then increase your pace when the words feel natural.",
+          "Keep your shoulders relaxed, breathe evenly, and let each line guide the next."
+        ],
+        Standard: [
+          "Use this practice round to notice where your rhythm breaks, then restart and aim for cleaner movement.",
+          "The goal is not a lucky score. The goal is a stable pace that you can repeat across many passages."
+        ],
+        Advanced: [
+          "Advanced practice should expose weak transitions, uneven punctuation timing, and moments where speed outruns attention.",
+          "Measure the pattern behind each mistake so the next round improves both confidence and control."
+        ]
+      },
+      Numbers: {
+        Easy: [
+          "12 24 36 48 60 72 84 96 108 120",
+          "101 202 303 404 505 606 707 808 909"
+        ],
+        Standard: [
+          "Order 4821 ships in 24 hours, batch 7305 closes at 18:45, and code 9920 resets after review.",
+          "The report shows 125 WPM, 625 CPM, 100% accuracy, 48 mistakes, and 100% progress as test values."
+        ],
+        Advanced: [
+          "Invoice 384-9921 requires 7 checks, 14 notes, 28 updates, and 56 confirmations before 23:59.",
+          "Sequence 91827, 74610, 58392, and 10486 should be typed carefully without swapping digits or skipping spaces."
+        ]
+      }
+    };
+    
+    const state = {
+      duration: 30,
+      mode: "Words",
+      difficulty: "Standard",
+      passageIndex: 0,
+      passage: "",
+      started: false,
+      finished: false,
+      startTime: null,
+      timerId: null,
+      remaining: 30,
+      lastAcceptedValue: ""
+    };
+    
+    const els = {
+      durationButtons: document.querySelectorAll("[data-duration]"),
+      modeButtons: document.querySelectorAll("[data-mode]"),
+      difficultyButtons: document.querySelectorAll("[data-difficulty]"),
+      passageDisplay: document.getElementById("passageDisplay"),
+      passageMeta: document.getElementById("passageMeta"),
+      input: document.getElementById("typingInput"),
+      restart: document.getElementById("restartButton"),
+      newPassage: document.getElementById("newPassageButton"),
+      runStatus: document.getElementById("runStatus"),
+      time: document.getElementById("timeMetric"),
+      wpm: document.getElementById("wpmMetric"),
+      cpm: document.getElementById("cpmMetric"),
+      accuracy: document.getElementById("accuracyMetric"),
+      mistakes: document.getElementById("mistakesMetric"),
+      progress: document.getElementById("progressMetric"),
+      resultPanel: document.getElementById("resultPanel"),
+      resultSentence: document.getElementById("resultSentence"),
+      finalWpm: document.getElementById("finalWpm"),
+      finalRawWpm: document.getElementById("finalRawWpm"),
+      finalCpm: document.getElementById("finalCpm"),
+      finalAccuracy: document.getElementById("finalAccuracy"),
+      finalCorrectCharacters: document.getElementById("finalCorrectCharacters"),
+      finalIncorrectCharacters: document.getElementById("finalIncorrectCharacters"),
+      finalCorrectWords: document.getElementById("finalCorrectWords"),
+      finalMistakes: document.getElementById("finalMistakes"),
+      finalDuration: document.getElementById("finalDuration"),
+      finalPassageMode: document.getElementById("finalPassageMode"),
+      tryAgain: document.getElementById("tryAgainButton")
+    };
+    
+    function formatTime(seconds) {
+      const safe = Math.max(0, Math.ceil(seconds));
+      const minutes = String(Math.floor(safe / 60)).padStart(2, "0");
+      const secs = String(safe % 60).padStart(2, "0");
+      return `${minutes}:${secs}`;
+    }
+    
+    function getPassages() {
+      return passageBank[state.mode][state.difficulty];
+    }
+    
+    function setStatus(label, type = "idle") {
+      els.runStatus.textContent = label;
+      els.runStatus.classList.toggle("running", type === "running");
+      els.runStatus.classList.toggle("finished", type === "finished");
+    }
+    
+    function syncActiveButtons() {
+      els.durationButtons.forEach(button => {
+        button.classList.toggle("active", Number(button.dataset.duration) === state.duration);
+      });
+    
+      els.modeButtons.forEach(button => {
+        button.classList.toggle("active", button.dataset.mode === state.mode);
+      });
+    
+      els.difficultyButtons.forEach(button => {
+        button.classList.toggle("active", button.dataset.difficulty === state.difficulty);
+      });
+    }
+    
+    function loadPassage() {
+      const list = getPassages();
+      state.passage = list[state.passageIndex % list.length];
+      els.passageMeta.textContent = `${state.mode} · ${state.difficulty}`;
+      renderPassage();
+    }
+    
+    function resetTest({ keepPassage = true, status = "Ready" } = {}) {
+      clearInterval(state.timerId);
+      state.started = false;
+      state.finished = false;
+      state.startTime = null;
+      state.remaining = state.duration;
+      state.lastAcceptedValue = "";
+      els.input.value = "";
+      els.input.disabled = false;
+      els.resultPanel.hidden = true;
+    
+      if (!keepPassage) {
+        loadPassage();
+      }
+    
+      renderPassage();
+      updateMetrics();
+      setStatus(status);
+    }
+    
+    function calculateStats() {
+      const typed = els.input.value;
+      const elapsedSeconds = state.started
+        ? Math.max(1, (Date.now() - state.startTime) / 1000)
+        : 0;
+    
+      let correct = 0;
+      let mistakes = 0;
+    
+      for (let i = 0; i < typed.length; i++) {
+        if (typed[i] === state.passage[i]) {
+          correct++;
+        } else {
+          mistakes++;
+        }
+      }
+    
+      const minutes = elapsedSeconds / 60;
+      const rawWpm = minutes > 0 ? Math.round((typed.length / 5) / minutes) : 0;
+      const wpm = minutes > 0 ? Math.round((correct / 5) / minutes) : 0;
+      const cpm = minutes > 0 ? Math.round(correct / minutes) : 0;
+      const accuracy = typed.length > 0 ? Math.round((correct / typed.length) * 100) : 100;
+      const progress = Math.min(100, Math.round((typed.length / state.passage.length) * 100));
+      const correctWords = countCorrectWords(typed, state.passage);
+    
+      return { typed, correct, mistakes, rawWpm, wpm, cpm, accuracy, progress, correctWords };
+    }
+
+    function countCorrectWords(typed, passage) {
+      const targetWords = passage.trim().split(/\s+/);
+      const typedWords = typed.trim().split(/\s+/).filter(Boolean);
+      let count = 0;
+
+      for (let index = 0; index < typedWords.length; index++) {
+        if (typedWords[index] === targetWords[index]) count++;
+      }
+
+      return count;
+    }
+    
+    function updateMetrics() {
+      const stats = calculateStats();
+    
+      els.time.textContent = formatTime(state.remaining);
+      els.wpm.textContent = `${stats.wpm} WPM`;
+      els.cpm.textContent = `${stats.cpm} CPM`;
+      els.accuracy.textContent = `${stats.accuracy}%`;
+      els.mistakes.textContent = `${stats.mistakes} ${stats.mistakes === 1 ? "mistake" : "mistakes"}`;
+      els.progress.textContent = `${stats.progress}%`;
+    }
+
+    function renderResult() {
+      const stats = calculateStats();
+      els.resultSentence.textContent = `You typed ${stats.wpm} WPM with ${stats.accuracy}% accuracy.`;
+      els.finalWpm.textContent = String(stats.wpm);
+      els.finalRawWpm.textContent = String(stats.rawWpm);
+      els.finalCpm.textContent = String(stats.cpm);
+      els.finalAccuracy.textContent = `${stats.accuracy}%`;
+      els.finalCorrectCharacters.textContent = String(stats.correct);
+      els.finalIncorrectCharacters.textContent = String(stats.mistakes);
+      els.finalCorrectWords.textContent = String(stats.correctWords);
+      els.finalMistakes.textContent = String(stats.mistakes);
+      els.finalDuration.textContent = state.duration < 60 ? `${state.duration} sec` : `${state.duration / 60} min`;
+      els.finalPassageMode.textContent = `${state.mode} · ${state.difficulty}`;
+      els.resultPanel.hidden = false;
+    }
+    
+    function renderPassage() {
+      const typed = els.input.value;
+      const chars = [...state.passage];
+    
+      els.passageDisplay.innerHTML = chars.map((char, index) => {
+        const typedChar = typed[index];
+        const classes = ["char"];
+    
+        if (char === " ") classes.push("space");
+        if (typedChar != null) {
+          classes.push(typedChar === char ? "correct" : "wrong");
+        }
+        if (!state.finished && index === typed.length) {
+          classes.push("current");
+        }
+    
+        const output = char === " " ? "&nbsp;" : escapeHtml(char);
+        return `<span class="${classes.join(" ")}">${output}</span>`;
+      }).join("");
+    }
+    
+    function escapeHtml(char) {
+      return char
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+    
+    function startTimer() {
+      state.started = true;
+      state.startTime = Date.now();
+      setStatus("Running", "running");
+    
+      state.timerId = setInterval(() => {
+        const elapsed = (Date.now() - state.startTime) / 1000;
+        state.remaining = Math.max(0, state.duration - elapsed);
+        updateMetrics();
+    
+        if (state.remaining <= 0) {
+          finishTest();
+        }
+      }, 250);
+    }
+    
+    function finishTest() {
+      clearInterval(state.timerId);
+      state.finished = true;
+      state.remaining = Math.max(0, state.remaining);
+      els.input.disabled = true;
+      renderPassage();
+      updateMetrics();
+      renderResult();
+      setStatus("Complete", "finished");
+    }
+    
+    function handleTyping() {
+      if (state.finished) return;
+    
+      if (els.input.value.length > state.passage.length) {
+        els.input.value = els.input.value.slice(0, state.passage.length);
+      }
+      state.lastAcceptedValue = els.input.value;
+    
+      if (!state.started && els.input.value.length > 0) {
+        startTimer();
+      }
+    
+      renderPassage();
+      updateMetrics();
+    
+      if (els.input.value.length >= state.passage.length) {
+        finishTest();
+      }
+    }
+    
+    function blockBulkInput() {
+      els.input.value = state.lastAcceptedValue;
+      renderPassage();
+      updateMetrics();
+      setStatus("Paste blocked");
+    }
+
+    els.input.addEventListener("paste", (event) => {
+      event.preventDefault();
+      blockBulkInput();
+    });
+
+    els.input.addEventListener("drop", (event) => {
+      event.preventDefault();
+      blockBulkInput();
+    });
+
+    els.input.addEventListener("beforeinput", (event) => {
+      if (event.inputType === "insertFromPaste" || event.inputType === "insertFromDrop" || (event.data && event.data.length > 1)) {
+        event.preventDefault();
+        blockBulkInput();
+      }
+    });
+
+    els.input.addEventListener("input", () => {
+      if (els.input.value.length - state.lastAcceptedValue.length > 1) {
+        blockBulkInput();
+        return;
+      }
+      handleTyping();
+    });
+    
+    els.durationButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        state.duration = Number(button.dataset.duration);
+        state.remaining = state.duration;
+        syncActiveButtons();
+        resetTest({ keepPassage: true, status: "Reset" });
+      });
+    });
+    
+    els.modeButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        state.mode = button.dataset.mode;
+        state.passageIndex = 0;
+        syncActiveButtons();
+        loadPassage();
+        resetTest({ keepPassage: true, status: "Reset" });
+      });
+    });
+    
+    els.difficultyButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        state.difficulty = button.dataset.difficulty;
+        state.passageIndex = 0;
+        syncActiveButtons();
+        loadPassage();
+        resetTest({ keepPassage: true, status: "Reset" });
+      });
+    });
+    
+    els.restart.addEventListener("click", () => {
+      resetTest({ keepPassage: true, status: "Restarted" });
+      els.input.focus();
+    });
+    
+    els.newPassage.addEventListener("click", () => {
+      state.passageIndex = (state.passageIndex + 1) % getPassages().length;
+      loadPassage();
+      resetTest({ keepPassage: true, status: "New passage" });
+      els.input.focus();
+    });
+
+    els.tryAgain.addEventListener("click", () => {
+      resetTest({ keepPassage: true, status: "Restarted" });
+      els.input.focus();
+    });
+    
+    syncActiveButtons();
+    loadPassage();
+    resetTest();
+  </script>
+</BaseLayout>

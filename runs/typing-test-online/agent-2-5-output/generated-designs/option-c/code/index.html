@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Option C - Night Calibration - Typing Test Online</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body class="console">
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Typing Test Online home"><span class="brand-mark"></span>Typing Test Online</a>
+    <nav aria-label="Page">
+      <a href="#how-it-works">How it works</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="tool-shell" aria-labelledby="tool-title">
+      <div class="intro">
+        <p class="eyebrow">Professional benchmark</p>
+        <h1 id="tool-title">Typing Test Online</h1>
+        <p class="support">Start typing to measure WPM, CPM, accuracy, and mistakes.</p>
+      </div>
+
+      <div class="control-board" aria-label="Test settings">
+        <div class="control-group">
+          <span class="label">Duration</span>
+          <div class="segmented" data-group="duration">
+            <button class="active">30 sec</button><button>1 min</button><button>2 min</button><button>3 min</button><button>5 min</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="label">Mode</span>
+          <div class="segmented" data-group="mode">
+            <button class="active">Words</button><button>Sentences</button><button>Practice</button><button>Numbers</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="label">Difficulty</span>
+          <div class="segmented" data-group="difficulty">
+            <button>Easy</button><button class="active">Standard</button><button>Advanced</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="metric-strip" aria-label="Live metrics">
+        <div><span>Time</span><strong id="time">01:00</strong></div>
+        <div><span>WPM</span><strong id="wpm">0</strong></div>
+        <div><span>CPM</span><strong id="cpm">0</strong></div>
+        <div><span>Accuracy</span><strong id="accuracy">100%</strong></div>
+        <div><span>Mistakes</span><strong id="mistakes">0</strong></div>
+        <div><span>Progress</span><strong id="progress-value">0%</strong></div>
+      </div>
+
+      <div class="workbench">
+        <div class="passage" aria-label="Typing passage">
+          <span class="correct">Steady</span> <span class="correct">practice</span> <span class="current">builds</span> speed. Focus on each word, keep a calm rhythm, and <span class="incorrect">correct</span> mistakes before they become habits.
+        </div>
+        <label class="input-label" for="typing-input">The timer starts when you type the first character.</label>
+        <textarea id="typing-input" rows="3" spellcheck="false" autocomplete="off" placeholder="Type the passage here..."></textarea>
+        <div class="progress-row">
+          <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
+          <span class="progress-note">Practice feedback updates live</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="secondary" id="restart">Restart</button>
+        <button class="primary" id="new-passage">New passage</button>
+      </div>
+
+      <aside class="result-summary" aria-live="polite">
+        <h2>Your typing test result</h2>
+        <p>You typed <strong>0 WPM</strong> with <strong>100%</strong> accuracy in <strong>1 min</strong>.</p>
+      </aside>
+    </section>
+
+    <section class="content-band" id="how-it-works">
+      <h2>How the typing test works</h2>
+      <p>Choose a timed test, type the passage, and review WPM, CPM, accuracy, mistakes, and progress after the run.</p>
+    </section>
+    <section class="content-band" id="faq">
+      <h2>FAQ</h2>
+      <p>Scoring and SEO explanations are reserved below the visual restoration target and are implemented after the visual gate.</p>
+    </section>
+  </main>
+  <script src="./script.js"></script>
+</body>
+</html>

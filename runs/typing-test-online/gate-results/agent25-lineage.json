@@ -1,0 +1,18 @@
+{
+  "gate": "agent25-lineage",
+  "runDir": "/Users/dom/Desktop/库/toolsite-agent-factory/runs/typing-test-online",
+  "status": "pass",
+  "passed": true,
+  "failures": [],
+  "details": {
+    "domain": "typing-test-online.com",
+    "selectedOption": "Option A — Benchmark Console"
+  },
+  "evidence": {
+    "externalResponse": "agent-2-5-output/external-design-evidence/external-response.md",
+    "selectedLineage": "agent-2-5-output/external-design-evidence/selected-design-lineage.md",
+    "selectedDesktop": "agent-2-5-output/selected-design/target/desktop.png",
+    "selectedMobile": "agent-2-5-output/selected-design/target/mobile.png"
+  },
+  "generatedAt": "2026-05-08T10:39:56.366Z"
+}

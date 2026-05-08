@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Typing Test Online - GPT Option Board</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px;
+      background: #f6f8fc;
+      color: #0f172a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .option {
+      overflow: hidden;
+      border: 1px solid #d9e2ef;
+      border-radius: 18px;
+      background: white;
+      box-shadow: 0 18px 52px rgba(15, 23, 42, 0.10);
+    }
+    .label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid #e2e8f0;
+      font-weight: 800;
+    }
+    .badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: #635bff;
+      font-weight: 900;
+    }
+    .name span {
+      display: block;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <section class="option">
+      <div class="label"><span class="badge">A</span><div class="name">Benchmark Console<span>GPT recommended</span></div></div>
+      <img src="../generated-designs/option-a/target/desktop.png" alt="Option A Benchmark Console">
+    </section>
+    <section class="option">
+      <div class="label"><span class="badge">B</span><div class="name">Practice Studio<span>Alternate</span></div></div>
+      <img src="../generated-designs/option-b/target/desktop.png" alt="Option B Practice Studio">
+    </section>
+    <section class="option">
+      <div class="label"><span class="badge">C</span><div class="name">Speed Lab<span>Alternate</span></div></div>
+      <img src="../generated-designs/option-c/target/desktop.png" alt="Option C Speed Lab">
+    </section>
+  </main>
+</body>
+</html>

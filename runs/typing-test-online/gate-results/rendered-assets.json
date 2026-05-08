@@ -1,0 +1,37 @@
+{
+  "gate": "rendered-assets",
+  "runDir": "/Users/dom/Desktop/库/toolsite-agent-factory/runs/typing-test-online",
+  "status": "pass",
+  "passed": true,
+  "failures": [],
+  "details": {
+    "desktop": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "imageCount": 0,
+      "backgroundAssetCount": 0,
+      "images": [],
+      "backgroundAssets": [],
+      "failures": [],
+      "scrollWidth": 1440
+    },
+    "mobile": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "imageCount": 0,
+      "backgroundAssetCount": 0,
+      "images": [],
+      "backgroundAssets": [],
+      "failures": [],
+      "scrollWidth": 390
+    }
+  },
+  "evidence": {
+    "url": "http://127.0.0.1:4327/"
+  },
+  "generatedAt": "2026-05-08T10:40:01.345Z"
+}

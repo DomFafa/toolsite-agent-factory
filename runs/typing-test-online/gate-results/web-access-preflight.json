@@ -1,0 +1,38 @@
+{
+  "gate": "web-access-preflight",
+  "runDir": "/Users/dom/Desktop/库/toolsite-agent-factory/runs/typing-test-online",
+  "status": "pass",
+  "passed": true,
+  "failures": [],
+  "details": {
+    "webAccessRoot": "web-access",
+    "requiredFiles": [
+      "SKILL.md",
+      "README.md",
+      "scripts/check-deps.sh",
+      "scripts/cdp-proxy.mjs",
+      "scripts/match-site.sh",
+      "references/cdp-api.md"
+    ],
+    "pathScan": {
+      "SKILL.md": {
+        "hasRepoRelativePath": true,
+        "forbiddenPathMatches": 0
+      },
+      "README.md": {
+        "hasRepoRelativePath": true,
+        "forbiddenPathMatches": 0
+      },
+      "references/cdp-api.md": {
+        "hasRepoRelativePath": true,
+        "forbiddenPathMatches": 0
+      }
+    }
+  },
+  "evidence": {
+    "skill": "web-access/SKILL.md",
+    "checkDeps": "web-access/scripts/check-deps.sh",
+    "cdpProxy": "web-access/scripts/cdp-proxy.mjs"
+  },
+  "generatedAt": "2026-05-08T10:41:19.573Z"
+}

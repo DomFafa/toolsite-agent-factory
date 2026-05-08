@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Typing Test Online</title>
+  <meta name="description" content="Start typing to measure WPM, CPM, accuracy, and mistakes with a clean browser-based typing test." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="Typing Test Online home">
+      <span class="brand-mark">T</span>
+      <span>Typing Test Online</span>
+    </a>
+    <nav class="nav">
+      <a href="#">Tools</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="tool-panel" aria-labelledby="page-title">
+      <div class="intro-row">
+        <div>
+          <p class="eyebrow">Browser benchmark</p>
+          <h1 id="page-title">Typing Test Online</h1>
+          <p class="support-line">Start typing to measure WPM, CPM, accuracy, and mistakes.</p>
+        </div>
+        <div class="run-status" id="runStatus">Ready</div>
+      </div>
+
+      <div class="control-grid" aria-label="Typing test settings">
+        <div class="control-group">
+          <div class="control-label">Duration</div>
+          <div class="segmented" role="group" aria-label="Duration">
+            <button class="seg active" data-duration="30">30 sec</button>
+            <button class="seg" data-duration="60">1 min</button>
+            <button class="seg" data-duration="120">2 min</button>
+            <button class="seg" data-duration="180">3 min</button>
+            <button class="seg" data-duration="300">5 min</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">Passage mode</div>
+          <div class="segmented" role="group" aria-label="Passage mode">
+            <button class="seg active" data-mode="Words">Words</button>
+            <button class="seg" data-mode="Sentences">Sentences</button>
+            <button class="seg" data-mode="Practice">Practice</button>
+            <button class="seg" data-mode="Numbers">Numbers</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">Difficulty</div>
+          <div class="segmented" role="group" aria-label="Difficulty">
+            <button class="seg" data-difficulty="Easy">Easy</button>
+            <button class="seg active" data-difficulty="Standard">Standard</button>
+            <button class="seg" data-difficulty="Advanced">Advanced</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="metrics" aria-label="Live typing metrics">
+        <div class="metric">
+          <span class="metric-label">Time</span>
+          <strong id="timeMetric">00:30</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">WPM</span>
+          <strong id="wpmMetric">0 WPM</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">CPM</span>
+          <strong id="cpmMetric">0 CPM</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Accuracy</span>
+          <strong id="accuracyMetric">100%</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Mistakes</span>
+          <strong id="mistakesMetric">0 mistakes</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Progress</span>
+          <strong id="progressMetric">0%</strong>
+        </div>
+      </div>
+
+      <div class="passage-shell">
+        <div class="passage-topline">
+          <span id="passageMeta">Words · Standard</span>
+          <span class="hint">Current character is underlined</span>
+        </div>
+        <div class="passage" id="passageDisplay" aria-label="Typing passage"></div>
+      </div>
+
+      <label class="input-label" for="typingInput">Typing input</label>
+      <textarea
+        id="typingInput"
+        class="typing-input"
+        rows="4"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder="Start typing here..."
+      ></textarea>
+
+      <div class="actions">
+        <button class="button secondary" id="restartButton">Restart</button>
+        <button class="button primary" id="newPassageButton">New passage</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

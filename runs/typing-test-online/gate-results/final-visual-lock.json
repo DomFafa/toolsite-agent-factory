@@ -1,0 +1,117 @@
+{
+  "gate": "final-visual-lock",
+  "runDir": "/Users/dom/Desktop/库/toolsite-agent-factory/runs/typing-test-online",
+  "status": "pass",
+  "passed": true,
+  "failures": [],
+  "details": {
+    "desktop": {
+      "innerWidth": 1440,
+      "innerHeight": 900,
+      "scrollWidth": 1440,
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "top": 64,
+        "bottom": 2326,
+        "width": 1440,
+        "height": 2262,
+        "centerDelta": 0
+      },
+      "tool": {
+        "left": 130,
+        "right": 1310,
+        "top": 82,
+        "bottom": 931,
+        "width": 1180,
+        "height": 849,
+        "centerDelta": 0
+      },
+      "firstContent": {
+        "left": 330,
+        "right": 1110,
+        "top": 931,
+        "bottom": 1088,
+        "width": 780,
+        "height": 157,
+        "centerDelta": 0
+      },
+      "visibleText": "T\nTyping Test Online\nHow it works\nFAQ\n\nBROWSER BENCHMARK\n\nTyping Test Online\n\nStart typing to measure WPM, CPM, accuracy, and mistakes.\n\nReady\nDURATION\n30 sec\n1 min\n2 min\n3 min\n5 min\nPASSAGE MODE\nWords\nSentences\nPractice\nNumbers\nDIFFICULTY\nEasy\nStandard\nAdvanced\nTime\n00:30\nWPM\n0 WPM\nCPM\n0 CPM\nAccuracy\n100%\nMistakes\n0 mistakes\nProgress\n0%\nWords · Standard\nCurrent character is underlined\nSteady practice builds speed. Focus on each word, keep a calm rhythm, and correct mistakes before they become habits.\nTYPING INPUT\nRestart\nNew passage\nHow the typing test works\n\nChoose a duration, mode, and difficulty, then type the passage shown in the workbench. The timer starts on the first valid typed character, live metrics update as you type, and the final result appears when time runs out or the passage is completed.\n\nWhat WPM and CPM mean\n\nWPM means words per minute. For standard typing tests, five characters count as one word, which keeps scores comparable across different passages. CPM means characters per minute and is useful when you want a more direct view of keyboard pace.\n\nHow accuracy is calculated\n\nAccuracy compares correct characters with everything you typed. Incorrect and extra characters count as mistakes, so clean typing improves both your accuracy and your net WPM result.\n\nTyping practice tips\nKeep your eyes on the next word instead of the keyboard.\nType at a steady pace before trying to raise your speed.\nRepeat short tests to build consistency and reduce errors.\nPractice punctuation and numbers separately when they slow you down.\nReview mistakes after each test, then try again with a calmer rhythm.\nCommon typing test durations\n\nUse 30 seconds for a quick warmup, 1 minute for a fast WPM check, 2 or 3 minutes for balanced practice, and 5 minutes when you want a steadier benchmark that rewards focus over a longer session.\n\nFrequently asked questions\nWhat is a good WPM score?\nHow is WPM calculated?\nWhat is CPM in a typing test?\nDoes accuracy affect my typing speed score?\nHow can I improve my typing speed?\nIs this typing test free?\nCan I use the typing test without signing up?\nWhat is the best duration for typing practice?"
+    },
+    "mobile": {
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "scrollWidth": 390,
+      "main": {
+        "left": 0,
+        "right": 390,
+        "top": 52,
+        "bottom": 2830,
+        "width": 390,
+        "height": 2778,
+        "centerDelta": 0
+      },
+      "tool": {
+        "left": 16,
+        "right": 374,
+        "top": 56,
+        "bottom": 1025,
+        "width": 358,
+        "height": 969,
+        "centerDelta": 0
+      },
+      "firstContent": {
+        "left": 16,
+        "right": 374,
+        "top": 1025,
+        "bottom": 1249,
+        "width": 358,
+        "height": 224,
+        "centerDelta": 0
+      },
+      "visibleText": "T\nTyping Test Online\n\nBROWSER BENCHMARK\n\nTyping Test Online\n\nStart typing to measure WPM, CPM, accuracy, and mistakes.\n\nReady\nDURATION\n30 sec\n1 min\n2 min\n3 min\n5 min\nPASSAGE MODE\nWords\nSentences\nPractice\nNumbers\nDIFFICULTY\nEasy\nStandard\nAdvanced\nTime\n00:30\nWPM\n0 WPM\nCPM\n0 CPM\nAccuracy\n100%\nMistakes\n0 mistakes\nProgress\n0%\nWords · Standard\nSteady practice builds speed. Focus on each word, keep a calm rhythm, and correct mistakes before they become habits.\nTYPING INPUT\nRestart\nNew passage\nHow the typing test works\n\nChoose a duration, mode, and difficulty, then type the passage shown in the workbench. The timer starts on the first valid typed character, live metrics update as you type, and the final result appears when time runs out or the passage is completed.\n\nWhat WPM and CPM mean\n\nWPM means words per minute. For standard typing tests, five characters count as one word, which keeps scores comparable across different passages. CPM means characters per minute and is useful when you want a more direct view of keyboard pace.\n\nHow accuracy is calculated\n\nAccuracy compares correct characters with everything you typed. Incorrect and extra characters count as mistakes, so clean typing improves both your accuracy and your net WPM result.\n\nTyping practice tips\nKeep your eyes on the next word instead of the keyboard.\nType at a steady pace before trying to raise your speed.\nRepeat short tests to build consistency and reduce errors.\nPractice punctuation and numbers separately when they slow you down.\nReview mistakes after each test, then try again with a calmer rhythm.\nCommon typing test durations\n\nUse 30 seconds for a quick warmup, 1 minute for a fast WPM check, 2 or 3 minutes for balanced practice, and 5 minutes when you want a steadier benchmark that rewards focus over a longer session.\n\nFrequently asked questions\nWhat is a good WPM score?\nHow is WPM calculated?\nWhat is CPM in a typing test?\nDoes accuracy affect my typing speed score?\nHow can I improve my typing speed?\nIs this typing test free?\nCan I use the typing test without signing up?\nWhat is the best duration for typing practice?"
+    },
+    "wide": {
+      "innerWidth": 2048,
+      "innerHeight": 734,
+      "scrollWidth": 2048,
+      "main": {
+        "left": 0,
+        "right": 2048,
+        "top": 64,
+        "bottom": 2326,
+        "width": 2048,
+        "height": 2262,
+        "centerDelta": 0
+      },
+      "tool": {
+        "left": 434,
+        "right": 1614,
+        "top": 82,
+        "bottom": 931,
+        "width": 1180,
+        "height": 849,
+        "centerDelta": 0
+      },
+      "firstContent": {
+        "left": 634,
+        "right": 1414,
+        "top": 931,
+        "bottom": 1088,
+        "width": 780,
+        "height": 157,
+        "centerDelta": 0
+      },
+      "visibleText": "T\nTyping Test Online\nHow it works\nFAQ\n\nBROWSER BENCHMARK\n\nTyping Test Online\n\nStart typing to measure WPM, CPM, accuracy, and mistakes.\n\nReady\nDURATION\n30 sec\n1 min\n2 min\n3 min\n5 min\nPASSAGE MODE\nWords\nSentences\nPractice\nNumbers\nDIFFICULTY\nEasy\nStandard\nAdvanced\nTime\n00:30\nWPM\n0 WPM\nCPM\n0 CPM\nAccuracy\n100%\nMistakes\n0 mistakes\nProgress\n0%\nWords · Standard\nCurrent character is underlined\nSteady practice builds speed. Focus on each word, keep a calm rhythm, and correct mistakes before they become habits.\nTYPING INPUT\nRestart\nNew passage\nHow the typing test works\n\nChoose a duration, mode, and difficulty, then type the passage shown in the workbench. The timer starts on the first valid typed character, live metrics update as you type, and the final result appears when time runs out or the passage is completed.\n\nWhat WPM and CPM mean\n\nWPM means words per minute. For standard typing tests, five characters count as one word, which keeps scores comparable across different passages. CPM means characters per minute and is useful when you want a more direct view of keyboard pace.\n\nHow accuracy is calculated\n\nAccuracy compares correct characters with everything you typed. Incorrect and extra characters count as mistakes, so clean typing improves both your accuracy and your net WPM result.\n\nTyping practice tips\nKeep your eyes on the next word instead of the keyboard.\nType at a steady pace before trying to raise your speed.\nRepeat short tests to build consistency and reduce errors.\nPractice punctuation and numbers separately when they slow you down.\nReview mistakes after each test, then try again with a calmer rhythm.\nCommon typing test durations\n\nUse 30 seconds for a quick warmup, 1 minute for a fast WPM check, 2 or 3 minutes for balanced practice, and 5 minutes when you want a steadier benchmark that rewards focus over a longer session.\n\nFrequently asked questions\nWhat is a good WPM score?\nHow is WPM calculated?\nWhat is CPM in a typing test?\nDoes accuracy affect my typing speed score?\nHow can I improve my typing speed?\nIs this typing test free?\nCan I use the typing test without signing up?\nWhat is the best duration for typing practice?"
+    }
+  },
+  "evidence": {
+    "url": "http://127.0.0.1:4327/",
+    "screenshots": {
+      "desktop": "agent-5-output/final-visual-lock/desktop.png",
+      "mobile": "agent-5-output/final-visual-lock/mobile.png",
+      "wide": "agent-5-output/final-visual-lock/wide.png"
+    }
+  },
+  "generatedAt": "2026-05-08T10:39:59.529Z"
+}
