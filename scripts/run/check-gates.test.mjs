@@ -1,0 +1,243 @@
+import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+
+import { checkRunGates, reportHasPassDecision } from './check-gates.mjs';
+
+async function makeRun() {
+  const root = await mkdtemp(path.join(tmpdir(), 'gate-check-'));
+  const runDir = path.join(root, 'runs', 'sample-site');
+  await mkdir(runDir, { recursive: true });
+  await writeFile(
+    path.join(runDir, 'state.json'),
+    JSON.stringify(
+      {
+        site_id: 'sample-site',
+        domain: 'example.com',
+        approved_for_production: false,
+        agent_outputs: {
+          agent_1: 'agent-1-output/keyword-research-report.md',
+          agent_2: 'agent-2-output/site-brief.md',
+          agent_2_5: null,
+          agent_3: null,
+          agent_4: null,
+          agent_5: null,
+          agent_6: null,
+        },
+        qa: { passed: false, report: null },
+      },
+      null,
+      2,
+    ),
+  );
+  return runDir;
+}
+
+async function writeAgent2Outputs(runDir) {
+  const dir = path.join(runDir, 'agent-2-output');
+  await mkdir(dir, { recursive: true });
+  for (const file of [
+    'site-brief.md',
+    'tool-spec.md',
+    'content-plan.md',
+    'seo-plan.md',
+    'ui-reference-dossier.md',
+    'design-generation-input.md',
+  ]) {
+    await writeFile(path.join(dir, file), `# ${file}\n`);
+  }
+}
+
+async function writeWebAccessGate(runDir, { passed = true } = {}) {
+  const dir = path.join(runDir, 'gate-results');
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    path.join(dir, 'web-access-preflight.json'),
+    JSON.stringify(
+      {
+        gate: 'web-access-preflight',
+        runDir,
+        status: passed ? 'pass' : 'fail',
+        passed,
+        failures: passed ? [] : ['missing web-access/SKILL.md'],
+        details: {},
+        evidence: {},
+        generatedAt: '2026-05-08T00:00:00.000Z',
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
+  const root = path.join(runDir, 'agent-2-5-output');
+  const selected = path.join(root, 'selected-design');
+  await mkdir(path.join(selected, 'target'), { recursive: true });
+  for (const file of [
+    'design-generation-prompt.md',
+    'design-manifest.md',
+    'design-generation-report.md',
+    'asset-acquisition-report.md',
+  ]) {
+    await writeFile(path.join(root, file), `# ${file}\n`);
+  }
+  for (const file of [
+    'target/desktop.png',
+    'target/mobile.png',
+    'design-tokens.md',
+    'component-spec.md',
+    'asset-plan.md',
+    'usability-contract.md',
+    'asset-quality-contract.md',
+    'interaction-state-model.md',
+    'dynamic-data-fit.md',
+    'ux-self-audit.md',
+    'restoration-rules.md',
+    'forbidden-deviations.md',
+    'selection-rationale.md',
+  ]) {
+    await mkdir(path.dirname(path.join(selected, file)), { recursive: true });
+    await writeFile(path.join(selected, file), file.endsWith('.png') ? 'png' : `# ${file}\n`);
+  }
+  for (const option of ['option-a', 'option-b', 'option-c']) {
+    await mkdir(path.join(root, 'generated-designs', option), { recursive: true });
+  }
+  if (externalEvidence) {
+    const evidence = path.join(root, 'external-design-evidence');
+    await mkdir(evidence, { recursive: true });
+    await writeFile(
+      path.join(evidence, 'external-response.md'),
+      [
+        '# Raw external response',
+        '',
+        '# Design Generation Prompt',
+        '',
+        'Generate design directions for typing-test-online.com.',
+        '',
+        'Option A - Benchmark Console includes design target and design tokens.',
+      ].join('\n'),
+    );
+    await writeFile(path.join(evidence, 'conversation-screenshot.png'), 'x'.repeat(10_001));
+    await writeFile(path.join(evidence, 'source-provenance.md'), '# Source provenance\n\nDecision: PASS\n');
+    await writeFile(path.join(evidence, 'selected-design-lineage.md'), '# Selected design lineage\n\nDecision: PASS\n');
+  }
+}
+
+test('allows Agent 2.5 when Agent 1 is waived and Agent 2 outputs exist', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    [
+      '# Gate Ledger - sample-site',
+      '',
+      '- [waived] Agent 1 Keyword Research - User supplied keyword directly.',
+      '- [passed] Agent 2 Site Brief - Required files are present.',
+    ].join('\n'),
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-2.5' });
+  assert.equal(result.allowed, true);
+  assert.deepEqual(result.missing, []);
+});
+
+test('blocks Agent 2.5 when repo-local web-access preflight has not passed', async () => {
+  const runDir = await makeRun();
+  await writeAgent2Outputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    [
+      '# Gate Ledger - sample-site',
+      '',
+      '- [waived] Agent 1 Keyword Research - User supplied keyword directly.',
+      '- [passed] Agent 2 Site Brief - Required files are present.',
+    ].join('\n'),
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-2.5' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /web-access-preflight\.json/);
+  assert.equal(result.allowedNextStep, 'Run repo-local web-access preflight gate');
+});
+
+test('blocks Agent 4 when selected design and visual gate artifacts are missing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-4' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /agent-2-5-output\/selected-design\/target\/desktop\.png/);
+  assert.match(result.missing.join('\n'), /agent-5-output\/visual-restoration-gate-report\.md/);
+  assert.equal(result.allowedNextStep, 'Run Agent 2.5 UI Design Generation');
+});
+
+test('blocks Agent 3 when Agent 2.5 lacks external GPT provenance evidence', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: false });
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /external-design-evidence\/external-response\.md/);
+  assert.match(result.missing.join('\n'), /external-design-evidence\/conversation-screenshot\.png/);
+  assert.match(result.missing.join('\n'), /external-design-evidence\/source-provenance\.md/);
+  assert.match(result.missing.join('\n'), /external-design-evidence\/selected-design-lineage\.md/);
+  assert.equal(result.allowedNextStep, 'Run Agent 2.5 UI Design Generation');
+});
+
+test('blocks Agent 3 when Agent 2.5 external GPT provenance is present but not passing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true });
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+  await writeFile(
+    path.join(runDir, 'agent-2-5-output/external-design-evidence/source-provenance.md'),
+    '# Source provenance\n\nDecision: FAIL\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /source-provenance\.md with Decision: PASS/);
+});
+
+test('blocks Agent 3 when selected design lineage is not passing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true });
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+  await writeFile(
+    path.join(runDir, 'agent-2-5-output/external-design-evidence/selected-design-lineage.md'),
+    '# Selected design lineage\n\nDecision: FAIL\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /selected-design-lineage\.md with Decision: PASS/);
+});
+
+test('recognizes Agent 5 reports with Decision: PASS', () => {
+  assert.equal(reportHasPassDecision('Decision: PASS\n\nDesktop: 95 / 100'), true);
+  assert.equal(reportHasPassDecision('Decision: FAIL\n\nRequired changes remain'), false);
+});

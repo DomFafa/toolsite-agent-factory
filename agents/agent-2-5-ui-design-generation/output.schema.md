@@ -6,6 +6,8 @@ Required outputs:
 - `design-manifest.md`
 - `generated-designs/`
 - `selected-design/`
+- `external-design-evidence/`
+- `chat-delivery/`
 - `asset-acquisition-report.md`
 - `design-generation-report.md`
 
@@ -58,6 +60,21 @@ generated-designs/
 - `screenshots/desktop.png` when code is runnable
 - `screenshots/mobile.png` when code is runnable
 - `selection-rationale.md`
+
+`external-design-evidence/` must contain raw provenance for the GPT/design-model step:
+
+- `external-response.md` with the verbatim or exported external model response used to create the design directions
+- `conversation-screenshot.png` or an equivalent screenshot of the external design surface showing the generated response
+- `source-provenance.md` mapping each generated option and the selected target screenshots/code to the external response, with any Codex normalization/local edits explicitly identified
+
+Agent 3 must compare against target screenshots derived from the external design response. Locally fabricated targets without raw external provenance are not acceptable.
+
+`chat-delivery/` must contain the user-visible option selection record:
+
+- `options-board.png` showing all three GPT-generated options in one review image, or a side-by-side board assembled from the three GPT option screenshots.
+- `option-selection.md` with `Decision: PASS`, the three option names, evidence that the board was sent to the current chat, the user-selected option, or the exact 3-minute timeout/default decision.
+
+Agent 2.5 must stop after sending the three options to the current chat. It may proceed only after the user chooses an option, or after 3 minutes without a user response, in which case it must select the GPT-recommended option and record the timeout in `option-selection.md`.
 
 `asset-acquisition-report.md` must record:
 

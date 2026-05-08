@@ -6,6 +6,7 @@ Required outputs:
 - `visual-restoration-gate-report.md` when run in Visual Restoration Gate mode
 - `qa-report.md`
 - `qa-screenshots/`
+- `chat-delivery/final-screenshot-delivery.md` before Agent 6
 - `fix-routing.md`
 
 Each output should include decisions, assumptions, and next-agent handoff notes.
@@ -40,6 +41,15 @@ Design Package Gate outputs must record:
 - Copy/brand safety assessment
 - Pass/fail decision
 - Required changes if failed
+
+Final QA outputs must record:
+
+- Browser-backed final visual lock result path under `gate-results/final-visual-lock.json`
+- Target-vs-final page visual similarity result path under `gate-results/final-visual-similarity.json`
+- Browser-backed rendered asset visibility result path under `gate-results/rendered-assets.json`
+- Tool spec implementation result path under `gate-results/tool-spec.json`
+- Final QA evidence bundle path under `gate-results/final-qa-evidence.json`
+- `chat-delivery/final-screenshot-delivery.md` confirming the GPT target screenshot and final coded page screenshot were sent to the current chat for user inspection
 
 Visual Restoration Gate outputs must record:
 

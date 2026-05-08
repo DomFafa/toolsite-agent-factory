@@ -53,6 +53,12 @@
 - [ ] Desktop UI matches
 - [ ] Mobile UI matches
 - [ ] Final UI matches Agent 2.5 selected design without visual regression
+- [ ] Browser-backed final visual lock gate passed and wrote `gate-results/final-visual-lock.json`
+- [ ] Final target-vs-page visual similarity gate passed at 90% or higher and wrote `gate-results/final-visual-similarity.json`
+- [ ] Browser-backed rendered asset visibility gate passed and wrote `gate-results/rendered-assets.json`
+- [ ] Tool spec implementation gate passed and wrote `gate-results/tool-spec.json`
+- [ ] Final QA evidence bundle passed and wrote `gate-results/final-qa-evidence.json`
+- [ ] GPT target screenshot and final coded page screenshot were sent to the current chat and recorded in `agent-5-output/chat-delivery/final-screenshot-delivery.md`
 - [ ] Tool behavior passes
 - [ ] Primary task flow interaction review passes for meal formats, presets, toggles, portions, and clearing behavior
 - [ ] Dynamic values do not overflow the UI

@@ -16,7 +16,7 @@ if [[ -e "$RUN_DIR" ]]; then
   exit 1
 fi
 
-mkdir -p "$RUN_DIR"/{agent-1-output,agent-2-output,agent-2-5-output,agent-3-output,agent-4-output,agent-5-output,agent-6-output,assets,site}
+mkdir -p "$RUN_DIR"/{agent-1-output,agent-2-output,agent-2-5-output/chat-delivery,agent-3-output,agent-4-output,agent-5-output/chat-delivery,agent-6-output,assets,gate-results,site}
 cp shared/templates/run-input.template.md "$RUN_DIR/input.md"
 cp shared/templates/approval.template.md "$RUN_DIR/approval.md"
 touch "$RUN_DIR/issues.md"
@@ -55,6 +55,18 @@ cat > "$RUN_DIR/README.md" <<MD
 - Cloudflare Pages project: dom-tool-$SITE_ID
 
 Fill \`input.md\`, then execute agents in order.
+
+Mechanical verification entrypoint:
+
+\`\`\`bash
+npm run verify:run -- --run-dir $RUN_DIR --before agent-6 --url http://127.0.0.1:<port>/
+\`\`\`
+
+Before Agent 2.5 or Agent 6, verify the repo-local web-access skill:
+
+\`\`\`bash
+npm run check:web-access -- --run-dir $RUN_DIR --write
+\`\`\`
 MD
 
 echo "Created $RUN_DIR"
