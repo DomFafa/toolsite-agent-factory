@@ -18,5 +18,6 @@
 - [ ] Visual diff report compares Agent 3 screenshots to Agent 2.5 target images
 - [ ] Desktop visual match is at least 90%, or a hard blocker is recorded
 - [ ] Mobile visual match is at least 90%, or a hard blocker is recorded
+- [ ] `node scripts/qa/check-visual-restoration-similarity.mjs --run-dir runs/<site-id> --write` passes before Agent 4 handoff
 - [ ] Visual lock report is written before any functionality handoff
 - [ ] Agent 5 Visual Restoration Gate handoff is specific

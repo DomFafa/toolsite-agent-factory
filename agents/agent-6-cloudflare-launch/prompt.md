@@ -6,12 +6,15 @@ Launch an approved, QA-passed static site to Cloudflare Pages and complete domai
 
 ## Operating rules
 
+- Before starting any new toolsite run, read the standard flow reference: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
+- Before doing work, output a run-start acknowledgement: flow files read, current run phase, next agent to execute, and actions forbidden in the current phase.
 - Read all relevant files from the current run folder.
 - Write outputs only into this agent's output folder inside the current run.
 - Use English for system docs, reports, specs, and site content.
 - Do not overengineer.
 - Preserve V1 constraints: static frontend only, no backend, no login, no database, no API keys.
 - Stop and write an issue note if required inputs are missing.
+- Do not start launch work unless the current chat contains explicit user approval to launch (`批准上线`) and `approval.md` is fully complete. If either is missing, stop before deployment, production push, Cloudflare/DNS/analytics/indexing work, or any production environment change.
 - Root `.env.local` should contain only account-level Cloudflare inputs: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_EMAIL_ROUTING_FORWARD_TO`. Do not require `CLOUDFLARE_ZONE_ID` or `PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN`.
 - Required launch gate: discover the Cloudflare zone ID from the current run's target domain using `docs/cloudflare-zone-discovery.md`. Ignore stale fixed zone IDs unless they are verified to match the target domain.
 - All Cloudflare operations are API-first. Use `docs/cloudflare-api-first-fallback.md`: try token API first, then Dashboard same-origin API through `web-access`, then manual Dashboard UI only if needed.

@@ -1,5 +1,8 @@
 # Checklist
 
+- [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
+- [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
+
 # Design Package Gate
 
 - [ ] Agent 2.5 generated at least three options or recorded a hard blocker
@@ -7,7 +10,13 @@
 - [ ] Selected design has design tokens, component spec, asset plan, restoration rules, and forbidden deviations
 - [ ] Selected design has usability contract, dynamic data fit notes, and UX self-audit
 - [ ] Selected design has post-selection high-resolution asset acquisition evidence
-- [ ] `selected-design/downloads/selected-option-assets.zip` and `asset-manifest.json` exist, or a hard blocker/user waiver is recorded
+- [ ] `selected-design/image-slots.md` lists every selected image slot, or explicitly records `Required image slots: none`
+- [ ] `selected-design/downloads/selected-option-assets.zip` and `asset-manifest.json` exist when selected image slots exist, or a hard blocker/user waiver is recorded
+- [ ] `gate-results/selected-assets.json` exists and passes before Agent 3 starts
+- [ ] `gate-results/toolsite-design-review.json` exists and passes before Agent 3 starts
+- [ ] Toolsite design-review subset checks first impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel
+- [ ] Selected assets are independent standalone GPT/generated/user-provided files, not crops or extracts from option screenshots, target screenshots, final screenshots, or QA screenshots
+- [ ] Fallback generated illustrations/assets include `selected-design/fallback-illustration-report.md` with `Decision: PASS`
 - [ ] Selected design has complete runnable code, or a code-export blocker/fallback path is recorded
 - [ ] Selected design is practical for 90% Astro/HTML/CSS/vanilla JS restoration
 - [ ] Usability QA checks realistic dynamic data values for numeric overflow
@@ -41,6 +50,7 @@
 - [ ] Agent 3 output is a static visual restoration, not a functionality-first implementation
 - [ ] Desktop screenshot matches Agent 2.5 selected target at 90% or higher
 - [ ] Mobile screenshot matches Agent 2.5 selected target at 90% or higher
+- [ ] `gate-results/visual-restoration-similarity.json` exists and passes before Agent 4 starts
 - [ ] Visual deviations are documented by module
 - [ ] Visual restoration does not preserve a design flaw that causes numeric overflow, unreadable text, dirty thumbnails, or unusable controls
 - [ ] Visual restoration does not preserve low-resolution or blurry food assets
@@ -53,6 +63,15 @@
 - [ ] Desktop UI matches
 - [ ] Mobile UI matches
 - [ ] Final UI matches Agent 2.5 selected design without visual regression
+- [ ] Browser-backed final visual lock gate passed and wrote `gate-results/final-visual-lock.json`
+- [ ] Final target-vs-page visual similarity gate passed at 90% or higher and wrote `gate-results/final-visual-similarity.json`
+- [ ] Browser-backed rendered asset visibility gate passed and wrote `gate-results/rendered-assets.json`
+- [ ] Tool spec implementation gate passed and wrote `gate-results/tool-spec.json`
+- [ ] Selected independent assets gate passed and wrote `gate-results/selected-assets.json`
+- [ ] Toolsite design-review subset gate passed and wrote `gate-results/toolsite-design-review.json`
+- [ ] Agent 3 visual restoration similarity gate passed and wrote `gate-results/visual-restoration-similarity.json`
+- [ ] Final QA evidence bundle passed and wrote `gate-results/final-qa-evidence.json`
+- [ ] GPT target screenshot and final coded page screenshot were sent to the current chat and recorded in `agent-5-output/chat-delivery/final-screenshot-delivery.md`
 - [ ] Tool behavior passes
 - [ ] Primary task flow interaction review passes for meal formats, presets, toggles, portions, and clearing behavior
 - [ ] Dynamic values do not overflow the UI
@@ -61,3 +80,5 @@
 - [ ] SEO passes
 - [ ] Noindex rules pass
 - [ ] Production gate is enforced
+- [ ] Final QA pass stopped the workflow; Agent 6, deployment, production push, Cloudflare/DNS/analytics/indexing, and production environment changes were not started
+- [ ] Handoff requires explicit user launch approval in the current chat with `批准上线` and completed `approval.md`

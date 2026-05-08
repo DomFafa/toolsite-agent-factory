@@ -10,6 +10,8 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 
 ## Operating Rules
 
+- Before starting any new toolsite run, read the standard flow reference: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
+- Before doing work, output a run-start acknowledgement: flow files read, current run phase, next agent to execute, and actions forbidden in the current phase.
 - Read all relevant files from the current run folder.
 - Write outputs only into `agent-2-5-output/` inside the current run.
 - Use English for system docs, reports, specs, and site content.
@@ -40,6 +42,17 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 
 Generate at least three distinct UI directions unless a hard external blocker prevents generation.
 
+The `design-generation-prompt.md` and external GPT prompt must include these non-negotiable constraints:
+
+- The UI must be restorable in Astro + HTML/CSS + vanilla JS.
+- The target is 90% screenshot similarity against the coded page.
+- The first viewport must be the real usable tool, not a marketing page.
+- Realistic dynamic data and long labels must not overflow.
+- The mobile layout must be readable, tappable, and usable.
+- Primary interaction states must be complete and visible.
+- Pretty-but-unusable UI must be rejected.
+- UX must not be sacrificed for visual impact.
+
 Each direction must include:
 
 - Desktop design target
@@ -62,6 +75,8 @@ Every direction must obey:
 - The interface must fit the actual tool workflow from Agent 2.
 - The interface must fit realistic calculator data, not only the values in the mock screenshot.
 - The design must avoid generic SaaS/Tailwind template patterns.
+- The design must pass the toolsite design-review subset: first impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel.
+- Avoid generic hero copy, decorative blobs/orbs, emoji design, feature-grid filler, centered-everything template composition, and SEO/marketing content above the actual tool.
 - The design must not copy logos, brand assets, unique illustrations, exact layouts, or protected trade dress from references.
 - The design may use reference material for mood, component feel, illustration mood, and layout rhythm only within the boundaries in `docs/ui-reference-guidelines.md`.
 - The design must be reproducible with Astro, HTML, CSS, vanilla JS, and local assets.
@@ -90,21 +105,24 @@ Every direction must obey:
 
 After selecting the winning option, Agent 2.5 must run a mandatory asset acquisition loop through `web-access` in the same external design surface:
 
-1. Send the selected option name, selected target screenshot, component spec, and `asset-quality-contract.md` back to the external model.
-2. Ask the model to generate every image asset used by the selected design as separate high-resolution files, not as crops from the design screenshot.
-3. Require a downloadable `selected-option-assets.zip` containing:
+1. Write `agent-2-5-output/selected-design/image-slots.md` listing every selected-design image slot, including purpose and intended rendered size. If there are no image slots, explicitly record `Required image slots: none` in `image-slots.md`, `asset-manifest.json`, and `asset-acquisition-report.md`.
+2. If image slots exist, send the selected option name, selected target screenshot, component spec, image slot inventory, and `asset-quality-contract.md` back to the external model.
+3. Ask the model to generate every image asset used by the selected design as separate high-resolution standalone files. These must be independent production assets, not crops, extracts, traces, or cut-outs from the design screenshot, option screenshots, target screenshots, final screenshots, or QA screenshots.
+4. Save the exact post-selection asset request as `agent-2-5-output/selected-design/asset-generation-prompt.md`.
+5. Require a downloadable `selected-option-assets.zip` containing:
    - `asset-manifest.json`
    - `asset-quality-contract.md`
    - one file per image slot, using stable names such as `ingredient-rice.png`, `preset-lean-chicken-bowl.png`, `hero-food.png`, or equivalent SVG names
    - optional source prompts in `asset-prompts.md`
-4. Require every file in the zip to match the selected option's style and composition.
-5. Require raster ingredient hero assets to be at least `1000x360`, raster preset thumbnails to be at least `300x190`, and any larger rendered slots to have at least 2x source pixels.
-6. Require images to contain no embedded UI text, mini labels, nutrition values, logos, watermarks, screenshot fragments, or accidental white gutters.
-7. Download the zip, import or extract the assets into `agent-2-5-output/selected-design/assets/`, and preserve the zip under `agent-2-5-output/selected-design/downloads/`.
-8. Run the asset quality gate after wiring those assets into the run. If the gate fails, return to the external model with the exact failures and request a corrected asset zip.
-9. Repeat until the high-resolution asset pack passes, or record a hard external blocker in `asset-acquisition-report.md`.
+6. Require every file in the zip to match the selected option's style and composition.
+7. Require raster ingredient hero assets to be at least `1000x360`, raster preset thumbnails to be at least `300x190`, and any larger rendered slots to have at least 2x source pixels.
+8. Require images to contain no embedded UI text, mini labels, nutrition values, logos, watermarks, screenshot fragments, or accidental white gutters.
+9. Download the zip, import or extract the assets into `agent-2-5-output/selected-design/assets/`, and preserve the zip under `agent-2-5-output/selected-design/downloads/`.
+10. Run `node scripts/qa/check-selected-assets.mjs --run-dir runs/<site-id> --write`. If the gate fails, return to the external model with the exact failures and request a corrected asset zip.
+11. Run the asset quality gate after wiring those assets into the run. If the gate fails, return to the external model with the exact failures and request a corrected asset zip.
+12. Repeat until the high-resolution asset pack passes, or record a hard external blocker in `asset-acquisition-report.md`.
 
-Fallback vector illustrations or locally generated placeholders are allowed only after the asset acquisition loop fails or is explicitly waived by the user. They must be recorded as a fallback, not treated as the preferred path.
+Fallback generated illustrations, fallback vector art, or locally generated placeholders are allowed only after the asset acquisition loop fails or is explicitly waived by the user. They must be recorded in `asset-acquisition-report.md` and `selected-design/fallback-illustration-report.md` with `Decision: PASS`, not treated as the preferred path.
 
 ## External LLM Flow
 

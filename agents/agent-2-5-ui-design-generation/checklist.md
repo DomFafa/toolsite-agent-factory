@@ -1,8 +1,12 @@
 # Checklist
 
+- [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
+- [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
 - [ ] Agent 2 brief, SEO plan, tool spec, content plan, and UI reference dossier read
+- [ ] Repo-local `web-access` preflight passed and wrote `gate-results/web-access-preflight.json`
 - [ ] No secrets or environment files sent to external LLM
 - [ ] GPT/web design generation attempted through `web-access`
+- [ ] External prompt includes the non-negotiable constraint block: Astro + HTML/CSS + vanilla JS, 90% screenshot similarity, first viewport as the real tool, no dynamic-data overflow, mobile usability, complete interaction states, no pretty-but-unusable UI, and no UX sacrifice for visual impact
 - [ ] External prompt says the design must be implementable in Astro + HTML/CSS + vanilla JS
 - [ ] External prompt states the default visual restoration target is 90%
 - [ ] External prompt asks for codable UI, not only a beautiful image
@@ -16,11 +20,16 @@
 - [ ] External prompt requires production-quality image assets with minimum source size, aspect ratio fit, subject fill, and white-margin limits
 - [ ] External prompt requires readable ingredient/preset labels and practical click/tap targets
 - [ ] External prompt requires complete food imagery or responsive fallback layouts when dense grids would make cards unreadable
+- [ ] External prompt requires the toolsite design-review subset: first impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel
+- [ ] External prompt rejects generic hero copy, decorative blobs/orbs, emoji design, feature-grid filler, centered-everything template composition, and SEO/marketing content above the tool
 - [ ] External prompt asks for design tokens, component specs, asset plan, restoration rules, and forbidden deviations
 - [ ] External prompt asks for `usability-contract.md`, `asset-quality-contract.md`, `interaction-state-model.md`, `dynamic-data-fit.md`, and `ux-self-audit.md`
 - [ ] External prompt avoids hard-to-reproduce effects unless exported as local assets
 - [ ] Missing UI references handled as open exploration, not a skip
 - [ ] At least three design directions generated or hard blocker recorded
+- [ ] The three generated options were sent to the current chat as one comparison image before proceeding
+- [ ] User selected an option in chat, or no reply was received for 3 minutes and GPT's recommended option was selected by timeout
+- [ ] `chat-delivery/options-board.png` and `chat-delivery/option-selection.md` exist and record the chat delivery/selection evidence
 - [ ] Each design direction includes desktop and mobile targets
 - [ ] Each design direction includes codability notes and implementation risk
 - [ ] Each design direction includes usability notes, dynamic-data fit, overflow handling, and thumbnail-cleanliness notes
@@ -29,9 +38,13 @@
 - [ ] Each design direction includes complete generated code, or a code-export blocker is recorded
 - [ ] Local generated PNG/SVG assets are saved when they are needed for 90% restoration
 - [ ] After selected option confirmation, external GPT/design model was asked for a high-resolution asset zip for every selected design image slot
+- [ ] `selected-design/image-slots.md` lists every selected image slot, or explicitly records `Required image slots: none`
+- [ ] When image slots exist, `selected-design/asset-generation-prompt.md` records the post-selection GPT/design-model request for independent standalone assets
+- [ ] No selected asset was cropped, extracted, traced, or cut from option screenshots, target screenshots, final screenshots, or QA screenshots
 - [ ] `selected-option-assets.zip` was downloaded into `selected-design/downloads/`, or a hard blocker/user waiver is recorded
 - [ ] `asset-manifest.json` and extracted selected assets exist under `selected-design/`
-- [ ] Any fallback vector/local placeholder assets are explicitly recorded as fallback, not preferred output
+- [ ] Any fallback generated illustration/vector/local placeholder assets are used only after retry/waiver and recorded in `selected-design/fallback-illustration-report.md`
+- [ ] `node scripts/qa/check-selected-assets.mjs --run-dir runs/<site-id> --write` passed and wrote `gate-results/selected-assets.json`
 - [ ] Local generated PNG/SVG assets pass the asset quality gate when wired into the run
 - [ ] Local browser screenshots captured for generated code when code is complete
 - [ ] Selected design has target images, specs, restoration rules, and asset plan
