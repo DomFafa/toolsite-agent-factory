@@ -10,6 +10,8 @@ The pipeline optimizes usable UI restoration before functionality and SEO. A sit
 
 ## Standard Flow
 
+Standard flow reference: before starting any new toolsite run, Codex must read `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
+
 1. Agent 2 writes product, SEO, content, tool specs, `ui-reference-dossier.md`, and `design-generation-input.md`.
 2. Agent 2.5 builds `design-generation-prompt.md`.
 3. Agent 2.5 cannot start until `node scripts/run/check-web-access.mjs --run-dir runs/<site-id> --write` passes against the repo-local `web-access/` skill.
@@ -26,14 +28,16 @@ The pipeline optimizes usable UI restoration before functionality and SEO. A sit
     If the user does not respond within 3 minutes, Agent 2.5 may select the GPT-recommended option by timeout.
     The option board and decision must be saved under `agent-2-5-output/chat-delivery/`.
 13. Agent 2.5 selects one option and writes `design-manifest.md`.
-14. Agent 2.5 continues interacting with the external design model after option selection and requests `selected-option-assets.zip` for every image slot in the selected design.
-15. Agent 2.5 downloads the high-resolution asset zip, extracts assets into `agent-2-5-output/selected-design/assets/`, preserves the zip in `agent-2-5-output/selected-design/downloads/`, and writes `asset-acquisition-report.md`.
-16. Agent 5 runs in Design Package Gate mode with Usability QA first, including the asset quality gate and post-selection asset acquisition evidence. Agent 3 cannot start until this gate passes.
-17. Agent 3 builds a static visual restoration prototype only. It must not implement calculator functionality or SEO content yet.
-18. Agent 3 captures desktop/mobile screenshots and writes a visual diff report.
-19. Agent 5 runs in Visual Restoration Gate mode. Agent 4 cannot start until the rendered screenshots match the selected design targets at 90% or higher.
-20. Agent 4 adds functionality and SEO after the visual restoration gate passes, while preserving the visual lock.
-21. Agent 5 captures final implementation screenshots, runs the final target-vs-page visual similarity gate at 90% or higher, and sends both the GPT target image and the final coded page screenshot to the current chat before production approval.
+14. Agent 2.5 inventories the selected option's image slots in `selected-design/image-slots.md`. If the selected option has no image slots, `image-slots.md` and `asset-manifest.json` must explicitly record `Required image slots: none`.
+15. When image slots exist, Agent 2.5 continues interacting with the external design model after option selection and requests independent standalone assets for every image slot in the selected design. The prompt must be saved as `selected-design/asset-generation-prompt.md`.
+16. Agent 2.5 downloads the high-resolution asset zip, extracts assets into `agent-2-5-output/selected-design/assets/`, preserves the zip in `agent-2-5-output/selected-design/downloads/`, and writes `asset-acquisition-report.md`.
+17. Agent 2.5 runs `node scripts/qa/check-selected-assets.mjs --run-dir runs/<site-id> --write`; `gate-results/selected-assets.json` must pass.
+18. Agent 5 runs in Design Package Gate mode with Usability QA first, including the selected-assets gate, asset quality gate, post-selection asset acquisition evidence, and the toolsite design-review subset gate. Agent 3 cannot start until this gate passes.
+19. Agent 3 builds a static visual restoration prototype only. It must not implement calculator functionality or SEO content yet.
+20. Agent 3 captures desktop/mobile screenshots and writes a visual diff report.
+21. Agent 5 runs in Visual Restoration Gate mode. Agent 4 cannot start until the rendered screenshots match the selected design targets at 90% or higher and `gate-results/visual-restoration-similarity.json` passes.
+22. Agent 4 adds functionality and SEO after the visual restoration gate passes, while preserving the visual lock.
+23. Agent 5 captures final implementation screenshots, runs the final target-vs-page visual similarity gate at 90% or higher, and sends both the GPT target image and the final coded page screenshot to the current chat before production approval.
 
 ## Reference Modes
 
@@ -114,6 +118,14 @@ node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>
 
 After Agent 2.5 selects the winning option, it must not proceed directly to Agent 5. It must use `web-access` to continue the ChatGPT/design-model conversation and request a high-resolution asset pack for the selected option.
 
+First, Agent 2.5 must write:
+
+```txt
+agent-2-5-output/selected-design/image-slots.md
+```
+
+This file must list every selected-design image slot, including intended rendered size and purpose. If the selected option intentionally has no image slots, it must explicitly say `Required image slots: none`. This no-image decision must also appear in `asset-manifest.json` and `asset-acquisition-report.md`.
+
 The required download is:
 
 ```txt
@@ -130,13 +142,28 @@ The zip must include:
 The asset request must tell the model:
 
 - Do not crop assets from the design screenshot.
+- Do not extract, trace, or cut assets from option screenshots, target screenshots, final screenshots, or QA screenshots.
 - Generate or export each image slot as a standalone production asset.
 - Match the selected option's visual style.
 - Keep all labels and nutrition values out of image files.
 - Provide ingredient hero images at least `1000x360`, preset thumbnails at least `300x190`, and any larger rendered slot at 2x source pixels.
 - Avoid visible white gutters, watermarking, logos, and screenshot fragments.
 
-If the zip is missing, incomplete, low-resolution, or fails `asset-quality-gate`, Agent 2.5 must return to the external model with the exact failures and request a corrected zip. Fallback vector/local placeholders are allowed only after repeated failure or explicit user waiver, and must be recorded in `asset-acquisition-report.md`.
+If the zip is missing, incomplete, low-resolution, or fails the selected-assets gate or `asset-quality-gate`, Agent 2.5 must return to the external model with the exact failures and request a corrected zip. Fallback generated illustrations/vector/local placeholders are allowed only after repeated failure or explicit user waiver, and must be recorded in `asset-acquisition-report.md` plus `selected-design/fallback-illustration-report.md`.
+
+Run the mechanical gate before Design Package Gate:
+
+```bash
+node scripts/qa/check-selected-assets.mjs --run-dir runs/<site-id> --write
+```
+
+The gate writes:
+
+```txt
+gate-results/selected-assets.json
+```
+
+This result must pass before Agent 3 can start. The gate rejects missing `image-slots.md`, target/screenshot-derived assets, missing standalone asset prompts, missing manifests, low-resolution raster assets, raster-embedded SVGs, SVG text labels, and unrecorded fallback illustrations.
 
 ## Importing Downloaded Code
 
@@ -176,9 +203,16 @@ Agent 5 Design Package Gate must fail if:
 - design tokens, component specs, asset plan, restoration rules, or forbidden deviations are missing
 - usability contract, dynamic data fit notes, or UX self-audit are missing
 - interaction state model is missing or does not cover primary task-flow controls
-- post-selection high-resolution asset acquisition evidence is missing, unless a hard external blocker or user-approved waiver is recorded
+- `gate-results/selected-assets.json` is missing or failing
+- `gate-results/toolsite-design-review.json` is missing or failing
+- post-selection independent selected-asset evidence is missing, unless the selected option explicitly has no image slots or a hard external blocker/user-approved waiver is recorded
+- selected assets were cropped, extracted, traced, or cut from option screenshots, target screenshots, final screenshots, or QA screenshots
 - the selected design is not practical for 90% restoration in Astro + HTML/CSS/vanilla JS
 - first viewport is a marketing page instead of the tool
+- the first impression does not make the tool purpose, input/action path, and result/feedback path obvious
+- generic AI layout patterns dominate the design, including generic hero copy, decorative blobs/orbs, emoji design, feature-grid filler, or centered-everything template composition
+- the tool-first trunk test fails: site identity, current tool, input path, action path, output path, and mobile path are not evident
+- visual hierarchy or scan order puts SEO/marketing/support content before the actual tool
 - mobile layout is unusable
 - numeric values can overflow metric cards or result cells
 - preset thumbnails, food images, or ingredient images contain embedded text or screenshot fragments
@@ -196,6 +230,7 @@ Agent 5 Visual Restoration Gate must fail if:
 - Agent 3 screenshots are missing
 - Agent 3 visual diff report is missing
 - Agent 3 implemented functionality or SEO before visual lock
+- `gate-results/visual-restoration-similarity.json` is missing or failing
 - desktop visual match is below 90%
 - mobile visual match is below 90%
 - major visual modules drift from the selected design target
@@ -220,3 +255,28 @@ Before Agent 6, Agent 5 must compare the GPT/Agent 2.5 selected target screensho
 - the gate must write `gate-results/final-visual-similarity.json`
 
 Agent 6 is blocked if this gate is missing or failing.
+
+## Toolsite Design-Review Subset Gate
+
+This workflow intentionally does not run the full `/design-review` skill for every generated tool site. The full skill is a live-site audit and fix loop. For this factory, Agent 5 uses a smaller mechanical subset that blocks the failures most likely to waste implementation time:
+
+- first impression: the first viewport shows what the tool is, where to input, what to click, and where feedback/results appear
+- AI slop: no generic hero copy, decorative blobs/orbs, emoji design, feature-grid filler, or centered-everything template composition
+- tool-first trunk test: site identity, current tool, primary input, primary action, result/output, and mobile path are clear
+- visual hierarchy/scan order: the actual tool appears before SEO/marketing/support content
+- mobile tool usability: mobile readability, wrapping, tap targets, and zoom behavior are documented and viable
+- interaction feel: primary controls have visible state changes, feedback, result updates, and reset/clear behavior
+
+Run:
+
+```bash
+node scripts/qa/check-toolsite-design-review.mjs --run-dir runs/<site-id> --write
+```
+
+The gate writes:
+
+```txt
+gate-results/toolsite-design-review.json
+```
+
+Agent 3 is blocked if this gate is missing or failing.

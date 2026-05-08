@@ -19,6 +19,7 @@ Each output should include decisions, assumptions, visual deviations from the se
 - Mobile score out of 100
 - Overall score out of 100
 - Whether the required 90% threshold passed
+- `gate-results/visual-restoration-similarity.json` result path and pass/fail status
 - Evidence screenshot paths
 - Remaining deviations
 - Usability deviations, if any, including overflow, readability, dirty thumbnails, food crop issues, or control sizing issues

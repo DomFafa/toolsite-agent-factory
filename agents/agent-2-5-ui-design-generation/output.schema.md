@@ -45,8 +45,11 @@ generated-designs/
 - `target/mobile.png`
 - `code/` when complete generated code is available
 - `assets/` when local visual assets are needed
-- `downloads/selected-option-assets.zip` unless a hard external blocker or user-approved waiver is recorded
+- `downloads/selected-option-assets.zip` for every selected image slot, unless `image-slots.md` and `asset-manifest.json` explicitly declare that the selected option has no image slots, or a hard external blocker/user-approved waiver is recorded
 - `asset-manifest.json` copied or extracted from the selected option asset zip
+- `image-slots.md` listing every selected-design image slot, or explicitly recording `Required image slots: none`
+- `asset-generation-prompt.md` when any selected image slot exists, containing the post-selection GPT/design-model prompt for standalone assets
+- `fallback-illustration-report.md` when fallback generated illustrations/assets are used after GPT asset pack failure or waiver
 - `design-tokens.md`
 - `component-spec.md`
 - `asset-plan.md`
@@ -81,13 +84,17 @@ Agent 2.5 must stop after sending the three options to the current chat. It may 
 - Selected option name
 - External design surface used
 - Exact post-selection asset request prompt path
+- `image-slots.md` path and every selected-design image slot
+- Whether independent standalone assets were requested from GPT/design model after option selection
+- Confirmation that no asset was cropped, extracted, or traced from `target/desktop.png`, `target/mobile.png`, option screenshots, final screenshots, or QA screenshots
 - Whether `selected-option-assets.zip` was downloaded
 - Zip path and extracted asset paths
 - Required image slots from `asset-quality-contract.md`
 - Missing or replaced image slots
+- `selected-assets` gate command and result
 - Asset quality gate command and result
 - Retry count and retry reasons
-- Whether fallback assets were used
+- Whether fallback generated illustrations/assets were used, with `selected-design/fallback-illustration-report.md` and `Decision: PASS`
 - Any hard blocker and required next action
 
 `design-manifest.md` must record:
@@ -104,8 +111,9 @@ Agent 2.5 must stop after sending the three options to the current chat. It may 
 - Dynamic data fit and overflow risk assessment
 - Thumbnail/image text assessment
 - Asset quality assessment, including source sizes, aspect ratio fit, subject fill, white-margin risk, and `asset-quality-gate` result when assets are wired
-- Post-selection high-resolution asset pack status, including `selected-option-assets.zip`, `asset-manifest.json`, retry evidence, and fallback/waiver status
+- Post-selection independent selected-asset status, including `image-slots.md`, `asset-generation-prompt.md`, `selected-option-assets.zip`, `asset-manifest.json`, `gate-results/selected-assets.json`, retry evidence, and fallback/waiver status
 - Readability and touch-target assessment
+- Toolsite design-review subset readiness, including first impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel
 - Local asset inventory and asset license/source notes
 - Whether generated frontend code is complete, partial, or blocked
 - Local preview command or file path

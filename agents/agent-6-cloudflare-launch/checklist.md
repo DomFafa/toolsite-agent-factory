@@ -1,5 +1,6 @@
 # Checklist
 
+- [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
 - [ ] Approval completed
 - [ ] QA passed
 - [ ] Repo-local `web-access` preflight passed and wrote `gate-results/web-access-preflight.json`

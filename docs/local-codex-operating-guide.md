@@ -1,5 +1,7 @@
 # Local Codex Operating Guide
 
+Standard flow reference: before starting any new toolsite run, Codex must read `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
+
 ## How to run an agent manually
 
 1. Open this repository in the IDE.
@@ -14,6 +16,8 @@
 ```txt
 You are executing Agent <N> for Toolsite Agent Factory.
 Read:
+- examples/typing-test-online/README.md
+- examples/typing-test-online/workflow-example.md
 - agents/<agent-folder>/prompt.md
 - agents/<agent-folder>/input.schema.md
 - agents/<agent-folder>/output.schema.md

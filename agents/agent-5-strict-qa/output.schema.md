@@ -27,11 +27,16 @@ Design Package Gate outputs must record:
 - Data-fit score
 - Mobile usability score
 - UX interaction flow score
+- Toolsite design-review subset result under `gate-results/toolsite-design-review.json`
+- First impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel assessment
 - Numeric overflow assessment
 - Thumbnail and preset image text assessment
 - Asset quality gate result
+- Post-selection independent selected-asset gate result under `gate-results/selected-assets.json`
 - Post-selection high-resolution asset acquisition status
-- Selected option asset zip path, manifest status, retry evidence, and fallback/waiver status
+- Selected image slots inventory path under `agent-2-5-output/selected-design/image-slots.md`
+- Selected option asset zip path, manifest status, independent asset request prompt, retry evidence, and fallback/waiver status
+- Confirmation that selected assets were not cropped/extracted from option screenshots, target screenshots, final screenshots, or QA screenshots
 - Food image source size, aspect ratio, blur/upscaling, and white-gutter assessment
 - Build/tool panel readability assessment
 - Food image crop assessment
@@ -48,6 +53,9 @@ Final QA outputs must record:
 - Target-vs-final page visual similarity result path under `gate-results/final-visual-similarity.json`
 - Browser-backed rendered asset visibility result path under `gate-results/rendered-assets.json`
 - Tool spec implementation result path under `gate-results/tool-spec.json`
+- Post-selection independent selected-asset result path under `gate-results/selected-assets.json`
+- Toolsite design-review subset result path under `gate-results/toolsite-design-review.json`
+- Agent 3 visual restoration similarity result path under `gate-results/visual-restoration-similarity.json`
 - Final QA evidence bundle path under `gate-results/final-qa-evidence.json`
 - `chat-delivery/final-screenshot-delivery.md` confirming the GPT target screenshot and final coded page screenshot were sent to the current chat for user inspection
 
@@ -59,6 +67,7 @@ Visual Restoration Gate outputs must record:
 - Mobile visual match score out of 100
 - Overall visual match score out of 100
 - Required threshold: 90
+- Mechanical visual restoration similarity result path under `gate-results/visual-restoration-similarity.json`
 - Pass/fail decision
 - Visual deviations by module
 - Usability deviations by module, including overflow, readability, thumbnail cleanliness, image cropping, and control sizing
