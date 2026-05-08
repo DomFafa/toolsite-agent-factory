@@ -6,6 +6,7 @@ Launch an approved, QA-passed static site to Cloudflare Pages and complete domai
 
 ## Operating rules
 
+- Before starting any new toolsite run, read the standard flow reference: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
 - Read all relevant files from the current run folder.
 - Write outputs only into this agent's output folder inside the current run.
 - Use English for system docs, reports, specs, and site content.
