@@ -23,6 +23,7 @@ const AGENT_2_5_FILES = [
   'agent-2-5-output/selected-design/design-tokens.md',
   'agent-2-5-output/selected-design/component-spec.md',
   'agent-2-5-output/selected-design/asset-plan.md',
+  'agent-2-5-output/selected-design/image-slots.md',
   'agent-2-5-output/selected-design/usability-contract.md',
   'agent-2-5-output/selected-design/asset-quality-contract.md',
   'agent-2-5-output/selected-design/interaction-state-model.md',
@@ -176,6 +177,7 @@ async function checkAgent25(runDir) {
   missing.push(...(await missingFiles(runDir, AGENT_2_5_EXTERNAL_PROVENANCE_FILES)));
   missing.push(...(await missingFiles(runDir, AGENT_2_5_CHAT_DELIVERY_FILES)));
   missing.push(...(await requirePassingGateResult(runDir, 'agent25-lineage.json', 'Agent 2.5 lineage')));
+  missing.push(...(await requirePassingGateResult(runDir, 'selected-assets.json', 'post-selection independent selected image assets')));
 
   const externalResponsePath = path.join(
     runDir,
@@ -243,25 +245,16 @@ async function checkAgent25(runDir) {
     missing.push('agent-2-5-output/generated-designs/ with at least three option directories');
   }
 
-  const selectedAssetsZip = 'agent-2-5-output/selected-design/downloads/selected-option-assets.zip';
-  const assetReportPath = path.join(runDir, 'agent-2-5-output/asset-acquisition-report.md');
-  const assetReport = await readOptional(assetReportPath);
-  const assetZipExists = await exists(path.join(runDir, selectedAssetsZip));
-  const assetWaivedOrNotNeeded = /user-approved waiver|user waiver|waived|no image assets|required image slots\s*:\s*none/i.test(
-    assetReport,
-  );
-  if (!assetZipExists && !assetWaivedOrNotNeeded) {
-    missing.push(`${selectedAssetsZip} or asset-acquisition-report.md waiver/no-assets evidence`);
-  }
-
   return missing;
 }
 
 async function checkDesignPackageGate(runDir) {
   const report = 'agent-5-output/design-package-gate-report.md';
   const reportText = await readOptional(path.join(runDir, report));
-  if (reportHasPassDecision(reportText)) return [];
-  return [`${report} with pass decision`];
+  const missing = [];
+  if (!reportHasPassDecision(reportText)) missing.push(`${report} with pass decision`);
+  missing.push(...(await requirePassingGateResult(runDir, 'toolsite-design-review.json', 'toolsite design-review subset')));
+  return missing;
 }
 
 async function checkAgent3(runDir) {
@@ -275,6 +268,7 @@ async function checkVisualRestorationGate(runDir) {
   if (!reportHasPassDecision(reportText)) {
     missing.push(`${report} with pass decision and >=90 desktop/mobile match`);
   }
+  missing.push(...(await requirePassingGateResult(runDir, 'visual-restoration-similarity.json', 'Agent 3 target-vs-restored visual similarity >=90%')));
   const visualScore = await readOptional(path.join(runDir, 'agent-3-output/visual-match-score.md'));
   for (const label of ['Desktop', 'Mobile', 'Overall']) {
     const score = Number(visualScore.match(new RegExp(`${label}\\s*:\\s*([\\d.]+)\\s*/\\s*100`, 'i'))?.[1]);

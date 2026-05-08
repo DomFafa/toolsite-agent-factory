@@ -72,6 +72,28 @@ async function writeWebAccessGate(runDir, { passed = true } = {}) {
   );
 }
 
+async function writeGateResult(runDir, filename, { passed = true } = {}) {
+  const dir = path.join(runDir, 'gate-results');
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    path.join(dir, filename),
+    JSON.stringify(
+      {
+        gate: filename.replace(/\.json$/, ''),
+        runDir,
+        status: passed ? 'pass' : 'fail',
+        passed,
+        failures: passed ? [] : [`${filename} failed`],
+        details: {},
+        evidence: {},
+        generatedAt: '2026-05-08T00:00:00.000Z',
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
   const root = path.join(runDir, 'agent-2-5-output');
   const selected = path.join(root, 'selected-design');
@@ -90,6 +112,7 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
     'design-tokens.md',
     'component-spec.md',
     'asset-plan.md',
+    'image-slots.md',
     'usability-contract.md',
     'asset-quality-contract.md',
     'interaction-state-model.md',
@@ -105,6 +128,20 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
   for (const option of ['option-a', 'option-b', 'option-c']) {
     await mkdir(path.join(root, 'generated-designs', option), { recursive: true });
   }
+  await mkdir(path.join(root, 'chat-delivery'), { recursive: true });
+  await writeFile(path.join(root, 'chat-delivery/options-board.png'), 'x'.repeat(10_001));
+  await writeFile(
+    path.join(root, 'chat-delivery/option-selection.md'),
+    [
+      '# Option Selection',
+      '',
+      'Decision: PASS',
+      'Option A, Option B, and Option C were sent to chat.',
+      'Selected by user after review.',
+    ].join('\n'),
+  );
+  await writeGateResult(runDir, 'agent25-lineage.json');
+  await writeGateResult(runDir, 'selected-assets.json');
   if (externalEvidence) {
     const evidence = path.join(root, 'external-design-evidence');
     await mkdir(evidence, { recursive: true });
@@ -124,6 +161,30 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
     await writeFile(path.join(evidence, 'source-provenance.md'), '# Source provenance\n\nDecision: PASS\n');
     await writeFile(path.join(evidence, 'selected-design-lineage.md'), '# Selected design lineage\n\nDecision: PASS\n');
   }
+}
+
+async function writeDesignPackageGateOutputs(runDir) {
+  await mkdir(path.join(runDir, 'agent-5-output'), { recursive: true });
+  await writeFile(
+    path.join(runDir, 'agent-5-output/design-package-gate-report.md'),
+    '# Design Package Gate Report\n\nDecision: PASS\n',
+  );
+  await writeGateResult(runDir, 'toolsite-design-review.json');
+}
+
+async function writeAgent3Outputs(runDir) {
+  const root = path.join(runDir, 'agent-3-output');
+  await mkdir(path.join(root, 'final-screenshots'), { recursive: true });
+  await writeFile(path.join(root, 'final-screenshots/desktop.png'), 'png');
+  await writeFile(path.join(root, 'final-screenshots/mobile.png'), 'png');
+  await writeFile(path.join(root, 'visual-diff-report.md'), '# Visual diff\n');
+  await writeFile(path.join(root, 'visual-match-score.md'), 'Desktop: 95 / 100\nMobile: 95 / 100\nOverall: 95 / 100\n');
+  await writeFile(path.join(root, 'visual-lock.md'), '# Visual lock\nDecision: PASS\n');
+  await writeFile(path.join(root, 'implementation-handoff.md'), '# Handoff\n');
+  await writeFile(
+    path.join(runDir, 'agent-5-output/visual-restoration-gate-report.md'),
+    '# Visual Restoration Gate Report\n\nDecision: PASS\n',
+  );
 }
 
 test('allows Agent 2.5 when Agent 1 is waived and Agent 2 outputs exist', async () => {
@@ -197,6 +258,77 @@ test('blocks Agent 3 when Agent 2.5 lacks external GPT provenance evidence', asy
   assert.match(result.missing.join('\n'), /external-design-evidence\/source-provenance\.md/);
   assert.match(result.missing.join('\n'), /external-design-evidence\/selected-design-lineage\.md/);
   assert.equal(result.allowedNextStep, 'Run Agent 2.5 UI Design Generation');
+});
+
+test('blocks Agent 3 when selected asset generation gate is failing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true });
+  await writeFile(
+    path.join(runDir, 'gate-results/selected-assets.json'),
+    JSON.stringify(
+      {
+        gate: 'selected-assets',
+        runDir,
+        status: 'fail',
+        passed: false,
+        failures: ['cropped target screenshot asset'],
+        details: {},
+        evidence: {},
+        generatedAt: '2026-05-08T00:00:00.000Z',
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /selected-assets\.json/);
+});
+
+test('blocks Agent 3 when toolsite design-review subset gate is missing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true });
+  await mkdir(path.join(runDir, 'agent-5-output'), { recursive: true });
+  await writeFile(
+    path.join(runDir, 'agent-5-output/design-package-gate-report.md'),
+    '# Design Package Gate Report\n\nDecision: PASS\n',
+  );
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /toolsite-design-review\.json/);
+  assert.equal(result.allowedNextStep, 'Run Agent 5 Design Package Gate');
+});
+
+test('blocks Agent 4 when visual restoration similarity gate is missing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeAgent3Outputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-4' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /visual-restoration-similarity\.json/);
+  assert.equal(result.allowedNextStep, 'Run Agent 5 Visual Restoration Gate');
 });
 
 test('blocks Agent 3 when Agent 2.5 external GPT provenance is present but not passing', async () => {

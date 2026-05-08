@@ -41,6 +41,7 @@ function runCommand(command, args, options = {}) {
 
 function beforeOrder(before) {
   const value = String(before).toLowerCase();
+  if (['agent-2.5', 'agent2.5', 'agent-2-5', 'agent25'].includes(value)) return 2.5;
   if (['agent-3', 'agent3'].includes(value)) return 3;
   if (['agent-4', 'agent4'].includes(value)) return 4;
   if (['agent-5-final', 'final-qa'].includes(value)) return 5.9;
@@ -59,6 +60,12 @@ async function main() {
 
   if (order >= 3) {
     runCommand('node', ['scripts/run/check-agent25-lineage.mjs', '--run-dir', runDir, '--write']);
+    runCommand('node', ['scripts/qa/check-selected-assets.mjs', '--run-dir', runDir, '--write']);
+    runCommand('node', ['scripts/qa/check-toolsite-design-review.mjs', '--run-dir', runDir, '--write']);
+  }
+
+  if (order >= 4) {
+    runCommand('node', ['scripts/qa/check-visual-restoration-similarity.mjs', '--run-dir', runDir, '--write']);
   }
 
   if (order >= 6) {
