@@ -16,6 +16,13 @@ Example:
 ./scripts/create-run.sh keyword-density-checker keyworddensitychecker.com
 ```
 
+Before any agent work starts after run creation, Codex must output a run-start acknowledgement with:
+
+- Flow files read
+- Current run phase
+- Next agent to execute
+- Actions forbidden in the current phase
+
 ## Phase 1: Keyword research
 
 Use Agent 1 only when keyword validation is needed. Agent 1 stops after producing a keyword research report. It does not launch Agent 2.
@@ -40,6 +47,8 @@ Agent 2.5 uses `web-access` to generate UI design directions and implementation-
 This step is mandatory even when no UI references are provided.
 
 The default restoration target is 90%. Agent 2.5 must request codable and usable UI output: target screenshots, design tokens, component specs, usability contract, interaction-state model, dynamic data fit notes, UX self-audit, asset plans, asset-quality contract, restoration rules, forbidden deviations, and frontend code when available.
+
+Agent 2.5's GPT prompt must explicitly require: Astro + HTML/CSS/vanilla JS restoration, 90% screenshot similarity, first viewport as the real tool, no dynamic-data overflow, usable mobile layout, complete interaction states, no pretty-but-unusable UI, and no UX sacrifice for visual impact.
 
 After the winning option is selected, Agent 2.5 must inventory every selected-design image slot in `selected-design/image-slots.md`. If there are no image slots, both `image-slots.md` and `asset-manifest.json` must explicitly say so. If image slots exist, Agent 2.5 must continue the external GPT/design-model interaction and request independent standalone image assets for each slot. Cropping, extracting, tracing, or cutting assets from option screenshots, target screenshots, final screenshots, or QA screenshots is forbidden.
 
@@ -88,12 +97,15 @@ Agent 5 runs again in Final QA mode and checks:
 - Sitemap/robots rules
 - Content quality
 
+After Final QA passes, the workflow must stop for human launch approval. Agent 5 must not start Agent 6, deploy, push production, change Cloudflare/DNS/analytics/indexing, or make any production environment change.
+
 ## Phase 6: Production launch
 
 Agent 6 runs only after:
 
 - Agent 5 Final QA passed
 - `approval.md` is completed
+- The current chat contains explicit user approval to launch, such as `批准上线`
 - Cloudflare zone is active
 - Domain nameservers already point to Cloudflare
 

@@ -11,6 +11,7 @@ Perform strict QA in two modes:
 ## Operating rules
 
 - Before starting any new toolsite run, read the standard flow reference: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
+- Before doing work, output a run-start acknowledgement: flow files read, current run phase, next agent to execute, and actions forbidden in the current phase.
 - Read all relevant files from the current run folder.
 - Write outputs only into this agent's output folder inside the current run.
 - Use English for system docs, reports, specs, and site content.
@@ -24,6 +25,7 @@ Perform strict QA in two modes:
 - In Visual Restoration Gate mode, compare Agent 3 rendered screenshots against Agent 2.5 selected design targets. The default pass threshold is 90% visual match. Functionality and SEO completeness are not evaluated in this mode.
 - In Final QA mode, verify the Astro implementation against Agent 3 screenshots and the Agent 2.5 selected design, then verify functionality and SEO.
 - In Final QA mode, run an interaction-flow review inspired by design-review practice: act like a user completing the primary task, click the main choices, observe state changes, capture screenshots/evidence for issues, fix the smallest source change, and re-verify.
+- When Final QA passes, stop. Do not start Agent 6, deploy, push production, change Cloudflare/DNS/analytics/indexing, or make production environment changes until the user explicitly says `批准上线` in the current chat and `approval.md` is complete.
 - Do not approve designs that look like generic templates, marketing landing pages, or visually weak calculator shells.
 - Do not approve designs that rely on screenshot-only tricks: numeric overflow, unreadable ingredient rows, preset thumbnails with embedded text, cropped food imagery, or controls too small for real users.
 - Do not approve local food assets that are low-resolution, visibly blurry, stretched into larger cards, surrounded by accidental white gutters, or exported as SVG wrappers around tiny raster screenshots.

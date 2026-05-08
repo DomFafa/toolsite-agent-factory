@@ -11,6 +11,7 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 ## Operating Rules
 
 - Before starting any new toolsite run, read the standard flow reference: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
+- Before doing work, output a run-start acknowledgement: flow files read, current run phase, next agent to execute, and actions forbidden in the current phase.
 - Read all relevant files from the current run folder.
 - Write outputs only into `agent-2-5-output/` inside the current run.
 - Use English for system docs, reports, specs, and site content.
@@ -40,6 +41,17 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 ## Design Generation Requirements
 
 Generate at least three distinct UI directions unless a hard external blocker prevents generation.
+
+The `design-generation-prompt.md` and external GPT prompt must include these non-negotiable constraints:
+
+- The UI must be restorable in Astro + HTML/CSS + vanilla JS.
+- The target is 90% screenshot similarity against the coded page.
+- The first viewport must be the real usable tool, not a marketing page.
+- Realistic dynamic data and long labels must not overflow.
+- The mobile layout must be readable, tappable, and usable.
+- Primary interaction states must be complete and visible.
+- Pretty-but-unusable UI must be rejected.
+- UX must not be sacrificed for visual impact.
 
 Each direction must include:
 

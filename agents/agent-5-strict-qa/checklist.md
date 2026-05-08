@@ -1,6 +1,7 @@
 # Checklist
 
 - [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
+- [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
 
 # Design Package Gate
 
@@ -79,3 +80,5 @@
 - [ ] SEO passes
 - [ ] Noindex rules pass
 - [ ] Production gate is enforced
+- [ ] Final QA pass stopped the workflow; Agent 6, deployment, production push, Cloudflare/DNS/analytics/indexing, and production environment changes were not started
+- [ ] Handoff requires explicit user launch approval in the current chat with `批准上线` and completed `approval.md`

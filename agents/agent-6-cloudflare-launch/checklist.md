@@ -1,6 +1,8 @@
 # Checklist
 
 - [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
+- [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
+- [ ] Current chat contains explicit user launch approval: `批准上线`
 - [ ] Approval completed
 - [ ] QA passed
 - [ ] Repo-local `web-access` preflight passed and wrote `gate-results/web-access-preflight.json`
