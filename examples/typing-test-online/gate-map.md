@@ -9,6 +9,7 @@ Maps each gate to the failure it blocks.
 | Gate | Required Before | Blocks |
 | --- | --- | --- |
 | `web-access-preflight.json` | Agent 2.5 | Using stale or missing web-access flow |
+| `agent25-external-design-proof.json` | Agent 3 | Codex-local GPT option boards, local target screenshots, fake selected design packages, formal-project 3-minute defaults |
 | `agent25-lineage.json` | Agent 3 | Local fake GPT targets |
 | `selected-assets.json` | Agent 3 | Cropped, missing, or undocumented selected assets |
 | `toolsite-design-review.json` | Agent 3 | Pretty-but-bad UX and AI-template UI |
@@ -25,4 +26,3 @@ Maps each gate to the failure it blocks.
 ## Rule
 
 If a gate writes JSON, later agents must require the JSON pass result, not only a Markdown report.
-

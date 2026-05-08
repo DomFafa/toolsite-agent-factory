@@ -50,13 +50,17 @@ The default restoration target is 90%. Agent 2.5 must request codable and usable
 
 Agent 2.5's GPT prompt must explicitly require: Astro + HTML/CSS/vanilla JS restoration, 90% screenshot similarity, first viewport as the real tool, no dynamic-data overflow, usable mobile layout, complete interaction states, no pretty-but-unusable UI, and no UX sacrifice for visual impact.
 
+Agent 2.5 must prove the options and selected design came from GPT or an approved external design surface. It must save `external-design-evidence/external-response.md`, `conversation-screenshot.png`, `source-provenance.md`, `selected-design-lineage.md`, and `external-design-proof.json`. The proof must map Option A/B/C, `chat-delivery/options-board.png`, the selected option, desktop/mobile targets, and selected package back to the GPT response or GPT option source images. Local HTML/CSS option boards, manual mocks, reconstructed screenshots, locally generated targets, Codex-local packages, and formal-project 3-minute defaults are blockers.
+
+Run `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`; `gate-results/agent25-external-design-proof.json` must pass before Agent 3 can start.
+
 After the winning option is selected, Agent 2.5 must inventory every selected-design image slot in `selected-design/image-slots.md`. If there are no image slots, both `image-slots.md` and `asset-manifest.json` must explicitly say so. If image slots exist, Agent 2.5 must continue the external GPT/design-model interaction and request independent standalone image assets for each slot. Cropping, extracting, tracing, or cutting assets from option screenshots, target screenshots, final screenshots, or QA screenshots is forbidden.
 
 The asset request prompt must be saved as `selected-design/asset-generation-prompt.md`. The resulting `selected-option-assets.zip`, `asset-manifest.json`, extracted assets, retry evidence, and any fallback/waiver must be recorded before Design Package Gate. Run `node scripts/qa/check-selected-assets.mjs --run-dir runs/<site-id> --write`; `gate-results/selected-assets.json` must pass before Agent 3 can start.
 
 ## Phase 2.6: Design Package Gate
 
-Agent 5 runs in Design Package Gate mode. It reviews the selected design package before implementation and runs Usability QA before visual approval. It must verify interaction state semantics, post-selection independent selected-asset evidence, `gate-results/selected-assets.json`, and the executable asset quality gate.
+Agent 5 runs in Design Package Gate mode. It reviews the selected design package before implementation and runs Usability QA before visual approval. It must verify `gate-results/agent25-external-design-proof.json`, interaction state semantics, post-selection independent selected-asset evidence, `gate-results/selected-assets.json`, and the executable asset quality gate.
 
 Agent 5 must also run the toolsite design-review subset gate: `node scripts/qa/check-toolsite-design-review.mjs --run-dir runs/<site-id> --write`. This is not the full `/design-review` workflow; it mechanically checks the parts that matter for tool sites: first impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel. `gate-results/toolsite-design-review.json` must pass before Agent 3 can start.
 

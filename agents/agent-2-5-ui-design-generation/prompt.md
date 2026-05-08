@@ -19,6 +19,7 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 - Do not send secrets, `.env.local`, Cloudflare tokens, email routing values, or private credentials to external LLMs.
 - Do not ask the design model to rewrite SEO strategy or final content. It may reserve layout space for SEO sections, but Agent 2 remains the product/SEO source of truth.
 - Use `web-access` to operate the ChatGPT web UI or another approved authenticated design generation surface.
+- External GPT source proof is mandatory. Agent 2.5 must prove the three UI options, option board, selected targets, and selected design package came from GPT or an approved external design surface, not Codex local HTML/CSS, manual mockups, reconstructed screenshots, or locally generated targets.
 - User UI references are optional. Their absence must trigger open design exploration, not a skipped design step.
 - Design for codability. Avoid asking the external model for hard-to-reproduce visual effects unless it also exports them as local PNG/SVG assets.
 - Local visual assets are allowed and encouraged when they materially improve restoration fidelity. Assets must be original or generated, non-infringing, and saved in the run folder.
@@ -146,10 +147,14 @@ node scripts/design/import-generated-ui.mjs \
 
 11. Run each generated option locally when code is available, capture desktop and mobile screenshots, and store them with that option.
 12. Select the strongest option based on visual quality, codability, asset completeness, usability, real-data fit, and expected restoration fidelity.
-13. After the selected option is confirmed, run the mandatory post-selection high-resolution asset acquisition loop and download `selected-option-assets.zip`.
-14. Extract selected high-resolution assets into `agent-2-5-output/selected-design/assets/` and preserve the original zip in `agent-2-5-output/selected-design/downloads/`.
-15. Run `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` when selected assets are wired into the run. Treat failures as design package blockers.
-16. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
+13. Save source proof under `external-design-evidence/`: raw/exported GPT response, real conversation screenshot, source-provenance map, selected-design lineage, and `external-design-proof.json`.
+14. Build `chat-delivery/options-board.png` from GPT option source images only. Do not use local HTML/CSS, manual mockups, reconstructed targets, or Codex-created option boards as formal evidence.
+15. Stop for explicit user selection in the current chat. Formal projects do not allow the 3-minute default path; timeout default is allowed only for test/dry-run and must be recorded as such.
+16. Run `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`. Agent 3 is blocked until `gate-results/agent25-external-design-proof.json` passes.
+17. After the selected option is confirmed, run the mandatory post-selection high-resolution asset acquisition loop and download `selected-option-assets.zip`.
+18. Extract selected high-resolution assets into `agent-2-5-output/selected-design/assets/` and preserve the original zip in `agent-2-5-output/selected-design/downloads/`.
+19. Run `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` when selected assets are wired into the run. Treat failures as design package blockers.
+20. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
 
 ## Outputs
 

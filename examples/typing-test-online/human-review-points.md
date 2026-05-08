@@ -9,7 +9,7 @@ Lists where future runs must stop for user inspection.
 1. Three GPT options
    - Agent: 2.5
    - Evidence: `chat-delivery/options-board.png`
-   - Block: no implementation before user choice or 3-minute timeout.
+   - Block: no implementation before explicit current-chat user choice in formal projects.
 
 2. Selected option record
    - Agent: 2.5
@@ -28,7 +28,6 @@ Lists where future runs must stop for user inspection.
 
 ## Timeout Rule
 
-If the user does not choose an option within 3 minutes, Agent 2.5 may select GPT's recommended option.
+Formal projects do not use the 3-minute default.
 
-It must still record the timeout and selected option.
-
+The 3-minute default is allowed only for `test` or `dry-run` and must be recorded in `external-design-proof.json` plus `option-selection.md`.

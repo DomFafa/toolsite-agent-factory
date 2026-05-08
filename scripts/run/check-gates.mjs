@@ -35,6 +35,7 @@ const AGENT_2_5_FILES = [
 ];
 
 const AGENT_2_5_EXTERNAL_PROVENANCE_FILES = [
+  'agent-2-5-output/external-design-evidence/external-design-proof.json',
   'agent-2-5-output/external-design-evidence/external-response.md',
   'agent-2-5-output/external-design-evidence/conversation-screenshot.png',
   'agent-2-5-output/external-design-evidence/source-provenance.md',
@@ -176,6 +177,13 @@ async function checkAgent25(runDir) {
   const missing = await missingFiles(runDir, AGENT_2_5_FILES);
   missing.push(...(await missingFiles(runDir, AGENT_2_5_EXTERNAL_PROVENANCE_FILES)));
   missing.push(...(await missingFiles(runDir, AGENT_2_5_CHAT_DELIVERY_FILES)));
+  missing.push(
+    ...(await requirePassingGateResult(
+      runDir,
+      'agent25-external-design-proof.json',
+      'Agent 2.5 external GPT source proof',
+    )),
+  );
   missing.push(...(await requirePassingGateResult(runDir, 'agent25-lineage.json', 'Agent 2.5 lineage')));
   missing.push(...(await requirePassingGateResult(runDir, 'selected-assets.json', 'post-selection independent selected image assets')));
 
@@ -234,8 +242,11 @@ async function checkAgent25(runDir) {
     if (!/option\s+a/i.test(optionSelection) || !/option\s+b/i.test(optionSelection) || !/option\s+c/i.test(optionSelection)) {
       missing.push('agent-2-5-output/chat-delivery/option-selection.md mentions Option A, Option B, and Option C');
     }
-    if (!/user\s+selected|selected\s+by\s+user|default(?:ed)?\s+after\s+3\s*min|3\s*minutes/i.test(optionSelection)) {
-      missing.push('agent-2-5-output/chat-delivery/option-selection.md records user choice or 3-minute default');
+    if (!/user\s+selected|selected\s+by\s+user|current\s+chat\s+user/i.test(optionSelection)) {
+      missing.push('agent-2-5-output/chat-delivery/option-selection.md records explicit current-chat user choice');
+    }
+    if (/default(?:ed)?\s+after\s+3\s*(?:min|minutes?)|3[-\s]*(?:min|minute)s?\s+(?:default|timeout)|timeout\s+default/i.test(optionSelection)) {
+      missing.push('agent-2-5-output/chat-delivery/option-selection.md must not use a 3-minute default in formal projects');
     }
   }
 

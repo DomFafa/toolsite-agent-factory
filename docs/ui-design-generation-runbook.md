@@ -18,7 +18,7 @@ Before any work starts in a run, Codex must output the flow files read, current 
 2. Agent 2.5 builds `design-generation-prompt.md`.
 3. Agent 2.5 cannot start until `node scripts/run/check-web-access.mjs --run-dir runs/<site-id> --write` passes against the repo-local `web-access/` skill.
 4. Agent 2.5 uses `web-access` to submit the prompt and any allowed reference assets to the ChatGPT web UI or another approved design generation surface.
-   Agent 2.5 must preserve raw external provenance under `agent-2-5-output/external-design-evidence/`: the external response, a conversation screenshot/export, and a source-provenance map from the external response to the selected target screenshots/code.
+   Agent 2.5 must preserve raw external provenance under `agent-2-5-output/external-design-evidence/`: raw/exported external response, real conversation screenshot/export, source-provenance map, selected-design lineage, and `external-design-proof.json`.
 5. Agent 2.5 tells the external model that the design must be restored by Codex in Astro with HTML/CSS/vanilla JS and should be designed for 90% screenshot fidelity.
 6. Agent 2.5 gives the external model the real tool workflow, interaction state semantics, realistic dynamic data ranges, overflow stress values, long labels, and click/tap constraints before asking for visuals.
 7. Agent 2.5 requests at least three UI directions. Each direction must include desktop/mobile design targets, design tokens, component specs, usability contract, interaction state model, dynamic data fit notes, UX self-audit, an asset plan, restoration rules, forbidden deviations, and runnable frontend code when possible.
@@ -27,20 +27,22 @@ Before any work starts in a run, Codex must output the flow files read, current 
 10. Agent 2.5 imports any downloaded code archive with `scripts/design/import-generated-ui.mjs`.
 11. Agent 2.5 runs each option locally when complete code is available and captures desktop/mobile screenshots.
 12. Agent 2.5 sends one comparison image containing all three GPT-generated options to the current chat and stops for user selection.
-    If the user does not respond within 3 minutes, Agent 2.5 may select the GPT-recommended option by timeout.
+    Formal projects require explicit user selection in the current chat. A 3-minute default is allowed only in `test` or `dry-run` mode.
     The option board and decision must be saved under `agent-2-5-output/chat-delivery/`.
-13. Agent 2.5 selects one option and writes `design-manifest.md`.
-14. Agent 2.5 inventories the selected option's image slots in `selected-design/image-slots.md`. If the selected option has no image slots, `image-slots.md` and `asset-manifest.json` must explicitly record `Required image slots: none`.
-15. When image slots exist, Agent 2.5 continues interacting with the external design model after option selection and requests independent standalone assets for every image slot in the selected design. The prompt must be saved as `selected-design/asset-generation-prompt.md`.
-16. Agent 2.5 downloads the high-resolution asset zip, extracts assets into `agent-2-5-output/selected-design/assets/`, preserves the zip in `agent-2-5-output/selected-design/downloads/`, and writes `asset-acquisition-report.md`.
-17. Agent 2.5 runs `node scripts/qa/check-selected-assets.mjs --run-dir runs/<site-id> --write`; `gate-results/selected-assets.json` must pass.
-18. Agent 5 runs in Design Package Gate mode with Usability QA first, including the selected-assets gate, asset quality gate, post-selection asset acquisition evidence, and the toolsite design-review subset gate. Agent 3 cannot start until this gate passes.
-19. Agent 3 builds a static visual restoration prototype only. It must not implement calculator functionality or SEO content yet.
-20. Agent 3 captures desktop/mobile screenshots and writes a visual diff report.
-21. Agent 5 runs in Visual Restoration Gate mode. Agent 4 cannot start until the rendered screenshots match the selected design targets at 90% or higher and `gate-results/visual-restoration-similarity.json` passes.
-22. Agent 4 adds functionality and SEO after the visual restoration gate passes, while preserving the visual lock.
-23. Agent 5 captures final implementation screenshots, runs the final target-vs-page visual similarity gate at 90% or higher, and sends both the GPT target image and the final coded page screenshot to the current chat before production approval.
-24. After Final QA passes, Agent 5 stops. Agent 6, deployment, production push, Cloudflare/DNS/analytics/indexing work, and production environment changes are blocked until the user explicitly says `批准上线` in the current chat and `approval.md` is complete.
+13. Agent 2.5 writes `external-design-proof.json` mapping Option A/B/C, GPT option source images, option board, selected option, desktop/mobile targets, and selected package back to the GPT response or approved design surface.
+14. Agent 2.5 runs `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`; `gate-results/agent25-external-design-proof.json` must pass.
+15. Agent 2.5 writes `design-manifest.md` for the selected option.
+16. Agent 2.5 inventories the selected option's image slots in `selected-design/image-slots.md`. If the selected option has no image slots, `image-slots.md` and `asset-manifest.json` must explicitly record `Required image slots: none`.
+17. When image slots exist, Agent 2.5 continues interacting with the external design model after option selection and requests independent standalone assets for every image slot in the selected design. The prompt must be saved as `selected-design/asset-generation-prompt.md`.
+18. Agent 2.5 downloads the high-resolution asset zip, extracts assets into `agent-2-5-output/selected-design/assets/`, preserves the zip in `agent-2-5-output/selected-design/downloads/`, and writes `asset-acquisition-report.md`.
+19. Agent 2.5 runs `node scripts/qa/check-selected-assets.mjs --run-dir runs/<site-id> --write`; `gate-results/selected-assets.json` must pass.
+20. Agent 5 runs in Design Package Gate mode with Usability QA first, including the external GPT source proof gate, selected-assets gate, asset quality gate, post-selection asset acquisition evidence, and the toolsite design-review subset gate. Agent 3 cannot start until this gate passes.
+21. Agent 3 builds a static visual restoration prototype only. It must not implement calculator functionality or SEO content yet.
+22. Agent 3 captures desktop/mobile screenshots and writes a visual diff report.
+23. Agent 5 runs in Visual Restoration Gate mode. Agent 4 cannot start until the rendered screenshots match the selected design targets at 90% or higher and `gate-results/visual-restoration-similarity.json` passes.
+24. Agent 4 adds functionality and SEO after the visual restoration gate passes, while preserving the visual lock.
+25. Agent 5 captures final implementation screenshots, runs the final target-vs-page visual similarity gate at 90% or higher, and sends both the GPT target image and the final coded page screenshot to the current chat before production approval.
+26. After Final QA passes, Agent 5 stops. Agent 6, deployment, production push, Cloudflare/DNS/analytics/indexing work, and production environment changes are blocked until the user explicitly says `批准上线` in the current chat and `approval.md` is complete.
 
 ## Reference Modes
 
@@ -90,13 +92,34 @@ Agent 2.5 must not silently select a design. It must:
 - Assemble a single comparison image with Option A, Option B, and Option C.
 - Send that comparison image to the current chat window.
 - Ask the user to choose one option.
-- Wait up to 3 minutes.
 - If the user replies, select the user's option.
-- If the user does not reply within 3 minutes, select GPT's recommended option.
+- Formal projects must wait for explicit current-chat user selection before continuing.
+- Test/dry-run runs may use GPT's recommended option after 3 minutes only when marked as `test` or `dry-run`.
 - Save `agent-2-5-output/chat-delivery/options-board.png`.
-- Save `agent-2-5-output/chat-delivery/option-selection.md` with `Decision: PASS`, all option names, whether the board was sent to chat, and whether the selected option came from the user or the 3-minute default.
+- Save `agent-2-5-output/chat-delivery/option-selection.md` with `Decision: PASS`, all option names, whether the board was sent to chat, and the explicit current-chat user selection.
+- Save `agent-2-5-output/external-design-evidence/external-design-proof.json`.
 
-Agent 3 is blocked until this record exists and passes the mechanical gate.
+Formal projects do not allow the 3-minute default path. Test/dry-run runs may use it only when `external-design-proof.json` marks the run as `test` or `dry-run`.
+
+Agent 3 is blocked until this record exists and `gate-results/agent25-external-design-proof.json` passes.
+
+## External GPT Source Gate
+
+Before Agent 3, run:
+
+```bash
+node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write
+```
+
+This gate fails if:
+
+- `external-response.md` is a Codex summary instead of raw/exported GPT output
+- `conversation-screenshot.png` is missing
+- `source-provenance.md` does not map Option A/B/C, selected option, desktop target, and mobile target
+- `selected-design-lineage.md` does not prove the selected design came from the GPT option
+- `options-board.png` is a local HTML/CSS board, manual mock, reconstructed target, or Codex-local artifact
+- `option-selection.md` lacks explicit user selection in a formal project
+- any selected target or selected design package is Codex-local or locally generated
 
 ## Allowed Visual Assets
 
@@ -202,7 +225,8 @@ runs/<site-id>/agent-2-5-output/selected-design/code/
 Agent 5 Design Package Gate must fail if:
 
 - no desktop/mobile design targets exist
-- raw external GPT/design-model provenance is missing, including `external-design-evidence/external-response.md`, `conversation-screenshot.png`, and `source-provenance.md`
+- raw external GPT/design-model provenance is missing, including `external-design-evidence/external-response.md`, `conversation-screenshot.png`, `source-provenance.md`, `selected-design-lineage.md`, and `external-design-proof.json`
+- `gate-results/agent25-external-design-proof.json` is missing or failing
 - the selected target screenshots/code cannot be traced back to the external design response
 - design tokens, component specs, asset plan, restoration rules, or forbidden deviations are missing
 - usability contract, dynamic data fit notes, or UX self-audit are missing

@@ -6,6 +6,9 @@
 # Design Package Gate
 
 - [ ] Agent 2.5 generated at least three options or recorded a hard blocker
+- [ ] `gate-results/agent25-external-design-proof.json` exists and passes before Agent 3 starts
+- [ ] External GPT source proof includes raw/exported GPT response, real conversation screenshot, source-provenance map, selected-design lineage, GPT option source images, and explicit current-chat user selection for formal projects
+- [ ] Option board, selected targets, and selected design package are not Codex-local, local HTML/CSS, manual mock, reconstructed, or locally generated targets
 - [ ] Selected design has desktop and mobile target images
 - [ ] Selected design has design tokens, component spec, asset plan, restoration rules, and forbidden deviations
 - [ ] Selected design has usability contract, dynamic data fit notes, and UX self-audit
@@ -68,6 +71,7 @@
 - [ ] Browser-backed rendered asset visibility gate passed and wrote `gate-results/rendered-assets.json`
 - [ ] Tool spec implementation gate passed and wrote `gate-results/tool-spec.json`
 - [ ] Selected independent assets gate passed and wrote `gate-results/selected-assets.json`
+- [ ] Agent 2.5 external GPT source proof gate still passed and wrote `gate-results/agent25-external-design-proof.json`
 - [ ] Toolsite design-review subset gate passed and wrote `gate-results/toolsite-design-review.json`
 - [ ] Agent 3 visual restoration similarity gate passed and wrote `gate-results/visual-restoration-similarity.json`
 - [ ] Final QA evidence bundle passed and wrote `gate-results/final-qa-evidence.json`

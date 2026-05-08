@@ -27,9 +27,17 @@
 - [ ] External prompt avoids hard-to-reproduce effects unless exported as local assets
 - [ ] Missing UI references handled as open exploration, not a skip
 - [ ] At least three design directions generated or hard blocker recorded
-- [ ] The three generated options were sent to the current chat as one comparison image before proceeding
-- [ ] User selected an option in chat, or no reply was received for 3 minutes and GPT's recommended option was selected by timeout
+- [ ] `external-design-evidence/external-response.md` is the raw/exported GPT response, not a Codex summary
+- [ ] `external-design-evidence/conversation-screenshot.png` is a real GPT/approved design surface screenshot
+- [ ] `external-design-evidence/source-provenance.md` maps Option A/B/C, selected option, desktop target, and mobile target back to the GPT response or option source image
+- [ ] `external-design-evidence/selected-design-lineage.md` states the selected design came from the GPT option, not a Codex local mock
+- [ ] `external-design-evidence/external-design-proof.json` maps the raw response, conversation screenshot, GPT option source images, option board, user selection, selected targets, and selected package
+- [ ] The three generated options were sent to the current chat as one comparison image built from GPT option sources before proceeding
+- [ ] Formal project: user explicitly selected an option in the current chat; no 3-minute default was used
+- [ ] Test/dry-run only: any 3-minute default is explicitly marked as test/dry-run
 - [ ] `chat-delivery/options-board.png` and `chat-delivery/option-selection.md` exist and record the chat delivery/selection evidence
+- [ ] `chat-delivery/options-board.png` was not created from local HTML/CSS, manual mockups, reconstructed screenshots, or locally generated targets
+- [ ] `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write` passed and wrote `gate-results/agent25-external-design-proof.json`
 - [ ] Each design direction includes desktop and mobile targets
 - [ ] Each design direction includes codability notes and implementation risk
 - [ ] Each design direction includes usability notes, dynamic-data fit, overflow handling, and thumbnail-cleanliness notes
