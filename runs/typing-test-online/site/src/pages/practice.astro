@@ -1,0 +1,26 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const title = 'Typing Practice Tips - Improve WPM and Accuracy';
+const description = 'Simple typing practice advice for improving WPM, CPM and accuracy with timed online typing tests.';
+---
+
+<BaseLayout title={title} description={description} canonicalPath="/practice/">
+  <main class="info-page">
+    <a class="back-link" href="/">Back to typing test</a>
+    <h1>Typing Practice Tips</h1>
+    <p>Use short focused sessions, keep your eyes on the next word, and prioritize clean rhythm before raw speed.</p>
+    <section>
+      <h2>Practice routine</h2>
+      <ul>
+        <li>Start with a 60 second medium passage.</li>
+        <li>Repeat once for accuracy, then once for speed.</li>
+        <li>Switch to hard passages only after you can stay above 95% accuracy.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Accuracy first</h2>
+      <p>Corrections cost time. A slightly slower clean test often produces a better final WPM than a rushed test with many errors.</p>
+    </section>
+  </main>
+</BaseLayout>

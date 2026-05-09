@@ -1,0 +1,26 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const title = 'Typing Guides - WPM, CPM, Accuracy and Test Strategy';
+const description = 'Guide to typing speed metrics, typing test strategy, and how to interpret WPM, CPM and accuracy.';
+---
+
+<BaseLayout title={title} description={description} canonicalPath="/guides/">
+  <main class="info-page">
+    <a class="back-link" href="/">Back to typing test</a>
+    <h1>Typing Guides</h1>
+    <p>A good typing score balances speed and accuracy. Use WPM for standard comparison, CPM for raw character pace, and accuracy to judge consistency.</p>
+    <section>
+      <h2>How to use the test</h2>
+      <ol>
+        <li>Choose duration and difficulty.</li>
+        <li>Begin typing to start the timer.</li>
+        <li>Review WPM, CPM, accuracy, errors and level rating.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>What to improve first</h2>
+      <p>If accuracy is below 92%, slow down. If accuracy is above 97%, try a shorter sprint or a harder passage.</p>
+    </section>
+  </main>
+</BaseLayout>

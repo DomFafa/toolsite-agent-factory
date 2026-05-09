@@ -1,0 +1,25 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const title = 'Typing Test FAQ - WPM, Accuracy and Privacy';
+const description = 'Answers to common questions about online typing tests, WPM, CPM, accuracy, errors and local browser privacy.';
+---
+
+<BaseLayout title={title} description={description} canonicalPath="/faq/">
+  <main class="info-page">
+    <a class="back-link" href="/">Back to typing test</a>
+    <h1>Typing Test FAQ</h1>
+    <section>
+      <h2>Does the test upload my typing?</h2>
+      <p>No. The test is designed to run in your browser and store recent results locally.</p>
+    </section>
+    <section>
+      <h2>What is a good WPM?</h2>
+      <p>Many casual typists score around 40 to 60 WPM. Scores above 70 WPM are strong if accuracy stays high.</p>
+    </section>
+    <section>
+      <h2>Why does accuracy matter?</h2>
+      <p>Accuracy shows how many typed characters match the passage. High speed with low accuracy is usually not useful for real work.</p>
+    </section>
+  </main>
+</BaseLayout>

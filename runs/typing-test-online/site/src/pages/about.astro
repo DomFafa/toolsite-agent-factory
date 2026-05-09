@@ -1,0 +1,18 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const title = 'About Typing Test Online';
+const description = 'About Typing Test Online, a private browser typing speed test for WPM, CPM, accuracy and recent local results.';
+---
+
+<BaseLayout title={title} description={description} canonicalPath="/about/">
+  <main class="info-page">
+    <a class="back-link" href="/">Back to typing test</a>
+    <h1>About Typing Test Online</h1>
+    <p>Typing Test Online is a simple browser tool for checking typing speed, character pace, accuracy and errors without an account.</p>
+    <section>
+      <h2>Privacy approach</h2>
+      <p>The core test runs locally. Recent results are saved in browser storage so you can see short term progress without server sync.</p>
+    </section>
+  </main>
+</BaseLayout>

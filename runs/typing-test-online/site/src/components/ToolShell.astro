@@ -1,0 +1,19 @@
+---
+interface Props {
+  eyebrow?: string;
+  title: string;
+  description: string;
+}
+const { eyebrow = 'Free browser tool', title, description } = Astro.props;
+---
+<section class="tool-shell">
+  <div class="hero-card">
+    <p class="eyebrow">{eyebrow}</p>
+    <h1>{title}</h1>
+    <p class="hero-description">{description}</p>
+    <p class="privacy-note">Runs locally in your browser. No login. No upload required by default.</p>
+  </div>
+  <div class="tool-card">
+    <slot />
+  </div>
+</section>

@@ -1,0 +1,28 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const title = 'Typing Speed Formula - How WPM, CPM and Accuracy Are Calculated';
+const description = 'Learn the basic typing speed formulas for WPM, CPM, accuracy, errors and progress in an online typing test.';
+---
+
+<BaseLayout title={title} description={description} canonicalPath="/typing-speed-formula/">
+  <main class="info-page">
+    <a class="back-link" href="/">Back to typing test</a>
+    <h1>Typing Speed Formula</h1>
+    <section>
+      <h2>WPM</h2>
+      <p>WPM uses the common typing-test convention that five correct characters count as one word.</p>
+      <p><strong>WPM = correct characters / 5 / elapsed minutes</strong></p>
+    </section>
+    <section>
+      <h2>CPM</h2>
+      <p>CPM measures correct characters per minute.</p>
+      <p><strong>CPM = correct characters / elapsed minutes</strong></p>
+    </section>
+    <section>
+      <h2>Accuracy</h2>
+      <p>Accuracy compares typed characters with the target passage.</p>
+      <p><strong>Accuracy = correct typed characters / total typed characters</strong></p>
+    </section>
+  </main>
+</BaseLayout>

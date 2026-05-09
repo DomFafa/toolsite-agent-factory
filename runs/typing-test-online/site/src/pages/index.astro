@@ -1,0 +1,547 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const title = 'Typing Test Online - Free WPM, CPM and Accuracy Test';
+const description = 'Take a private browser typing test with WPM, CPM, accuracy, errors, recent results and a local WPM trend.';
+
+const recentResults = [
+  ['May 18, 2025', '10:24 AM', '72 WPM', '96%'],
+  ['May 18, 2025', '10:10 AM', '58 WPM', '93%'],
+  ['May 18, 2025', '9:55 AM', '64 WPM', '95%'],
+  ['May 17, 2025', '8:40 PM', '49 WPM', '91%'],
+  ['May 17, 2025', '8:20 PM', '61 WPM', '94%'],
+];
+
+const supportCards = [
+  {
+    title: 'Practice',
+    text: 'Sharpen your typing skills with timed practice and custom word lists.',
+    action: 'Start Practice',
+    icon: 'target',
+  },
+  {
+    title: 'Guides',
+    text: 'Learn typing tips, finger placement, and improve your speed.',
+    action: 'Read Guides',
+    icon: 'book',
+  },
+  {
+    title: 'FAQ',
+    text: 'Find answers to common questions about typing and this tool.',
+    action: 'View FAQ',
+    icon: 'chat',
+  },
+  {
+    title: 'About',
+    text: 'Learn more about this tool and our privacy-first approach.',
+    action: 'Learn More',
+    icon: 'person',
+  },
+];
+---
+
+<BaseLayout title={title} description={description}>
+  <main class="site-shell">
+    <header class="site-header" aria-label="Main navigation">
+      <a class="brand" href="/" aria-label="typing-test-online.com home">
+        <span class="brand-mark">T</span>
+        <span>typing-test-online.com</span>
+      </a>
+      <nav class="desktop-nav" aria-label="Primary">
+        <a href="/">Home</a>
+        <a class="active" href="/">Typing Test</a>
+        <a href="/practice/">Practice</a>
+        <a href="/guides/">Guides</a>
+        <a href="/faq/">FAQ</a>
+        <a href="/about/">About</a>
+      </nav>
+      <a class="practice-button" href="#typing-test">Practice now</a>
+      <button class="menu-button" type="button" aria-label="Open menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </header>
+
+    <p class="privacy-cue">
+      <span class="lock-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+        </svg>
+      </span>
+      Local only - no account required
+    </p>
+
+    <section id="typing-test" class="hero-grid" aria-label="Typing test">
+      <div class="test-card">
+        <div class="control-grid">
+          <fieldset>
+            <legend>Duration</legend>
+            <div class="segments">
+              <button type="button" data-duration="15">15s</button>
+              <button type="button" data-duration="30">30s</button>
+              <button class="selected" type="button" data-duration="60">60s</button>
+              <button type="button" data-duration="120">120s</button>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Difficulty</legend>
+            <div class="segments">
+              <button type="button" data-difficulty="easy">Easy</button>
+              <button class="selected" type="button" data-difficulty="medium">Medium</button>
+              <button type="button" data-difficulty="hard">Hard</button>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="passage-head">
+          <h1>Passage</h1>
+          <button id="change-passage" class="ghost-button" type="button">
+            <span class="reload-icon" aria-hidden="true"></span>
+            Change Passage
+          </button>
+        </div>
+
+        <p id="passage" class="passage-box">
+          The sun dipped below the horizon, casting a warm golden glow across the quiet meadow. Birds flew home in graceful arcs while a gentle breeze rustled the leaves. In the distance, a winding river sparkled like a ribbon of silver, guiding the eye toward the rolling hills beyond.
+        </p>
+
+        <textarea id="typing-input" class="typing-input" rows="4" aria-label="Typing input" placeholder="Start typing here..."></textarea>
+
+        <p class="timer-note">
+          <span class="timer-dot" aria-hidden="true"></span>
+          Timer starts on first valid typed character
+        </p>
+
+        <div class="metric-strip" aria-label="Live metrics">
+          <div>
+            <span>WPM</span>
+            <strong id="live-wpm">0</strong>
+          </div>
+          <div>
+            <span>CPM</span>
+            <strong id="live-cpm" class="dark">0</strong>
+          </div>
+          <div>
+            <span>Accuracy</span>
+            <strong id="live-accuracy" class="green">100%</strong>
+          </div>
+          <div>
+            <span>Errors</span>
+            <strong id="live-errors" class="red">0</strong>
+          </div>
+          <div>
+            <span>Time Left</span>
+            <strong id="live-time">60s</strong>
+          </div>
+          <div>
+            <span>Progress</span>
+            <strong id="live-progress" class="dark">0%</strong>
+            <i aria-hidden="true"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-art" aria-label="Typing practice illustration">
+        <img src="/assets/hero-typing-illustration.png" alt="Friendly illustration of a person typing with speed and chart accents" />
+      </div>
+    </section>
+
+    <section class="dashboard-grid" aria-label="Result dashboard">
+      <article class="card result-card">
+        <h2>
+          <span class="small-icon trophy" aria-hidden="true"></span>
+          Your Result <small>(last test)</small>
+        </h2>
+        <div class="result-metrics">
+          <div><span>WPM</span><strong id="result-wpm">72</strong></div>
+          <div><span>CPM</span><strong id="result-cpm" class="dark">362</strong></div>
+          <div><span>Accuracy</span><strong id="result-accuracy" class="green">96%</strong></div>
+          <div><span>Errors</span><strong id="result-errors" class="red">4</strong></div>
+        </div>
+        <div class="rating-row">
+          <span>Level Rating</span>
+          <div class="rating-dots" aria-label="Good rating">
+            <i class="filled"></i><i class="filled"></i><i class="filled"></i><i class="filled"></i><i></i>
+          </div>
+          <strong id="result-rating">Good</strong>
+        </div>
+        <div class="action-grid">
+          <button id="retry-test" class="primary-action" type="button">Retry Test</button>
+          <button id="cycle-difficulty" class="outline-action" type="button">Change Difficulty</button>
+          <button id="copy-result" class="outline-action" type="button">Copy Result</button>
+          <button id="share-card" class="outline-action" type="button">Share Card</button>
+        </div>
+        <output id="copy-status" class="copy-status" aria-live="polite"></output>
+      </article>
+
+      <article class="card recent-card">
+        <h2>Your Recent Results <small>(local)</small></h2>
+        <div id="recent-list" class="recent-list">
+          {recentResults.map(([date, time, wpm, accuracy]) => (
+            <div class="recent-row">
+              <span>{date}</span>
+              <span>{time}</span>
+              <span>{wpm}</span>
+              <strong>{accuracy}</strong>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <article class="card trend-card">
+        <h2>WPM Trend <small>(last 7 tests)</small></h2>
+        <svg id="trend-chart" viewBox="0 0 360 210" role="img" aria-label="WPM trend line">
+          <line x1="36" y1="25" x2="36" y2="172"></line>
+          <line x1="36" y1="172" x2="330" y2="172"></line>
+          <text x="8" y="31">120</text>
+          <text x="16" y="92">80</text>
+          <text x="16" y="153">40</text>
+          <text x="24" y="180">0</text>
+          <path class="area" d="M54 112 L98 103 L142 90 L186 86 L230 104 L274 70 L318 98 L318 172 L54 172 Z"></path>
+          <path class="line" d="M54 112 L98 103 L142 90 L186 86 L230 104 L274 70 L318 98"></path>
+          {[54, 98, 142, 186, 230, 274, 318].map((x) => <circle cx={x} cy={[112, 103, 90, 86, 104, 70, 98][[54, 98, 142, 186, 230, 274, 318].indexOf(x)]} r="5"></circle>)}
+          {[1, 2, 3, 4, 5, 6, 7].map((n, index) => <text class="axis-label" x={54 + index * 44} y="199">{n}</text>)}
+        </svg>
+      </article>
+    </section>
+
+    <section class="support-grid" aria-label="Helpful typing resources">
+      {supportCards.map((card) => (
+        <a id={card.title.toLowerCase()} class="support-card" href={`/${card.title.toLowerCase()}/`}>
+          <span class={`resource-icon ${card.icon}`} aria-hidden="true"></span>
+          <span class="support-copy">
+            <strong>{card.title}</strong>
+            <em>{card.text}</em>
+            <b>{card.action} -></b>
+          </span>
+        </a>
+      ))}
+    </section>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <span class="brand-mark">T</span>
+          <span>typing-test-online.com</span>
+        </a>
+        <p>A fast, simple, and private typing test. Improve your speed and accuracy.</p>
+        <p class="privacy-cue footer-privacy">
+          <span class="lock-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+              <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+            </svg>
+          </span>
+          Local only - no account required
+        </p>
+      </div>
+      <div class="footer-links">
+        <h2>Tools</h2>
+        <a href="/">Typing Test</a>
+        <a href="/practice/">Practice</a>
+        <a href="/guides/">Guides</a>
+      </div>
+      <div class="footer-links">
+        <h2>Resources</h2>
+        <a href="/faq/">FAQ</a>
+        <a href="/about/">About</a>
+        <a href="/typing-speed-formula/">WPM Formula</a>
+        <a href="/privacy">Privacy Policy</a>
+      </div>
+      <div class="footer-links">
+        <h2>Connect</h2>
+        <a href="/time-modes/">Time Modes</a>
+        <a href="/practice/">Practice Tips</a>
+      </div>
+      <aside class="tip-card">
+        <span class="small-icon bulb" aria-hidden="true"></span>
+        <strong>Tip</strong>
+        <p>Consistency is key. Practice a little every day to see big improvements.</p>
+      </aside>
+      <p class="copyright">(c) 2025 typing-test-online.com - All rights reserved.</p>
+    </footer>
+  </main>
+
+  <script is:inline>
+    const passages = {
+      easy: [
+        'The bright morning sun warmed the quiet street. A small bird landed near the window while the room filled with soft light.',
+        'Typing every day builds steady habits. Keep your eyes on the next word and let your hands move at a calm pace.',
+        'A student opened a notebook, reviewed the lesson, and typed a short summary before the next class began.',
+        'The team shared a simple update, confirmed the next meeting time, and closed the project notes for the day.',
+      ],
+      medium: [
+        'The sun dipped below the horizon, casting a warm golden glow across the quiet meadow. Birds flew home in graceful arcs while a gentle breeze rustled the leaves. In the distance, a winding river sparkled like a ribbon of silver, guiding the eye toward the rolling hills beyond.',
+        'A focused typing session rewards patience more than force. Smooth rhythm, clean corrections, and relaxed shoulders usually produce better speed than rushing through every word.',
+        'During a busy workday, clear written updates help everyone understand priorities, blockers, and the next decision that needs attention.',
+        'Good study notes turn scattered ideas into a path. Review the key terms, rewrite the examples, and test yourself before moving on.',
+      ],
+      hard: [
+        'Efficient typists balance anticipation with precision, reading several words ahead while keeping each keystroke deliberate. The best results come from repeatable rhythm, low correction overhead, and steady attention through the full timed session.',
+        'Complex passages reveal whether speed is sustainable under pressure. Watch punctuation, capitalization, and character order carefully, because every extra correction lowers net pace and makes accuracy harder to recover.',
+        'Productivity improves when tools reduce context switching, preserve reliable feedback, and help people complete small actions without hiding important state behind unnecessary interface layers.',
+        'Before sending a client proposal, review every figure, confirm the timeline, and make sure the message is concise enough for quick approval.',
+      ],
+    };
+
+    const state = {
+      duration: 60,
+      difficulty: 'medium',
+      passageIndex: 0,
+      startedAt: 0,
+      timerId: 0,
+      finished: false,
+      lastResult: null,
+    };
+
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+    const input = $('#typing-input');
+    const passage = $('#passage');
+    const live = {
+      wpm: $('#live-wpm'),
+      cpm: $('#live-cpm'),
+      accuracy: $('#live-accuracy'),
+      errors: $('#live-errors'),
+      time: $('#live-time'),
+      progress: $('#live-progress'),
+    };
+    const result = {
+      wpm: $('#result-wpm'),
+      cpm: $('#result-cpm'),
+      accuracy: $('#result-accuracy'),
+      errors: $('#result-errors'),
+      rating: $('#result-rating'),
+    };
+    const status = $('#copy-status');
+    const recentList = $('#recent-list');
+
+    function currentPassage() {
+      return passages[state.difficulty][state.passageIndex % passages[state.difficulty].length];
+    }
+
+    function setPassage() {
+      passage.textContent = currentPassage();
+      resetTest({ keepResult: true });
+    }
+
+    function score(value) {
+      const target = currentPassage();
+      let correct = 0;
+      let errors = 0;
+      for (let index = 0; index < value.length; index += 1) {
+        if (value[index] === target[index]) correct += 1;
+        else errors += 1;
+      }
+      const elapsed = state.startedAt ? Math.max((Date.now() - state.startedAt) / 1000, 1) : 0;
+      const minutes = Math.max(elapsed / 60, 1 / 60);
+      const accuracy = value.length ? Math.max(0, Math.round((correct / value.length) * 100)) : 100;
+      return {
+        correct,
+        errors,
+        accuracy,
+        wpm: Math.round((correct / 5) / minutes),
+        cpm: Math.round(correct / minutes),
+        progress: Math.min(100, Math.round((value.length / target.length) * 100)),
+        elapsed,
+      };
+    }
+
+    function levelFor(wpm) {
+      if (wpm >= 90) return 'Elite';
+      if (wpm >= 75) return 'Pro';
+      if (wpm >= 60) return 'Fast';
+      if (wpm >= 45) return 'Steady';
+      return 'Beginner';
+    }
+
+    function timeLeft() {
+      if (!state.startedAt) return state.duration;
+      return Math.max(0, state.duration - Math.floor((Date.now() - state.startedAt) / 1000));
+    }
+
+    function updateLive() {
+      const current = score(input.value);
+      live.wpm.textContent = String(current.wpm);
+      live.cpm.textContent = String(current.cpm);
+      live.accuracy.textContent = `${current.accuracy}%`;
+      live.errors.textContent = String(current.errors);
+      live.time.textContent = `${timeLeft()}s`;
+      live.progress.textContent = `${current.progress}%`;
+      if (timeLeft() <= 0 || input.value.length >= currentPassage().length) finishTest();
+    }
+
+    function finishTest() {
+      if (state.finished) return;
+      state.finished = true;
+      clearInterval(state.timerId);
+      const current = score(input.value);
+      const finalResult = {
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        wpm: current.wpm,
+        cpm: current.cpm,
+        accuracy: current.accuracy,
+        errors: current.errors,
+        duration: state.duration,
+        difficulty: state.difficulty,
+        rating: levelFor(current.wpm),
+      };
+      state.lastResult = finalResult;
+      result.wpm.textContent = String(finalResult.wpm);
+      result.cpm.textContent = String(finalResult.cpm);
+      result.accuracy.textContent = `${finalResult.accuracy}%`;
+      result.errors.textContent = String(finalResult.errors);
+      result.rating.textContent = finalResult.rating;
+      saveRecent(finalResult);
+      renderRecent();
+    }
+
+    function saveRecent(item) {
+      const recent = readRecent();
+      recent.unshift(item);
+      localStorage.setItem('typing-test-online-results', JSON.stringify(recent.slice(0, 7)));
+    }
+
+    function readRecent() {
+      try {
+        return JSON.parse(localStorage.getItem('typing-test-online-results') || '[]');
+      } catch {
+        return [];
+      }
+    }
+
+    function renderRecent() {
+      const recent = readRecent();
+      if (!recent.length) return;
+      recentList.innerHTML = recent.slice(0, 5).map((item) => `
+        <div class="recent-row">
+          <span>${item.date}</span>
+          <span>${item.time}</span>
+          <span>${item.wpm} WPM</span>
+          <strong>${item.accuracy}%</strong>
+        </div>
+      `).join('');
+    }
+
+    function resetTest({ keepResult = false } = {}) {
+      clearInterval(state.timerId);
+      state.startedAt = 0;
+      state.finished = false;
+      input.value = '';
+      input.disabled = false;
+      live.wpm.textContent = '0';
+      live.cpm.textContent = '0';
+      live.accuracy.textContent = '100%';
+      live.errors.textContent = '0';
+      live.time.textContent = `${state.duration}s`;
+      live.progress.textContent = '0%';
+      status.textContent = '';
+      if (!keepResult && state.lastResult) {
+        result.wpm.textContent = String(state.lastResult.wpm);
+        result.cpm.textContent = String(state.lastResult.cpm);
+        result.accuracy.textContent = `${state.lastResult.accuracy}%`;
+        result.errors.textContent = String(state.lastResult.errors);
+        result.rating.textContent = state.lastResult.rating;
+      }
+    }
+
+    function startTimer() {
+      if (state.startedAt || state.finished) return;
+      state.startedAt = Date.now();
+      state.timerId = window.setInterval(updateLive, 250);
+    }
+
+    function setSelected(buttons, active) {
+      buttons.forEach((button) => button.classList.toggle('selected', button === active));
+    }
+
+    $$('[data-duration]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (state.startedAt && !state.finished) return;
+        state.duration = Number(button.dataset.duration);
+        setSelected($$('[data-duration]'), button);
+        resetTest({ keepResult: true });
+      });
+    });
+
+    $$('[data-difficulty]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (state.startedAt && !state.finished) return;
+        state.difficulty = button.dataset.difficulty;
+        state.passageIndex = 0;
+        setSelected($$('[data-difficulty]'), button);
+        setPassage();
+      });
+    });
+
+    input.addEventListener('input', () => {
+      if (!input.value) {
+        resetTest({ keepResult: true });
+        return;
+      }
+      startTimer();
+      updateLive();
+    });
+
+    input.addEventListener('paste', (event) => {
+      event.preventDefault();
+      status.textContent = 'Paste is blocked for a clean typing test.';
+    });
+
+    const newPassageButton = $('#change-passage');
+    newPassageButton.addEventListener('click', () => {
+      if (state.startedAt && !state.finished) return;
+      state.passageIndex += 1;
+      setPassage();
+    });
+
+    function restartTest() {
+      resetTest();
+    }
+
+    $('#retry-test').addEventListener('click', restartTest);
+
+    $('#cycle-difficulty').addEventListener('click', () => {
+      const order = ['easy', 'medium', 'hard'];
+      const next = order[(order.indexOf(state.difficulty) + 1) % order.length];
+      const button = $(`[data-difficulty="${next}"]`);
+      button.click();
+    });
+
+    function resultText() {
+      const item = state.lastResult || {
+        wpm: result.wpm.textContent,
+        cpm: result.cpm.textContent,
+        accuracy: parseInt(result.accuracy.textContent, 10),
+        errors: result.errors.textContent,
+        duration: state.duration,
+        difficulty: state.difficulty,
+        rating: result.rating.textContent,
+      };
+      return `Typing Test Online result: ${item.wpm} WPM, ${item.cpm} CPM, ${item.accuracy}% accuracy, ${item.errors} errors, ${item.duration}s ${item.difficulty}, ${item.rating}.`;
+    }
+
+    async function copyResult(message) {
+      await navigator.clipboard.writeText(resultText());
+      status.textContent = message;
+    }
+
+    $('#copy-result').addEventListener('click', () => {
+      copyResult('Result copied.').catch(() => {
+        status.textContent = 'Copy failed. Select the result text manually.';
+      });
+    });
+
+    $('#share-card').addEventListener('click', () => {
+      copyResult('Share text copied locally.').catch(() => {
+        status.textContent = 'Share text is ready, but clipboard access failed.';
+      });
+    });
+
+    renderRecent();
+    setPassage();
+  </script>
+</BaseLayout>
