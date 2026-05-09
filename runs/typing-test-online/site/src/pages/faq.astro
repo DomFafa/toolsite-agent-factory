@@ -3,23 +3,64 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 const title = 'Typing Test FAQ - WPM, Accuracy and Privacy';
 const description = 'Answers to common questions about online typing tests, WPM, CPM, accuracy, errors and local browser privacy.';
+
+const groups = [
+  {
+    title: 'WPM and CPM',
+    items: [
+      ['What is WPM?', 'WPM means words per minute. This typing test uses the common convention that five typed characters count as one word.'],
+      ['What is a good WPM?', 'Many casual typists score around 40 to 60 WPM. Scores above 70 WPM are strong if accuracy stays high.'],
+      ['What is CPM?', 'CPM means characters per minute. It shows raw keyboard pace and is useful for data-entry style practice.'],
+      ['Why are WPM and CPM both shown?', 'WPM is easier to compare across typing tests. CPM gives a more direct view of character speed.'],
+    ],
+  },
+  {
+    title: 'Accuracy and errors',
+    items: [
+      ['Why does accuracy matter?', 'Accuracy shows how many typed characters match the passage. High speed with low accuracy is usually not useful for real work.'],
+      ['Do errors reduce my WPM?', 'Yes. Errors reduce net WPM because the score rewards correct characters, not only raw speed.'],
+      ['Should I backspace during a test?', 'For practice, finish the test calmly, then review error patterns. Constant corrections can hide rhythm problems.'],
+      ['Why does my score change between passages?', 'Different passages include different words, punctuation and rhythm. That can change both speed and accuracy.'],
+    ],
+  },
+  {
+    title: 'Privacy and local results',
+    items: [
+      ['Does the test upload my typing?', 'No. The test is designed to run in your browser and store recent results locally.'],
+      ['Do I need an account?', 'No. The tool works without login, signup, dashboard or profile setup.'],
+      ['Are recent results saved on a server?', 'No. Recent results are stored in your browser so you can see short-term progress without server sync.'],
+      ['Can I use this for an official certificate?', 'Use it for practice unless your school, employer or organization explicitly accepts this site as proof.'],
+    ],
+  },
+  {
+    title: 'Practice',
+    items: [
+      ['Which time mode should I use?', 'Use 15 or 30 seconds for warmups, 60 seconds for a standard benchmark, and 120 seconds for consistency practice.'],
+      ['How do I improve typing speed?', 'Practice regularly, keep a steady rhythm, look ahead to the next word and review mistakes after each round.'],
+      ['When should I use hard difficulty?', 'Use hard passages when medium passages feel controlled and your accuracy does not drop sharply.'],
+      ['Why is paste blocked?', 'Paste is blocked because a typing test should measure live typing, not copied input.'],
+    ],
+  },
+];
 ---
 
 <BaseLayout title={title} description={description} canonicalPath="/faq/">
   <main class="info-page">
     <a class="back-link" href="/">Back to typing test</a>
     <h1>Typing Test FAQ</h1>
-    <section>
-      <h2>Does the test upload my typing?</h2>
-      <p>No. The test is designed to run in your browser and store recent results locally.</p>
-    </section>
-    <section>
-      <h2>What is a good WPM?</h2>
-      <p>Many casual typists score around 40 to 60 WPM. Scores above 70 WPM are strong if accuracy stays high.</p>
-    </section>
-    <section>
-      <h2>Why does accuracy matter?</h2>
-      <p>Accuracy shows how many typed characters match the passage. High speed with low accuracy is usually not useful for real work.</p>
-    </section>
+    <p class="lead">Answers about typing speed, accuracy, privacy, local results and practice routines.</p>
+    {groups.map((group) => (
+      <section class="faq-category">
+        <h2>{group.title}</h2>
+        <div class="faq-list">
+          {group.items.map(([question, answer]) => (
+            <details>
+              <summary>{question}</summary>
+              <p>{answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+    ))}
   </main>
 </BaseLayout>

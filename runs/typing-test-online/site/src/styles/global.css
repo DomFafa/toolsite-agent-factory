@@ -615,7 +615,7 @@ p {
 
 .support-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-top: 22px;
 }
@@ -828,11 +828,65 @@ p {
   font-size: 20px;
 }
 
+.info-page h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
 .info-page p,
 .info-page li {
   color: #59627a;
   font-size: 16px;
   line-height: 1.7;
+}
+
+.info-page .lead {
+  color: #343b56;
+  font-size: 18px;
+}
+
+.info-page ul,
+.info-page ol {
+  padding-left: 22px;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.guide-grid div {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfcff;
+}
+
+.faq-category + .faq-category {
+  margin-top: 28px;
+}
+
+.faq-list {
+  display: grid;
+  gap: 10px;
+}
+
+details {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+  background: #fbfcff;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 850;
+}
+
+details p {
+  margin: 10px 0 0;
 }
 
 .back-link {
@@ -1012,6 +1066,10 @@ p {
 
   .info-page h1 {
     font-size: 28px;
+  }
+
+  .guide-grid {
+    grid-template-columns: 1fr;
   }
 }
 
