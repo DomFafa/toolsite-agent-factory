@@ -170,7 +170,9 @@ async function checkWebAccessPreflight(runDir) {
 }
 
 async function checkAgent2(runDir) {
-  return missingFiles(runDir, AGENT_2_FILES);
+  const missing = await missingFiles(runDir, AGENT_2_FILES);
+  missing.push(...(await requirePassingGateResult(runDir, 'page-plan.json', 'Agent 2 toolsite page plan')));
+  return missing;
 }
 
 async function checkAgent25(runDir) {
@@ -302,6 +304,7 @@ async function checkFinalQa(runDir, state) {
   missing.push(...(await requirePassingGateResult(runDir, 'final-visual-similarity.json', 'final target-vs-page visual similarity >=90%')));
   missing.push(...(await requirePassingGateResult(runDir, 'rendered-assets.json', 'rendered image/asset visibility')));
   missing.push(...(await requirePassingGateResult(runDir, 'tool-spec.json', 'Agent 2 tool spec implementation')));
+  missing.push(...(await requirePassingGateResult(runDir, 'page-plan.json', 'Agent 2 page plan implementation')));
   missing.push(...(await requirePassingGateResult(runDir, 'final-qa-evidence.json', 'final QA evidence bundle')));
 
   const finalDeliveryPath = path.join(runDir, 'agent-5-output/chat-delivery/final-screenshot-delivery.md');

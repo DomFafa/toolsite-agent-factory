@@ -53,6 +53,8 @@ Final QA outputs must record:
 - Target-vs-final page visual similarity result path under `gate-results/final-visual-similarity.json`
 - Browser-backed rendered asset visibility result path under `gate-results/rendered-assets.json`
 - Tool spec implementation result path under `gate-results/tool-spec.json`
+- Toolsite Page Plan result path under `gate-results/page-plan.json`
+- Required page existence, rejected page absence, optional page reasons, sitemap coverage, and robots.txt result
 - Post-selection independent selected-asset result path under `gate-results/selected-assets.json`
 - Toolsite design-review subset result path under `gate-results/toolsite-design-review.json`
 - Agent 3 visual restoration similarity result path under `gate-results/visual-restoration-similarity.json`

@@ -38,6 +38,16 @@ Agent 2 receives:
 
 It produces product, SEO, content, tool specs, and a UI reference dossier for Agent 2.5.
 
+Agent 2 must also produce a Toolsite Page Plan table in `page-plan.md` or `content-plan.md`:
+
+```txt
+page | type | status | reason | implementation owner
+```
+
+Allowed page statuses are `required`, `optional-recommended`, `optional-not-needed`, and `rejected`. Every formal tool site must include `/`, `/privacy`, `/terms`, `/sitemap.xml`, and `/robots.txt` as `required`. Agent 2 may recommend optional SEO/support pages, but must give a reason. `/login`, `/dashboard`, `/account`, `/pricing`, `/leaderboard`, `/api`, and `/blog` are rejected unless the current user explicitly requests them.
+
+Run `node scripts/qa/check-page-plan.mjs --run-dir runs/<site-id> --write`; `gate-results/page-plan.json` must pass before Agent 2.5 can start.
+
 ## Phase 2.5: UI design generation
 
 Before Agent 2.5 starts, run `node scripts/run/check-web-access.mjs --run-dir runs/<site-id> --write`. The pipeline is blocked unless the repo-local `web-access/` skill files and relative script paths pass this preflight.
@@ -84,6 +94,8 @@ Agent 4 implements the site in Astro using Agent 3 output. It must not redesign 
 
 Functionality is added after the visual gate. SEO metadata, SEO content sections, FAQ, schema, sitemap, and robots logic are added after the visual gate and must not disturb the visual lock.
 
+Agent 4 may implement only pages approved by the Agent 2 Page Plan. If Agent 4 wants to add an unplanned page, it must write a proposal and stop instead of implementing it.
+
 ## Phase 5: QA
 
 Agent 5 runs again in Final QA mode and checks:
@@ -99,6 +111,7 @@ Agent 5 runs again in Final QA mode and checks:
 - Build success
 - Noindex/index rules
 - Sitemap/robots rules
+- Toolsite Page Plan compliance: required pages exist, rejected pages do not exist, optional pages have Agent 2 reasons, sitemap contains approved pages, and robots.txt is valid
 - Content quality
 
 After Final QA passes, the workflow must stop for human launch approval. Agent 5 must not start Agent 6, deploy, push production, change Cloudflare/DNS/analytics/indexing, or make any production environment change.

@@ -48,6 +48,21 @@ async function writeAgent2Outputs(runDir) {
   ]) {
     await writeFile(path.join(dir, file), `# ${file}\n`);
   }
+  await writeFile(
+    path.join(dir, 'page-plan.md'),
+    [
+      '# Page Plan',
+      '',
+      '| page | type | status | reason | implementation owner |',
+      '| --- | --- | --- | --- | --- |',
+      '| / | tool | required | Primary tool route. | Agent4 |',
+      '| /privacy | legal | required | Required privacy page. | Agent4 |',
+      '| /terms | legal | required | Required terms page. | Agent4 |',
+      '| /sitemap.xml | system | required | Required sitemap. | Agent4 |',
+      '| /robots.txt | system | required | Required robots policy. | Agent4 |',
+    ].join('\n'),
+  );
+  await writeGateResult(runDir, 'page-plan.json');
 }
 
 async function writeWebAccessGate(runDir, { passed = true } = {}) {
@@ -238,6 +253,27 @@ test('blocks Agent 2.5 when repo-local web-access preflight has not passed', asy
   assert.equal(result.allowed, false);
   assert.match(result.missing.join('\n'), /web-access-preflight\.json/);
   assert.equal(result.allowedNextStep, 'Run repo-local web-access preflight gate');
+});
+
+test('blocks Agent 2.5 when Agent 2 page plan gate has not passed', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeGateResult(runDir, 'page-plan.json', { passed: false });
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    [
+      '# Gate Ledger - sample-site',
+      '',
+      '- [waived] Agent 1 Keyword Research - User supplied keyword directly.',
+      '- [passed] Agent 2 Site Brief - Required files are present.',
+    ].join('\n'),
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-2.5' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /page-plan\.json/);
+  assert.equal(result.allowedNextStep, 'Run Agent 2 Site Brief');
 });
 
 test('blocks Agent 4 when selected design and visual gate artifacts are missing', async () => {
