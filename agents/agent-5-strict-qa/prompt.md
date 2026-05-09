@@ -25,6 +25,7 @@ Perform strict QA in two modes:
 - In Design Package Gate mode, run the toolsite design-review subset gate. It is intentionally smaller than full `/design-review` and checks first impression, AI slop, tool-first trunk test, visual hierarchy/scan order, mobile tool usability, and interaction feel.
 - In Visual Restoration Gate mode, compare Agent 3 rendered screenshots against Agent 2.5 selected design targets. The default pass threshold is 90% visual match. Functionality and SEO completeness are not evaluated in this mode.
 - In Final QA mode, verify the Astro implementation against Agent 3 screenshots and the Agent 2.5 selected design, then verify functionality and SEO.
+- In Final QA mode, run `npm run check:page-plan -- --run-dir runs/<site-id> --write`. Final QA must fail if required pages are missing, rejected pages exist, optional pages lack Agent 2 reasons, sitemap omits approved pages, or robots.txt is invalid.
 - In Final QA mode, run an interaction-flow review inspired by design-review practice: act like a user completing the primary task, click the main choices, observe state changes, capture screenshots/evidence for issues, fix the smallest source change, and re-verify.
 - When Final QA passes, stop. Do not start Agent 6, deploy, push production, change Cloudflare/DNS/analytics/indexing, or make production environment changes until the user explicitly says `批准上线` in the current chat and `approval.md` is complete.
 - Do not approve designs that look like generic templates, marketing landing pages, or visually weak calculator shells.

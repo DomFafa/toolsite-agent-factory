@@ -70,6 +70,12 @@
 - [ ] Final target-vs-page visual similarity gate passed at 90% or higher and wrote `gate-results/final-visual-similarity.json`
 - [ ] Browser-backed rendered asset visibility gate passed and wrote `gate-results/rendered-assets.json`
 - [ ] Tool spec implementation gate passed and wrote `gate-results/tool-spec.json`
+- [ ] Toolsite Page Plan gate passed and wrote `gate-results/page-plan.json`
+- [ ] Required pages exist: `/`, `/privacy`, `/terms`, `/sitemap.xml`, `/robots.txt`
+- [ ] Rejected and `optional-not-needed` pages do not exist
+- [ ] Optional pages have Agent 2 reasons
+- [ ] Sitemap includes approved pages
+- [ ] Robots.txt has valid crawler policy and sitemap directive
 - [ ] Selected independent assets gate passed and wrote `gate-results/selected-assets.json`
 - [ ] Agent 2.5 external GPT source proof gate still passed and wrote `gate-results/agent25-external-design-proof.json`
 - [ ] Toolsite design-review subset gate passed and wrote `gate-results/toolsite-design-review.json`

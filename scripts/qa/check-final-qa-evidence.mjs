@@ -51,6 +51,7 @@ export async function runFinalQaEvidenceGate({ runDir }) {
     ['final-visual-similarity.json', 'final target-vs-page visual similarity'],
     ['rendered-assets.json', 'rendered asset renderability'],
     ['tool-spec.json', 'tool spec implementation'],
+    ['page-plan.json', 'toolsite page plan implementation'],
   ];
 
   const gateResults = {};

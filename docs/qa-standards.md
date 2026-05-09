@@ -92,6 +92,12 @@ Agent 5 must run again after Agent 4. It must check:
 - Title and meta description are keyword aligned
 - Canonical URL is correct
 - Robots and sitemap are correct
+- `gate-results/page-plan.json` passes
+- Required pages from Agent 2 Page Plan exist
+- Rejected and `optional-not-needed` pages from Agent 2 Page Plan do not exist
+- Optional pages have Agent 2 reasons
+- Sitemap contains approved pages from Agent 2 Page Plan
+- Robots.txt has a valid crawler policy and sitemap directive
 - Development is noindex
 - Production index switch is gated by approval
 - FAQ schema is valid when FAQ exists

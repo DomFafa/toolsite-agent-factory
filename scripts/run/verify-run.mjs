@@ -55,6 +55,7 @@ async function main() {
   const order = beforeOrder(args.before);
 
   if (order >= 2.5) {
+    runCommand('node', ['scripts/qa/check-page-plan.mjs', '--run-dir', runDir, '--write']);
     runCommand('node', ['scripts/run/check-web-access.mjs', '--run-dir', runDir, '--write']);
   }
 
@@ -77,6 +78,7 @@ async function main() {
     runCommand('node', ['scripts/qa/check-final-visual-similarity.mjs', '--run-dir', runDir, '--write']);
     runCommand('node', ['scripts/qa/check-rendered-assets.mjs', '--run-dir', runDir, '--url', args.url, '--write']);
     runCommand('node', ['scripts/qa/check-tool-spec.mjs', '--run-dir', runDir, '--write']);
+    runCommand('node', ['scripts/qa/check-page-plan.mjs', '--run-dir', runDir, '--write']);
     runCommand('node', ['scripts/qa/check-final-qa-evidence.mjs', '--run-dir', runDir, '--write']);
   }
 
