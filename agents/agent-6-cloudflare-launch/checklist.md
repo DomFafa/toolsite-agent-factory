@@ -37,3 +37,6 @@
 - [ ] Bing Webmaster site imported from GSC or added directly
 - [ ] Bing Webmaster sitemap submitted
 - [ ] Bing URL Submission completed for sitemap URLs
+- [ ] `npm run check:agent6-completion -- --run-dir runs/<site-id> --write` passed and wrote `gate-results/agent6-completion.json`
+- [ ] Final status is exactly `full_launch_completed` only when all required launch gates are completed
+- [ ] Final status is exactly `partial_launch_blocked` when any required launch gate has a hard blocker with evidence and next action

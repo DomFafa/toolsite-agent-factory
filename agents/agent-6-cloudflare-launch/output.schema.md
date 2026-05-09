@@ -6,6 +6,35 @@ Required outputs:
 - `cloudflare-checklist.md`
 - `indexing-report.md`
 
+`launch-report.md` must include this fixed required launch gates table before final status:
+
+```md
+| gate | status | evidence | hard blocker | next action |
+| --- | --- | --- | --- | --- |
+```
+
+Rows are required for:
+
+- Pages deployment
+- apex custom domain
+- www custom domain
+- DNS switched to Cloudflare Pages
+- Email Routing catch-all
+- Cloudflare Speed Settings
+- Cloudflare Images Transformations
+- Cloudflare Web Analytics
+- IndexNow
+- Google Search Console
+- Bing Webmaster Tools
+- API-first fallback
+
+Allowed final status values:
+
+- `full_launch_completed`
+- `partial_launch_blocked`
+
+`full_launch_completed` is allowed only after `gate-results/agent6-completion.json` passes with every required launch gate `completed`. If any gate has a hard blocker, the final status must be `partial_launch_blocked` and the row must include evidence plus next action.
+
 Each output should include decisions, assumptions, and next-agent handoff notes.
 
 Indexing outputs must record:
