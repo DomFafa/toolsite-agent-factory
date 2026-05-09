@@ -1,0 +1,42 @@
+id: mature-tool-workbench
+label: "A"
+name: "Mature Tool Workbench"
+strictness: "strong"
+best_for:
+  - calculator
+  - checker
+  - converter
+  - counter
+  - file tool
+  - image tool
+  - privacy tool
+  - security tool
+  - tester
+  - benchmark
+first_viewport:
+  pattern: "short intro plus large workbench"
+  required_regions:
+    - title
+    - subtitle
+    - trust cues
+    - input/control area
+    - result/preview/feedback area
+    - subtle visual asset
+visual_language:
+  density: "medium"
+  background: "light"
+  card_style: "soft rounded"
+  assets: "geometric icon, line art, mini diagram"
+  avoid:
+    - playful toy feeling
+    - dark cyber style
+    - generic SaaS hero
+result_patterns:
+  calculator: "strong numeric result plus formula/assumption note"
+  checker: "score/pass-fail plus issue list"
+  converter: "source-target bridge"
+  file: "local preview plus export/download"
+  text: "live metrics panel"
+mobile:
+  priority: "equal to desktop"
+  order: "intro, input, result, primary action, privacy cue, how-to, FAQ/about preview"
