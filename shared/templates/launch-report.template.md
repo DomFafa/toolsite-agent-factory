@@ -90,6 +90,32 @@
 - DNS records preserved:
 - Legacy Google Workspace/Squarespace records:
 
+## Required Launch Gates
+
+| gate | status | evidence | hard blocker | next action |
+| --- | --- | --- | --- | --- |
+| Pages deployment |  |  |  |  |
+| apex custom domain |  |  |  |  |
+| www custom domain |  |  |  |  |
+| DNS switched to Cloudflare Pages |  |  |  |  |
+| Email Routing catch-all |  |  |  |  |
+| Cloudflare Speed Settings |  |  |  |  |
+| Cloudflare Images Transformations |  |  |  |  |
+| Cloudflare Web Analytics |  |  |  |  |
+| IndexNow |  |  |  |  |
+| Google Search Console |  |  |  |  |
+| Bing Webmaster Tools |  |  |  |  |
+| API-first fallback |  |  |  |  |
+
 ## Final status
+
+Status:
+
+Allowed values only:
+
+- `full_launch_completed`
+- `partial_launch_blocked`
+
+`full_launch_completed` requires `gate-results/agent6-completion.json` pass with every required launch gate completed.
 
 ## Notes

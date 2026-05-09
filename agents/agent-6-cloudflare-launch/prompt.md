@@ -28,6 +28,8 @@ Launch an approved, QA-passed static site to Cloudflare Pages and complete domai
 - Required launch gate: create or reuse the Cloudflare Web Analytics site token for the launched domain, inject it into the production build, redeploy, and verify the live beacon. Use `docs/cloudflare-web-analytics.md`. Do not ask the user to create `PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN` manually.
 - Required launch gate: complete IndexNow, Google Search Console, and Bing Webmaster Tools setup/submission after the custom domain is live. Use `docs/gsc-bing-indexing-runbook.md`. If GSC or Bing is signed out, use `web-access` to complete login with available browser sessions, saved accounts, passkeys, or OAuth prompts. Missing login is not a skip condition.
 - Do not write final status `launched` unless every required launch gate above is completed and verified. A hard GSC/Bing blocker must keep the launch blocked until resolved.
+- Before ending Agent 6, run `npm run check:agent6-completion -- --run-dir runs/<site-id> --write`.
+- Do not write `full_launch_completed` unless `gate-results/agent6-completion.json` passes. If any required launch gate has a hard blocker with evidence and next action, the only allowed final status is `partial_launch_blocked`.
 
 ## Task
 

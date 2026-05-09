@@ -40,9 +40,37 @@ dom-tool-<site-id>
 13. Prepare and submit IndexNow using `docs/gsc-bing-indexing-runbook.md`.
 14. Complete Google Search Console setup, sitemap submission, and homepage request-indexing through API or `web-access`.
 15. Complete Bing Webmaster Tools setup/import, sitemap submission, and URL Submission through API or `web-access`.
-16. Write launch report.
+16. Write launch report with the required launch gates table.
+17. Run `npm run check:agent6-completion -- --run-dir runs/<site-id> --write`.
 
 Steps 3, 6, 7, 9, 10, 11, 12, 13, 14, and 15 are required launch gates. Do not mark the run `launched` until each gate is completed and verified.
+
+## Agent6 Completion Gate
+
+`gate-results/agent6-completion.json` is the final Agent 6 mechanical gate.
+
+It must pass before Agent 6 writes `full_launch_completed`.
+
+It checks:
+
+- Pages deployment completed.
+- Apex custom domain active.
+- WWW custom domain active.
+- DNS switched from the old provider to Cloudflare Pages.
+- Email Routing catch-all completed.
+- Cloudflare Speed Settings completed.
+- Cloudflare Images / Transformations enabled.
+- Cloudflare Web Analytics token created/reused, injected, redeployed, and beacon verified.
+- IndexNow completed.
+- Google Search Console completed or hard blocker recorded.
+- Bing Webmaster Tools completed or hard blocker recorded.
+- API-first fallback recorded when API/permission errors occur.
+
+If every required gate is completed, final status must be `full_launch_completed`.
+
+If any required gate has a hard blocker, final status must be `partial_launch_blocked`, and the blocker row must include evidence and next action.
+
+If any required gate is missing or incomplete, `full_launch_completed` fails.
 
 ## Cloudflare operation policy
 

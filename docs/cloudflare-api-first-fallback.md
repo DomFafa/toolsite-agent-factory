@@ -14,6 +14,8 @@ For each Cloudflare change:
 4. Use manual Dashboard UI clicks only when the same-origin API is unavailable or blocked.
 5. Do not mark Agent 6 launched until the required operation is completed or a hard blocker is written to `agent-6-output/launch-report.md`.
 
+If token API returns an authentication, permission, or unsupported-operation error, the fallback attempt is mandatory evidence. Missing `web-access`, Dashboard same-origin API, or manual Dashboard UI fallback evidence causes `gate-results/agent6-completion.json` to fail.
+
 ## Common Fallback Signals
 
 ```txt
