@@ -41,6 +41,7 @@ function runCommand(command, args, options = {}) {
 
 function beforeOrder(before) {
   const value = String(before).toLowerCase();
+  if (['agent-2', 'agent2'].includes(value)) return 2;
   if (['agent-2.5', 'agent2.5', 'agent-2-5', 'agent25'].includes(value)) return 2.5;
   if (['agent-3', 'agent3'].includes(value)) return 3;
   if (['agent-4', 'agent4'].includes(value)) return 4;
@@ -53,6 +54,10 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const runDir = path.resolve(args.runDir);
   const order = beforeOrder(args.before);
+
+  if (order >= 2) {
+    runCommand('node', ['scripts/qa/check-pre-agent2-toolsite-spec.mjs', '--run-dir', runDir, '--write']);
+  }
 
   if (order >= 2.5) {
     runCommand('node', ['scripts/qa/check-page-plan.mjs', '--run-dir', runDir, '--write']);

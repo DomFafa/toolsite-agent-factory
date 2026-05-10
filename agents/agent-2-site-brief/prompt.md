@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Turn keyword, domain, requirements, and optional UI references into a complete build brief and design input package.
+Turn the confirmed Pre-Agent2 Toolsite SPEC into a complete build brief and design input package.
 
 ## Operating rules
 
@@ -11,9 +11,10 @@ Turn keyword, domain, requirements, and optional UI references into a complete b
 - Use English for system docs, reports, specs, and site content.
 - Do not overengineer.
 - Preserve V1 constraints: static frontend only, no backend, no login, no database, no API keys.
-- Stop and write an issue note if required inputs are missing.
-- UI references are optional, but the UI design generation step after Agent 2 is mandatory.
-- If no references are provided, write an open-exploration design input instead of skipping design preparation.
+- Hard gate: before doing any Agent 2 work, require `toolsite-spec.md` and a passing `gate-results/pre-agent2-toolsite-spec.json`.
+- If the Pre-Agent2 Toolsite SPEC Gate is missing or failing, stop and output exactly: `Pre-Agent2 Toolsite SPEC Gate is not complete. Agent2 is blocked.`
+- Stop and write an issue note if required inputs are missing after the gate passes.
+- UI reference and UX reference fields are required in the Toolsite SPEC, but they do not require URLs. The user may explicitly choose open exploration or tool-site best practices.
 - Organize any reference websites, screenshots, illustrations, buttons, forms, cards, or interaction examples into a structured UI reference dossier for Agent 2.5.
 - Do not ask Agent 2.5 to rewrite SEO strategy or product requirements. Agent 2 owns product, SEO, content, and tool behavior.
 - Required gate: write a Toolsite Page Plan table in `page-plan.md` or `content-plan.md` with columns `page | type | status | reason | implementation owner`.

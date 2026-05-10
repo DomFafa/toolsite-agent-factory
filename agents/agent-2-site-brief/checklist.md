@@ -1,10 +1,13 @@
 # Checklist
 
+- [ ] `toolsite-spec.md` exists before Agent 2 starts
+- [ ] `gate-results/pre-agent2-toolsite-spec.json` passed before Agent 2 starts
+- [ ] User confirmed the Toolsite SPEC before Agent 2 starts
 - [ ] Domain and site ID are consistent
 - [ ] Search intent is explicit
 - [ ] Tool behavior is defined
 - [ ] SEO metadata is drafted
-- [ ] UI references are organized, or open-exploration mode is declared
+- [ ] UI reference and UX reference fields from the Toolsite SPEC are organized, or explicit open-exploration/tool-site-best-practice wording is preserved
 - [ ] `ui-reference-dossier.md` is written
 - [ ] `design-generation-input.md` is written for Agent 2.5
 - [ ] Toolsite Page Plan table is written in `page-plan.md` or `content-plan.md`
