@@ -79,6 +79,17 @@ Codex must write `human_review` events at these review points:
 | Final QA launch approval | `final_qa_launch_approval` | `final-qa-launch-approval` | Agent 6 | Explicitly approve launch, such as `批准上线`, or decline launch. |
 | Agent6 blocked or error stop | `agent6_blocked` | `agent6-blocked-<reason-slug>` | Production launch completion | Confirm the blocker is handled and Codex may continue, or stop. |
 
+When Codex is waiting at a human review point, it may manually resolve that point from Hermes inbox:
+
+```bash
+node scripts/run/resolve-human-review-from-hermes-inbox.mjs --run-dir runs/<site-id>
+node scripts/run/resolve-human-review-from-hermes-inbox.mjs --run-dir runs/<site-id> --write
+```
+
+The command reads `runs/<site-id>/human-review-events.jsonl` and `/Users/dom/agents/hermes-toolsite-monitor/hermes-home/state/toolsite-inbox.jsonl`. The default mode is a dry run and must not modify files. With `--write`, Codex appends a new `status: "resolved"` `human_review` event to the run event file. It must not modify the previous open event, must not modify Hermes inbox, must not continue the next workflow phase automatically, and must not bypass the current human review decision.
+
+If there is exactly one current open review in the run, Codex may use the newest unconsumed Hermes inbox message whose `created_at` is at or after that open event's `created_at`. If there are multiple current open reviews, the Hermes inbox message must include the target review id using `review:<review-id>`, for example `review:agent25-option-selection Choose Option B`. Consumed inbox messages are tracked by `inbox_message_key` in resolved events and must not be reused.
+
 ## Phase 1: Keyword research
 
 Use Agent 1 only when keyword validation is needed. Agent 1 stops after producing a keyword research report. It does not launch Agent 2.
