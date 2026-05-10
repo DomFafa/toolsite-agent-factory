@@ -67,6 +67,8 @@ npm run check:pre-agent2-spec -- --run-dir runs/keyword-density-checker --write
 
 Use the relevant agent prompt files in order only after the required gates pass.
 
+Human review points are recorded in `runs/<site-id>/human-review-events.jsonl`. Codex appends an open `human_review` event and pauses whenever the workflow requires user confirmation; Hermes may later forward the event `message` exactly as written, without explaining, summarizing, or rewriting it.
+
 ## Important safety rule
 
 Production launch is blocked unless:
