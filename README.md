@@ -35,15 +35,16 @@ toolsite-agent-factory/
 1. Use Agent 1 to research a keyword. Stop after the report. Do not auto-trigger building.
 2. Create a new run folder under `runs/<site-id>/`.
 3. Fill the run input using `shared/templates/run-input.template.md`.
-4. Run Agent 2 to create the site brief.
-5. Run Agent 2.5 to generate codable and usable UI design directions, specs, usability contracts, local asset plans, and frontend code when available. This step is required even without UI references.
-6. Run Agent 5 in Design Package Gate mode. Weak, non-codable, or visually attractive but unusable UI cannot proceed to visual restoration.
-7. Run Agent 3 to create a static visual restoration and capture browser screenshots. Functionality and SEO stay deferred.
-8. Run Agent 5 in Visual Restoration Gate mode. Agent 4 cannot proceed until desktop/mobile visual match reaches the default 90% threshold.
-9. Run Agent 4 to add functionality and SEO from Agent 3 output without redesigning.
-10. Run Agent 5 in Final QA mode across SEO, UI, desktop, mobile, build, noindex/index rules, and tool behavior.
-11. Fill `approval.md` only after Final QA passes.
-12. Run Agent 6 for Cloudflare Pages Direct Upload, domain binding, DNS, SSL, indexing, IndexNow, Email Routing catch-all, and Cloudflare Web Analytics.
+4. Complete the Pre-Agent2 Toolsite SPEC Gate in `toolsite-spec.md`. Agent 2 is blocked until the five user inputs, six user decision areas, system baseline sections, and explicit user confirmation are complete and `gate-results/pre-agent2-toolsite-spec.json` passes.
+5. Run Agent 2 to create the site brief from the confirmed Toolsite SPEC.
+6. Run Agent 2.5 to generate codable and usable UI design directions, specs, usability contracts, local asset plans, and frontend code when available. This step is required even without UI references.
+7. Run Agent 5 in Design Package Gate mode. Weak, non-codable, or visually attractive but unusable UI cannot proceed to visual restoration.
+8. Run Agent 3 to create a static visual restoration and capture browser screenshots. Functionality and SEO stay deferred.
+9. Run Agent 5 in Visual Restoration Gate mode. Agent 4 cannot proceed until desktop/mobile visual match reaches the default 90% threshold.
+10. Run Agent 4 to add functionality and SEO from Agent 3 output without redesigning.
+11. Run Agent 5 in Final QA mode across SEO, UI, desktop, mobile, build, noindex/index rules, and tool behavior.
+12. Fill `approval.md` only after Final QA passes.
+13. Run Agent 6 for Cloudflare Pages Direct Upload, domain binding, DNS, SSL, indexing, IndexNow, Email Routing catch-all, and Cloudflare Web Analytics.
 
 ## Quick start
 
@@ -58,7 +59,13 @@ Then open the generated folder:
 runs/keyword-density-checker/
 ```
 
-Use the relevant agent prompt files in order.
+Before Agent 2, create `toolsite-spec.md` from `shared/templates/toolsite-spec.template.md`, complete the user-confirmed SPEC, and run:
+
+```bash
+npm run check:pre-agent2-spec -- --run-dir runs/keyword-density-checker --write
+```
+
+Use the relevant agent prompt files in order only after the required gates pass.
 
 ## Important safety rule
 

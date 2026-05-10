@@ -27,14 +27,67 @@ Before any agent work starts after run creation, Codex must output a run-start a
 
 Use Agent 1 only when keyword validation is needed. Agent 1 stops after producing a keyword research report. It does not launch Agent 2.
 
+## Phase 1.5: Pre-Agent2 Toolsite SPEC Gate
+
+Agent 2 is blocked until the Pre-Agent2 Toolsite SPEC Gate passes.
+
+Codex must complete a lightweight user Q&A and write `runs/<site-id>/toolsite-spec.md` before Agent 2 starts. The target Q&A length is 12-20 rounds. Complex tools may use up to 30 rounds. If the six user decision areas are already clear before 12 rounds, Codex may output the SPEC early only when `toolsite-spec.md` explicitly records:
+
+```txt
+六个用户决策区已清楚，用户同意提前输出 SPEC。
+```
+
+The user must provide five required fields before the gate can pass:
+
+- Keyword / 关键词
+- Target domain / 目标域名
+- UI reference / UI 参考
+- UX reference / UX 参考
+- Extra ideas, constraints, or mimic points / 额外想法 / 限制 / 模仿点
+
+UI reference and UX reference are required fields, but they do not require URLs. The user may explicitly write `no clear reference`, `open exploration`, or `follow tool-site best practices`.
+
+The Q&A must cover six user decision areas:
+
+- Tool Purpose
+- First Viewport UX
+- Input / Output Model
+- Result Experience
+- UI / UX Direction
+- Non-goals
+
+Codex fills these baseline sections from system defaults. They do not need to be asked one by one:
+
+- Technical Constraints
+- Page Boundary
+- Agent Workflow Boundary
+- SEO Baseline
+- Success Criteria Baseline
+
+`toolsite-spec.md` must include:
+
+```md
+## User Confirmation
+- [x] User confirmed this Toolsite SPEC before Agent2 starts.
+- Confirmation text:
+- Confirmed by:
+- Confirmed at:
+```
+
+Run `node scripts/qa/check-pre-agent2-toolsite-spec.mjs --run-dir runs/<site-id> --write`; `gate-results/pre-agent2-toolsite-spec.json` must pass before Agent 2 can start.
+
+If any condition is missing, Codex must stop and output exactly:
+
+```txt
+Pre-Agent2 Toolsite SPEC Gate is not complete. Agent2 is blocked.
+```
+
 ## Phase 2: Build brief
 
 Agent 2 receives:
 
-- Primary keyword
-- Target domain
-- Brief requirements
-- Optional UI reference objects
+- Confirmed Toolsite SPEC
+- Passing `gate-results/pre-agent2-toolsite-spec.json`
 
 It produces product, SEO, content, tool specs, and a UI reference dossier for Agent 2.5.
 

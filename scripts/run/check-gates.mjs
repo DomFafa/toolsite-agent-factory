@@ -2,6 +2,7 @@ import { access, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { PRE_AGENT2_BLOCK_MESSAGE } from '../qa/check-pre-agent2-toolsite-spec.mjs';
 import { requirePassingGateResult } from './gate-result-utils.mjs';
 
 const AGENT_2_FILES = [
@@ -163,6 +164,15 @@ async function checkAgent1(runDir, statuses) {
   if (ledgerHasWaiver(statuses, 'Agent 1 Keyword Research')) return [];
   if (await exists(path.join(runDir, 'agent-1-output/keyword-research-report.md'))) return [];
   return ['agent-1-output/keyword-research-report.md or gate-ledger Agent 1 waiver'];
+}
+
+async function checkPreAgent2Spec(runDir) {
+  const missing = await requirePassingGateResult(
+    runDir,
+    'pre-agent2-toolsite-spec.json',
+    'Pre-Agent2 Toolsite SPEC Gate',
+  );
+  return missing.length > 0 ? [PRE_AGENT2_BLOCK_MESSAGE] : [];
 }
 
 async function checkWebAccessPreflight(runDir) {
@@ -336,6 +346,7 @@ function firstAllowedNextStep(failedStages) {
   const first = failedStages[0]?.stage;
   return (
     {
+      preAgent2Spec: 'Complete Pre-Agent2 Toolsite SPEC Gate',
       agent1: 'Run Agent 1 Keyword Research or record an explicit waiver',
       webAccessPreflight: 'Run repo-local web-access preflight gate',
       agent2: 'Run Agent 2 Site Brief',
@@ -360,6 +371,7 @@ export async function checkRunGates({ runDir, before }) {
   const failedStages = [];
 
   const checks = [
+    { stage: 'preAgent2Spec', applies: beforeOrder === 2, run: () => checkPreAgent2Spec(absoluteRunDir) },
     { stage: 'webAccessPreflight', applies: beforeOrder >= 2.5, run: () => checkWebAccessPreflight(absoluteRunDir) },
     { stage: 'agent1', applies: beforeOrder >= 2.5, run: () => checkAgent1(absoluteRunDir, ledgerStatuses) },
     { stage: 'agent2', applies: beforeOrder >= 2.5, run: () => checkAgent2(absoluteRunDir) },

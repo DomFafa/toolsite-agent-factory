@@ -7,9 +7,25 @@
 - Primary keyword:
 - Brief requirements:
 
-## Optional UI references
+## Pre-Agent2 required user inputs
 
-References are optional. Leave this section blank when none are available; Agent 2.5 still runs in open-exploration mode.
+These five fields are required before Agent 2. UI Reference and UX Reference do not require URLs. If no specific reference exists, explicitly write "no clear reference", "open exploration", or "follow tool-site best practices".
+
+- Keyword / 关键词:
+- Target Domain / 目标域名:
+- UI Reference / UI 参考:
+- UX Reference / UX 参考:
+- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点:
+
+Before Agent 2 starts, copy `shared/templates/toolsite-spec.template.md` to `toolsite-spec.md`, complete the SPEC, get explicit user confirmation, then run:
+
+```bash
+npm run check:pre-agent2-spec -- --run-dir runs/<site-id> --write
+```
+
+## UI and UX references
+
+Reference fields are required above, but reference URLs/assets are optional. Leave file paths blank when none are available; Agent 2.5 still runs in open-exploration mode after Agent 2.
 
 ### Reference 1
 
