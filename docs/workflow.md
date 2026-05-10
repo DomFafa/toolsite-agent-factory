@@ -23,6 +23,62 @@ Before any agent work starts after run creation, Codex must output a run-start a
 - Next agent to execute
 - Actions forbidden in the current phase
 
+## Human review event protocol
+
+Every run uses a single append-only human review event file:
+
+```txt
+runs/<site-id>/human-review-events.jsonl
+```
+
+When Codex reaches a human review point, it must append an open `human_review` event to this file and then pause for the user's reply. Codex must not continue past the blocked phase until the user reply required by that review point has been received in the current workflow.
+
+Each JSONL line must use this field structure:
+
+```json
+{
+  "schema_version": "human-review-event.v1",
+  "type": "human_review",
+  "review_type": "agent25_option_selection",
+  "id": "agent25-option-selection",
+  "site_id": "<site-id>",
+  "run_dir": "runs/<site-id>",
+  "phase": "agent-2.5",
+  "agent": "agent-2.5-ui-design-generation",
+  "status": "open",
+  "blocking": true,
+  "blocks": "agent-4",
+  "title": "Choose UI option",
+  "message": "Please choose Option A, Option B, or Option C. Codex must not choose for you.",
+  "expected_reply": "Reply with: Choose Option A / Choose Option B / Choose Option C / Reject all and regenerate: ...",
+  "attachments": [
+    {
+      "label": "Options board",
+      "path": "agent-2-5-output/chat-delivery/options-board.png",
+      "kind": "image",
+      "required": true
+    }
+  ],
+  "created_at": "ISO-8601",
+  "created_by": "codex"
+}
+```
+
+Required fields are `schema_version`, `type`, `review_type`, `id`, `site_id`, `run_dir`, `phase`, `agent`, `status`, `blocking`, `blocks`, `title`, `message`, `expected_reply`, `attachments`, `created_at`, and `created_by`. Attachment paths are relative to the run directory. The event `message` field is the exact user-facing text that Hermes may forward. Hermes is not responsible for explaining, summarizing, rewriting, or adding recommendations to this message.
+
+This stage only defines the event protocol. Hermes polling, Telegram delivery, event resolution automation, and gate-script enforcement are separate later work.
+
+Codex must write `human_review` events at these review points:
+
+| Review point | `review_type` | `id` | Blocks | Required user reply |
+| --- | --- | --- | --- | --- |
+| Pre-Agent2 SPEC confirmation | `pre_agent2_spec_confirmation` | `pre-agent2-spec-confirmation` | Agent 2 | Confirm the Toolsite SPEC or request changes. |
+| Agent2 brief review | `agent2_brief_review` | `agent2-brief-review` | Agent 2.5 | Confirm the Agent2 brief or request changes. |
+| Agent2.5 UI Option A/B/C selection | `agent25_option_selection` | `agent25-option-selection` | Agent 3 / implementation flow | Choose Option A, B, or C, or reject all options with instructions. |
+| Selected Assets / Design Package Gate exception confirmation | `selected_assets_design_package_exception` | `selected-assets-design-package-exception` | Agent 3 / Agent 4, depending on where the exception occurs | Approve the exception, request rework, or stop. |
+| Final QA launch approval | `final_qa_launch_approval` | `final-qa-launch-approval` | Agent 6 | Explicitly approve launch, such as `批准上线`, or decline launch. |
+| Agent6 blocked or error stop | `agent6_blocked` | `agent6-blocked-<reason-slug>` | Production launch completion | Confirm the blocker is handled and Codex may continue, or stop. |
+
 ## Phase 1: Keyword research
 
 Use Agent 1 only when keyword validation is needed. Agent 1 stops after producing a keyword research report. It does not launch Agent 2.
