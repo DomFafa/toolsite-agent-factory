@@ -163,6 +163,8 @@ Toolsite SPEC is too generic. Agent2 is blocked.
 
 The Pre-Agent2 Telegram loop must run this specificity check before it sends the SPEC confirmation card. If the generated SPEC is too generic, it must not ask the user to confirm that SPEC.
 
+The Telegram SPEC review card is a user-facing artifact and must be Chinese-first. It may keep necessary product terms such as `word counter`, `Stripe`, `wordcounter.net`, metric names, and URL paths, but it must not forward whole English sentences from `toolsite-spec.md` as the review content.
+
 ## Phase 2: Build brief
 
 Agent 2 receives:
