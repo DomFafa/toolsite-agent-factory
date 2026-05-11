@@ -36,7 +36,7 @@ toolsite-agent-factory/
 2. Create a new run folder under `runs/<site-id>/`.
 3. Fill the run input using `shared/templates/run-input.template.md`.
 4. Complete the Pre-Agent2 Toolsite SPEC Gate in `toolsite-spec.md`. Agent 2 is blocked until the five user inputs, six user decision areas, system baseline sections, and explicit user confirmation are complete and `gate-results/pre-agent2-toolsite-spec.json` passes.
-5. Run Agent 2 to create the site brief from the confirmed Toolsite SPEC.
+5. Run Agent 2 to create machine working documents from the confirmed Toolsite SPEC, then run the Agent2 Brief Compliance Check. Agent2 brief files are not default user review artifacts.
 6. Run Agent 2.5 to generate codable and usable UI design directions, specs, usability contracts, local asset plans, and frontend code when available. This step is required even without UI references.
 7. Run Agent 5 in Design Package Gate mode. Weak, non-codable, or visually attractive but unusable UI cannot proceed to visual restoration.
 8. Run Agent 3 to create a static visual restoration and capture browser screenshots. Functionality and SEO stay deferred.
@@ -67,7 +67,7 @@ npm run check:pre-agent2-spec -- --run-dir runs/keyword-density-checker --write
 
 Use the relevant agent prompt files in order only after the required gates pass.
 
-Human review points are recorded in `runs/<site-id>/human-review-events.jsonl`. Codex appends an open `human_review` event and pauses whenever the workflow requires user confirmation; Hermes may later forward the event `message` exactly as written, without explaining, summarizing, or rewriting it.
+Human review points are recorded in `runs/<site-id>/human-review-events.jsonl`. Codex appends an open `human_review` event and pauses whenever the workflow requires user confirmation; Hermes may later forward the event `message` exactly as written, without explaining, summarizing, or rewriting it. The confirmed Toolsite SPEC is the main user review artifact before Agent 2. Agent2 brief files are machine working documents by default; only an Agent2 Brief Compliance Check failure or uncertainty should trigger an `agent2_brief_exception` human review.
 
 ## Important safety rule
 

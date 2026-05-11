@@ -12,6 +12,7 @@ const AGENT_2_FILES = [
   'agent-2-output/seo-plan.md',
   'agent-2-output/ui-reference-dossier.md',
   'agent-2-output/design-generation-input.md',
+  'agent-2-output/brief-compliance-summary.md',
 ];
 
 const AGENT_2_5_FILES = [
@@ -182,6 +183,7 @@ async function checkWebAccessPreflight(runDir) {
 async function checkAgent2(runDir) {
   const missing = await missingFiles(runDir, AGENT_2_FILES);
   missing.push(...(await requirePassingGateResult(runDir, 'page-plan.json', 'Agent 2 toolsite page plan')));
+  missing.push(...(await requirePassingGateResult(runDir, 'agent2-brief-compliance.json', 'Agent 2 brief compliance')));
   return missing;
 }
 
