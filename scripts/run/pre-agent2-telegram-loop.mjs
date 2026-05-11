@@ -915,6 +915,240 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
   ].join('\n');
 }
 
+function cleanedReviewLine(value) {
+  return asText(value).replace(/^[-*]\s+/, '').trim();
+}
+
+function withBullet(value) {
+  return value ? `- ${value}` : '';
+}
+
+function hasChinese(value) {
+  return /[\u4e00-\u9fff]/.test(value);
+}
+
+function allowedEnglishTerms(value) {
+  return [
+    ...String(value || '').matchAll(
+      /word counter|Stripe|wordcounter\.net|words|characters|sentences|paragraphs|reading time|speaking time|\/[a-z0-9_.-]+/gi,
+    ),
+  ].map((match) => match[0]);
+}
+
+function translateEnglishReviewLine(line, label) {
+  const raw = cleanedReviewLine(line);
+  if (!raw) return '';
+
+  const exactTranslations = [
+    [
+      /^The core task is not content creation or AI rewriting\. It is fast, trustworthy counting for writers, editors, students, SEO\/content operators, and anyone checking text length\.$/i,
+      '核心任务不是内容创作或 AI rewrite，而是为写作者、编辑、学生、内容人员等提供快速可信的文本统计。',
+    ],
+    [
+      /^Writers and editors checking draft length before publishing\.$/i,
+      '写作者和编辑在发布前检查草稿长度。',
+    ],
+    [
+      /^Students or professionals checking text length for forms, essays, blurbs, or platform limits\.$/i,
+      '学生或专业用户检查表单、文章、简介或平台限制下的文本长度。',
+    ],
+    [
+      /^SEO\/content users who need quick text statistics without login, upload, or saving private text\.$/i,
+      '内容运营用户无需登录、上传或保存私密文本，就能快速查看文本统计。',
+    ],
+    [
+      /^On mobile, the text input comes first and the stat cards follow immediately below it\. The tool must be usable before any SEO content\.$/i,
+      '移动端输入框优先展示，统计卡片紧跟其下；任何搜索内容都不能挤占第一屏工具体验。',
+    ],
+    [
+      /^Input is plain text only\. Users paste or type into one large text area\.$/i,
+      '输入仅为纯文本，用户在一个大文本框中粘贴或输入内容。',
+    ],
+    [
+      /^Output updates in real time without a submit button\.$/i,
+      '输出实时更新，不需要点击提交按钮。',
+    ],
+    [
+      /^Include lightweight actions: clear text, copy results, and insert example text\.$/i,
+      '提供轻量操作：清空文本、复制结果、插入示例文本。',
+    ],
+    [
+      /^Text must be processed in the local browser only\. Do not upload it and do not store user input\.$/i,
+      '文本必须只在浏览器本地处理，不上传，也不保存用户输入。',
+    ],
+    [
+      /^Core metric cards should be visible, scannable, and stable while users type or paste long text\.$/i,
+      '核心指标卡片在用户输入或粘贴长文本时应保持可见、易扫读、布局稳定。',
+    ],
+    [
+      /^Keyword density is not a first-screen core metric\. It can only be considered later as an optional advanced module\.$/i,
+      'keyword density 不属于第一屏核心指标，最多以后作为可选高级模块考虑。',
+    ],
+    [
+      /^The experience should feel like a focused utility, not a marketing landing page or dashboard\.$/i,
+      '整体体验应像聚焦的实用工具，而不是营销落地页或 dashboard。',
+    ],
+    [
+      /^Do not make keyword density a first-screen core feature\.$/i,
+      '不要把 keyword density 做成第一屏核心功能。',
+    ],
+    [
+      /^Do not require users to click submit before seeing results\.$/i,
+      '不要要求用户点击提交后才看到结果。',
+    ],
+    [
+      /^User text must stay in the browser\. The site must not upload, persist, log, sync, or send the pasted text to a server\.$/i,
+      '用户文本必须留在浏览器内，站点不得上传、持久化、记录、同步或发送粘贴文本到服务器。',
+    ],
+    [/^Static frontend only\.$/i, '仅使用静态前端。'],
+    [
+      /^No backend, database, login, account system, API key, AI service, server-side text processing, or analytics that captures user text\.$/i,
+      '不使用后端、数据库、登录、账户系统、API key、AI 服务、服务器端文本处理，也不使用会捕获用户文本的统计分析。',
+    ],
+    [
+      /^Counting logic must run locally in the browser and handle long text without overflow\.$/i,
+      '统计逻辑必须在浏览器本地运行，并能处理长文本而不溢出。',
+    ],
+    [
+      /^Required pages: `?\/`?, `?\/privacy`?, `?\/terms`?, `?\/sitemap\.xml`?, and `?\/robots\.txt`?\.$/i,
+      '必需页面：/、/privacy、/terms、/sitemap.xml、/robots.txt。',
+    ],
+    [
+      /^The `?\/`? page is the word counter tool page\. First-screen tool experience has priority over SEO content\.$/i,
+      '/ 页面是 word counter 工具页，第一屏工具体验优先于搜索内容。',
+    ],
+    [
+      /^Forbidden by default: `?\/login`?, `?\/dashboard`?, `?\/account`?, `?\/pricing`?, `?\/leaderboard`?, `?\/api`?, `?\/history`?, and `?\/blog`?\.$/i,
+      '默认禁止页面：/login、/dashboard、/account、/pricing、/leaderboard、/api、/history、/blog。',
+    ],
+    [
+      /^Users understand within 3 seconds that they can paste or type text and immediately see text statistics\.$/i,
+      '用户打开页面后 3 秒内知道可以粘贴或输入文本，并立即看到文本统计。',
+    ],
+    [
+      /^Pasting text immediately updates words, characters, sentences, paragraphs, reading time, and speaking time\.$/i,
+      '粘贴文本后立即更新 words、characters、sentences、paragraphs、reading time、speaking time。',
+    ],
+    [
+      /^Mobile is usable, long text does not overflow, and the first viewport remains a working tool rather than SEO filler\.$/i,
+      '移动端可用，长文本不溢出，第一屏保持为可工作的工具，而不是搜索内容填充。',
+    ],
+    [
+      /^Build one focused tool page for the target domain\. The first viewport must prioritize the usable tool experience\.$/i,
+      '为目标域名构建一个聚焦工具页，第一屏必须优先呈现可用工具体验。',
+    ],
+    [
+      /^Use the keyword and target domain from Required Inputs\. Keep SEO content below or around the tool without blocking first-viewport tool usage\.$/i,
+      '使用已确认关键词和目标域名；搜索内容应放在工具下方或周围，不能阻碍第一屏工具使用。',
+    ],
+  ];
+
+  for (const [pattern, replacement] of exactTranslations) {
+    if (pattern.test(raw)) return withBullet(replacement);
+  }
+
+  let match = raw.match(/^Build (.+?) for (.+?): a browser-local word counter that lets users paste or type plain text and see real-time text statistics\.$/i);
+  if (match) {
+    return withBullet(`为 ${match[2]} 构建 ${match[1]}：浏览器本地运行，用户粘贴或输入纯文本后实时查看文本统计结果。`);
+  }
+
+  match = raw.match(/^The first viewport must be a clean Stripe-style tool surface inspired by (.+?): a short title and description, a large text input, and core stat cards below or to the right\.$/i);
+  if (match) {
+    return withBullet(`第一屏必须是受 ${match[1]} 启发的干净 Stripe 风格工具区：上方简短标题和说明，中间大文本输入框，下方或右侧显示核心统计卡片。`);
+  }
+
+  match = raw.match(/^Preserve the user constraint: (.+)\.?$/i);
+  if (match) return withBullet(`保留用户限制：${match[1].replace(/\.$/, '')}。`);
+
+  match = raw.match(/^The first viewport default metrics must include: (.+)\.$/i);
+  if (match) return withBullet(`第一屏默认指标必须包含：${match[1].replace(/, /g, '、')}。`);
+
+  match = raw.match(/^UI reference: (.+?)\. Use a clean, professional Stripe-style visual system with whitespace, subtle cards, clear hierarchy, and restrained color\.$/i);
+  if (match) {
+    return withBullet(`UI 参考：${match[1]}。采用干净、专业、留白充足、卡片感轻、层级清晰、色彩克制的 Stripe 风格。`);
+  }
+
+  match = raw.match(/^UX reference: (.+?)\. Match the immediacy of wordcounter\.net style live statistics, but do not copy its layout or visual design\.$/i);
+  if (match) {
+    return withBullet(`UX 参考：${match[1]}。借鉴 wordcounter.net 的即时统计体验，但不要照搬布局或视觉。`);
+  }
+
+  match = raw.match(/^Do not build (.+)\.$/i);
+  if (match) return withBullet(`不要做：${match[1].replace(/, /g, '、')}。`);
+
+  match = raw.match(/^Primary keyword is (.+?)\. The title, description, H1, and page intent must stay aligned with a browser-local word counter\.$/i);
+  if (match) {
+    return withBullet(`主关键词是 ${match[1]}；标题、描述、H1 和页面意图必须保持为浏览器本地运行的 word counter。`);
+  }
+
+  match = raw.match(/^SEO explanation and FAQ content may appear below the tool, but must not push the tool out of the first viewport\.$/i);
+  if (match) return withBullet('搜索说明和 FAQ 可以放在工具下方，但不能把工具挤出第一屏。');
+
+  match = raw.match(/^Build (.+?) for (.+?)\. The tool purpose must stay specific to this keyword and not become a generic utility template\.$/i);
+  if (match) return withBullet(`为 ${match[2]} 构建 ${match[1]}，工具目标必须贴合这个关键词，不能变成通用工具模板。`);
+
+  match = raw.match(/^Preserve the user-provided constraint and mimic point: (.+)\.$/i);
+  if (match) return withBullet(`保留用户提供的限制和模仿点：${match[1]}。`);
+
+  match = raw.match(/^Target users are visitors who search for (.+?) and need to complete that specific tool task on (.+?)\.$/i);
+  if (match) return withBullet(`目标用户是在搜索 ${match[1]}，并需要在 ${match[2]} 完成该具体工具任务的访问者。`);
+
+  match = raw.match(/^The accepted user constraints are: (.+)\.$/i);
+  if (match) return withBullet(`已确认的用户限制是：${match[1]}。`);
+
+  match = raw.match(/^The first viewport must be specific to (.+?); it cannot be a generic calculator\/checker shell\.$/i);
+  if (match) return withBullet(`第一屏必须服务于 ${match[1]}，不能只是通用计算器或检查器外壳。`);
+
+  match = raw.match(/^Use (.+?) as the visual reference and keep (.+?) visible in the first-screen product behavior\.$/i);
+  if (match) return withBullet(`视觉参考 ${match[1]}，并在第一屏产品行为中体现：${match[2]}。`);
+
+  match = raw.match(/^Inputs and outputs must match the concrete (.+?) workflow for (.+?)\.$/i);
+  if (match) return withBullet(`输入和输出必须匹配 ${match[2]} 上的具体 ${match[1]} 工作流。`);
+
+  match = raw.match(/^The output model must reflect the user-provided UX reference (.+?), without copying it blindly\.$/i);
+  if (match) return withBullet(`输出模型必须体现用户提供的 UX 参考 ${match[1]}，但不要盲目照搬。`);
+
+  match = raw.match(/^Results must show the concrete output users expect from (.+?); generic "core result" language is not enough\.$/i);
+  if (match) return withBullet(`结果区必须展示用户对 ${match[1]} 期待的具体输出，不能只写泛泛的“核心结果”。`);
+
+  match = raw.match(/^UI reference: (.+)\.$/i);
+  if (match) return withBullet(`UI 参考：${match[1]}。`);
+
+  match = raw.match(/^UX reference: (.+)\.$/i);
+  if (match) return withBullet(`UX 参考：${match[1]}。`);
+
+  match = raw.match(/^Apply those references to (.+?), while respecting: (.+)\.$/i);
+  if (match) return withBullet(`把这些参考应用到 ${match[1]}，并遵守：${match[2]}。`);
+
+  match = raw.match(/^Do not add features, pages, or workflows outside the confirmed (.+?) scope for (.+?)\.$/i);
+  if (match) return withBullet(`不要添加超出 ${match[2]} 已确认 ${match[1]} 范围的功能、页面或工作流。`);
+
+  match = raw.match(/^Keep the first version within the user constraints: (.+)\.$/i);
+  if (match) return withBullet(`第一版必须控制在用户限制内：${match[1]}。`);
+
+  match = raw.match(/^Use static frontend constraints for (.+?) unless a later approved brief changes them\. Do not add backend, database, login, or API key requirements by default\.$/i);
+  if (match) return withBullet(`${match[1]} 默认使用静态前端约束；除非后续批准的 brief 改变，不要添加后端、数据库、登录或 API key 要求。`);
+
+  match = raw.match(/^A visitor can open (.+?), understand the (.+?) task, complete it, and trust the result without login or unnecessary setup\.$/i);
+  if (match) return withBullet(`访问者打开 ${match[1]} 后，能理解并完成 ${match[2]} 任务，且无需登录或额外设置即可信任结果。`);
+
+  if (hasChinese(raw)) return line;
+
+  const terms = [...new Set(allowedEnglishTerms(raw))];
+  const fallback = terms.length > 0
+    ? `${label}需保留这些已确认要点：${terms.join('、')}。`
+    : `${label}需按已确认 SPEC 执行，不能保留英文整句说明。`;
+  return withBullet(fallback);
+}
+
+function reviewCardContent(content, label) {
+  return String(content || '')
+    .split(/\r?\n/)
+    .map((line) => translateEnglishReviewLine(line, label))
+    .filter(Boolean)
+    .join('\n') || '- SPEC 中未单独列出，请按已确认问答和系统默认约束执行。';
+}
+
 export function renderSpecReviewCard({ specText, specPath }) {
   const sections = [
     {
@@ -968,7 +1202,7 @@ export function renderSpecReviewCard({ specText, specPath }) {
     '',
     ...sections.flatMap((section, index) => [
       `${index + 1}. ${section.label}`,
-      section.content,
+      reviewCardContent(section.content, section.label),
       '',
     ]),
     `附：SPEC 文件：${specPath}`,

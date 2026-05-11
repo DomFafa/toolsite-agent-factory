@@ -119,6 +119,24 @@ function assertSpecConfirmationCard(text) {
   assert.match(text, /请回复：/);
 }
 
+function assertChineseFirstSpecCard(text) {
+  assertSpecConfirmationCard(text);
+  assert.doesNotMatch(text, /Static frontend only\./);
+  assert.doesNotMatch(text, /No backend, database/);
+  assert.doesNotMatch(text, /Users understand within 3 seconds/);
+  assert.doesNotMatch(text, /The first viewport must be a clean Stripe-style tool surface/);
+  assert.doesNotMatch(text, /Input is plain text only/);
+  assert.match(text, /word counter/);
+  assert.match(text, /Stripe/);
+  assert.match(text, /wordcounter\.net/);
+  assert.match(text, /words/);
+  assert.match(text, /characters/);
+  assert.match(text, /sentences/);
+  assert.match(text, /paragraphs/);
+  assert.match(text, /reading time/);
+  assert.match(text, /speaking time/);
+}
+
 function genericWordCounterSpec() {
   return [
     '# Toolsite SPEC: sample-site',
@@ -179,6 +197,80 @@ function genericWordCounterSpec() {
     '## Success Criteria Baseline',
     '',
     '- 用户打开页面后完成任务。',
+    '',
+  ].join('\n');
+}
+
+function englishWordCounterSpec() {
+  return [
+    '# Toolsite SPEC: wordcounter-test',
+    '',
+    '## Required Inputs',
+    '',
+    '- Keyword: word counter',
+    '- Target Domain: wordcounter-test.local',
+    '- UI Reference: Stripe 风格',
+    '- UX Reference: wordcounter.net',
+    '- Extra Ideas / Constraints / Mimic Points: 第一屏必须是工具，不要登录，不要复杂功能',
+    '',
+    '## Tool Purpose',
+    '',
+    '- Build word counter for wordcounter-test.local: a browser-local word counter that lets users paste or type plain text and see real-time text statistics.',
+    '- The core task is not content creation or AI rewriting. It is fast, trustworthy counting for writers, editors, students, SEO/content operators, and anyone checking text length.',
+    '',
+    '## Target Users and Use Cases',
+    '',
+    '- Writers and editors checking draft length before publishing.',
+    '- Students or professionals checking text length for forms, essays, blurbs, or platform limits.',
+    '- SEO/content users who need quick text statistics without login, upload, or saving private text.',
+    '',
+    '## First Viewport UX',
+    '',
+    '- The first viewport must be a clean Stripe-style tool surface inspired by Stripe 风格: a short title and description, a large text input, and core stat cards below or to the right.',
+    '- On mobile, the text input comes first and the stat cards follow immediately below it. The tool must be usable before any SEO content.',
+    '',
+    '## Input / Output Model',
+    '',
+    '- Input is plain text only. Users paste or type into one large text area.',
+    '- Output updates in real time without a submit button.',
+    '- Include lightweight actions: clear text, copy results, and insert example text.',
+    '- Text must be processed in the local browser only. Do not upload it and do not store user input.',
+    '',
+    '## Result Experience',
+    '',
+    '- The first viewport default metrics must include: words, characters, sentences, paragraphs, reading time, and speaking time.',
+    '- Core metric cards should be visible, scannable, and stable while users type or paste long text.',
+    '- Keyword density is not a first-screen core metric. It can only be considered later as an optional advanced module.',
+    '',
+    '## UI / UX Direction',
+    '',
+    '- UI reference: Stripe 风格. Use a clean, professional Stripe-style visual system with whitespace, subtle cards, clear hierarchy, and restrained color.',
+    '- UX reference: wordcounter.net. Match the immediacy of wordcounter.net style live statistics, but do not copy its layout or visual design.',
+    '- The experience should feel like a focused utility, not a marketing landing page or dashboard.',
+    '',
+    '## Non-goals',
+    '',
+    '- Do not build login, accounts, database, backend, API keys, AI rewrite, spelling check, grammar check, cloud sync, history, leaderboard, or saved documents.',
+    '- Do not make keyword density a first-screen core feature.',
+    '- Do not require users to click submit before seeing results.',
+    '',
+    '## Technical Constraints',
+    '',
+    '- Static frontend only.',
+    '- No backend, database, login, account system, API key, AI service, server-side text processing, or analytics that captures user text.',
+    '- Counting logic must run locally in the browser and handle long text without overflow.',
+    '',
+    '## Page Boundary',
+    '',
+    '- Required pages: `/`, `/privacy`, `/terms`, `/sitemap.xml`, and `/robots.txt`.',
+    '- The `/` page is the word counter tool page. First-screen tool experience has priority over SEO content.',
+    '- Forbidden by default: `/login`, `/dashboard`, `/account`, `/pricing`, `/leaderboard`, `/api`, `/history`, and `/blog`.',
+    '',
+    '## Success Criteria Baseline',
+    '',
+    '- Users understand within 3 seconds that they can paste or type text and immediately see text statistics.',
+    '- Pasting text immediately updates words, characters, sentences, paragraphs, reading time, and speaking time.',
+    '- Mobile is usable, long text does not overflow, and the first viewport remains a working tool rather than SEO filler.',
     '',
   ].join('\n');
 }
@@ -459,6 +551,22 @@ test('long SPEC confirmation review card is split into Telegram-safe messages', 
   assert.ok(chunks.length > 1);
   assert.ok(chunks.every((chunk) => chunk.length <= 500));
   assert.match(chunks.join('\n'), /runs\/sample-site\/toolsite-spec\.md/);
+});
+
+test('English SPEC input renders a Chinese-first Telegram review card', () => {
+  const card = renderSpecReviewCard({
+    specText: englishWordCounterSpec(),
+    specPath: 'runs/wordcounter-test/toolsite-spec.md',
+  });
+
+  assertChineseFirstSpecCard(card);
+  assert.match(card, /工具目标/);
+  assert.match(card, /第一屏 UX/);
+  assert.match(card, /输入 \/ 输出模型/);
+  assert.match(card, /明确不做的功能/);
+  assert.match(card, /成功标准/);
+  assert.match(card, /浏览器本地运行/);
+  assert.match(card, /仅使用静态前端/);
 });
 
 test('generic SPEC is not sent for user confirmation', async () => {
