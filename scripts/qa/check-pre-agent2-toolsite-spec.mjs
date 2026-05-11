@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { resultFromFailures, writeGateResult } from '../run/gate-result-utils.mjs';
 
 export const PRE_AGENT2_BLOCK_MESSAGE = 'Pre-Agent2 Toolsite SPEC Gate is not complete. Agent2 is blocked.';
+export const SPEC_GENERIC_BLOCK_MESSAGE = 'Toolsite SPEC is too generic. Agent2 is blocked.';
 
 const SPEC_PATH = 'toolsite-spec.md';
+const QA_PATH = 'pre-agent2-qa.md';
 
 const FIVE_ELEMENTS = [
   {
@@ -55,6 +57,44 @@ const SYSTEM_DEFAULT_SECTIONS = [
   'Success Criteria Baseline',
 ];
 
+const SUBSTANTIVE_SECTIONS = [
+  ...USER_DECISION_SECTIONS,
+  ...SYSTEM_DEFAULT_SECTIONS,
+  'Target Users and Use Cases',
+  'Privacy',
+];
+
+const GENERIC_PLACEHOLDER_PATTERNS = [
+  /快速完成明确计算[、, ]*转换[、, ]*检查任务/i,
+  /核心数字或结果最醒目/i,
+  /用户打开页面后完成任务/i,
+  /使用仓库标准约束/i,
+  /Use the repository standard static frontend tool constraints/i,
+  /Use the baseline toolsite defaults/i,
+];
+
+const WORD_COUNTER_REQUIRED_TERMS = [
+  ['word counter', [/word\s*counter/i, /wordcounter/i]],
+  ['纯文本输入', [/纯文本/, /plain\s+text/i]],
+  ['实时统计', [/实时[^。\n]*统计/, /即时[^。\n]*统计/, /live\s+(?:stats|statistics)/i, /real[\s-]?time\s+(?:stats|statistics)/i]],
+  ['words', [/\bwords?\b/i]],
+  ['characters', [/\bcharacters?\b/i]],
+  ['sentences', [/\bsentences?\b/i]],
+  ['paragraphs', [/\bparagraphs?\b/i]],
+  ['reading time', [/\breading\s+time\b/i]],
+  ['speaking time', [/\bspeaking\s+time\b/i]],
+  ['浏览器本地处理', [/浏览器本地/, /本地处理/, /local\s+browser/i]],
+  ['Stripe 风格', [/stripe/i]],
+  ['wordcounter.net', [/wordcounter\.net/i]],
+  ['不做登录', [/登录/, /\blogin\b/i]],
+  ['不做账户', [/账户/, /\baccount\b/i]],
+  ['不做数据库', [/数据库/, /\bdatabase\b/i]],
+  ['不做 AI rewrite', [/AI\s*rewrite/i, /AI\s*改写/i]],
+  ['不做拼写检查', [/拼写检查/, /spell(?:ing)?\s+check/i]],
+  ['不做语法检查', [/语法检查/, /grammar\s+check/i]],
+  ['不做历史记录', [/历史记录/, /\bhistory\b/i]],
+];
+
 function parseArgs(argv) {
   const args = { write: false };
   for (let index = 0; index < argv.length; index += 1) {
@@ -98,6 +138,10 @@ function normalize(value) {
     .trim();
 }
 
+function compactText(value) {
+  return normalize(value).replace(/\s+/g, ' ');
+}
+
 function hasUsefulValue(value) {
   const cleaned = stripMarkdown(value);
   if (!cleaned) return false;
@@ -137,6 +181,18 @@ function sectionContent(text, heading) {
     body.push(lines[index]);
   }
   return body.join('\n').trim();
+}
+
+function sectionContentAny(text, headings) {
+  for (const heading of headings) {
+    const content = sectionContent(text, heading);
+    if (content) return content;
+  }
+  return '';
+}
+
+function substantiveSpecText(text) {
+  return SUBSTANTIVE_SECTIONS.map((heading) => sectionContent(text, heading)).filter(Boolean).join('\n\n');
 }
 
 function hasCompleteSection(text, heading) {
@@ -197,9 +253,122 @@ function validateUserConfirmation(text, failures) {
   }
 }
 
+function meaningfulTokens(value) {
+  return compactText(value)
+    .split(/\s+/)
+    .filter((token) => token.length >= 3)
+    .filter((token) => !['the', 'and', 'for', 'with', 'open', 'tool', 'site', 'best', 'practices'].includes(token));
+}
+
+function valueAppears(text, value) {
+  const normalizedText = compactText(text);
+  const normalizedValue = compactText(value);
+  if (!normalizedValue) return false;
+  if (normalizedText.includes(normalizedValue)) return true;
+  const tokens = meaningfulTokens(value);
+  if (tokens.length === 0) return false;
+  const required = Math.min(tokens.length, 2);
+  return tokens.filter((token) => normalizedText.includes(token)).length >= required;
+}
+
+function decisionAppears(text, value) {
+  const normalizedText = compactText(text);
+  const normalizedValue = compactText(value);
+  if (!normalizedValue) return false;
+  if (normalizedText.includes(normalizedValue)) return true;
+  const tokens = meaningfulTokens(value);
+  if (tokens.length < 4) return valueAppears(text, value);
+  const matched = tokens.filter((token) => normalizedText.includes(token)).length;
+  return matched >= Math.max(4, Math.ceil(tokens.length * 0.7));
+}
+
+function patternAppears(text, patterns) {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function isWordCounterSpec(fields) {
+  return /word\s*counter|wordcounter/i.test(`${fields.keyword || ''} ${fields.targetDomain || ''}`);
+}
+
+function qaDecisionValues(qaText) {
+  return String(qaText || '')
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*Decision:\s*(.+?)\s*$/i)?.[1] || '')
+    .map(stripMarkdown)
+    .filter(hasUsefulValue)
+    .filter((value) => !/^\d+$/.test(value));
+}
+
+function collectSpecificityFailures(specText, qaText = '') {
+  const failures = [];
+  const fields = {};
+  for (const field of FIVE_ELEMENTS) {
+    fields[field.key] = findLabeledValue(specText, field.aliases);
+  }
+  const substantiveText = substantiveSpecText(specText);
+
+  for (const field of FIVE_ELEMENTS) {
+    const value = fields[field.key];
+    if (!hasUsefulValue(value)) continue;
+    if (!valueAppears(specText, value)) {
+      failures.push(`specificity: SPEC does not preserve five-element value: ${field.label}`);
+    }
+  }
+
+  for (const field of ['keyword', 'targetDomain', 'uiReference', 'uxReference']) {
+    if (hasUsefulValue(fields[field]) && !valueAppears(substantiveText, fields[field])) {
+      failures.push(`specificity: ${field} must appear in the substantive SPEC sections, not only in the five-element list`);
+    }
+  }
+
+  if (hasUsefulValue(fields.extraIdeas) && !valueAppears(substantiveText, fields.extraIdeas)) {
+    failures.push('specificity: extra ideas / constraints / mimic points must be reflected in the substantive SPEC sections');
+  }
+
+  for (const decision of qaDecisionValues(qaText)) {
+    if (!decisionAppears(substantiveText, decision)) {
+      failures.push(`specificity: SPEC does not preserve Pre-Agent2 Q&A decision: ${decision}`);
+    }
+  }
+
+  for (const heading of USER_DECISION_SECTIONS) {
+    const content = sectionContent(specText, heading);
+    if (!content) continue;
+    if (GENERIC_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(content)) && !valueAppears(content, fields.keyword)) {
+      failures.push(`specificity: ${heading} is generic and does not name the current tool`);
+    }
+  }
+
+  if (isWordCounterSpec(fields)) {
+    const allText = `${specText}\n${sectionContentAny(specText, ['Privacy'])}`;
+    for (const [label, patterns] of WORD_COUNTER_REQUIRED_TERMS) {
+      if (!patternAppears(allText, patterns)) {
+        failures.push(`specificity: word counter SPEC is missing ${label}`);
+      }
+    }
+  }
+
+  return failures;
+}
+
+export function validateToolsiteSpecSpecificity(specText, { requireFiveElements = false } = {}) {
+  const failures = collectSpecificityFailures(specText);
+  if (requireFiveElements) {
+    for (const field of FIVE_ELEMENTS) {
+      const value = findLabeledValue(specText, field.aliases);
+      if (!hasUsefulValue(value)) failures.push(`specificity: missing required five-element field: ${field.label}`);
+    }
+  }
+  return {
+    passed: failures.length === 0,
+    failures,
+  };
+}
+
 export async function runPreAgent2ToolsiteSpecGate({ runDir }) {
   const absoluteRunDir = path.resolve(runDir);
   const specText = await readOptional(path.join(absoluteRunDir, SPEC_PATH));
+  const qaText = await readOptional(path.join(absoluteRunDir, QA_PATH));
   const failures = [];
 
   if (!specText.trim()) {
@@ -221,6 +390,7 @@ export async function runPreAgent2ToolsiteSpecGate({ runDir }) {
     }
 
     validateUserConfirmation(specText, failures);
+    failures.push(...collectSpecificityFailures(specText, qaText));
 
     return resultFromFailures({
       gate: 'pre-agent2-toolsite-spec',
@@ -230,6 +400,7 @@ export async function runPreAgent2ToolsiteSpecGate({ runDir }) {
         questionRounds: qna.rounds,
         complexTool: qna.complex,
         earlySpecConsent: qna.earlyConsent,
+        specificityPassed: !failures.some((failure) => failure.startsWith('specificity:')),
       },
       evidence: {
         spec: SPEC_PATH,
@@ -256,7 +427,8 @@ async function main() {
   if (result.passed) {
     console.log('PASS Pre-Agent2 Toolsite SPEC Gate');
   } else {
-    console.log(PRE_AGENT2_BLOCK_MESSAGE);
+    const hasSpecificityFailure = result.failures.some((failure) => failure.startsWith('specificity:'));
+    console.log(hasSpecificityFailure ? SPEC_GENERIC_BLOCK_MESSAGE : PRE_AGENT2_BLOCK_MESSAGE);
     for (const failure of result.failures) console.log(`- ${failure}`);
   }
   process.exitCode = result.passed ? 0 : 1;

@@ -5,6 +5,10 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  SPEC_GENERIC_BLOCK_MESSAGE,
+} from '../qa/check-pre-agent2-toolsite-spec.mjs';
+
+import {
   QUESTION_BANK,
   REMOTE_DISABLED_MESSAGE,
   buildQuestionEvent,
@@ -113,6 +117,70 @@ function assertSpecConfirmationCard(text) {
   assert.match(text, /明确不做的功能/);
   assert.match(text, /成功标准/);
   assert.match(text, /请回复：/);
+}
+
+function genericWordCounterSpec() {
+  return [
+    '# Toolsite SPEC: sample-site',
+    '',
+    '## Required Inputs',
+    '',
+    '- Keyword: word counter',
+    '- Target Domain: wordcounter-test.local',
+    '- UI Reference: Stripe 风格',
+    '- UX Reference: wordcounter.net',
+    '- Extra Ideas / Constraints / Mimic Points: 第一屏必须是工具，不要登录，不要复杂功能',
+    '',
+    '## Lightweight Q&A Record',
+    '',
+    '- Question rounds: 12',
+    '- Complex tool: no',
+    '',
+    '## Tool Purpose',
+    '',
+    '- 快速完成明确计算、转换或检查任务。',
+    '',
+    '## First Viewport UX',
+    '',
+    '- 核心数字或结果最醒目。',
+    '',
+    '## Input / Output Model',
+    '',
+    '- 用户输入内容后得到结果。',
+    '',
+    '## Result Experience',
+    '',
+    '- 结果清晰、快速、可信。',
+    '',
+    '## UI / UX Direction',
+    '',
+    '- 使用仓库标准约束。',
+    '',
+    '## Non-goals',
+    '',
+    '- 不做复杂功能。',
+    '',
+    '## Technical Constraints',
+    '',
+    '- Use the repository standard static frontend tool constraints.',
+    '',
+    '## Page Boundary',
+    '',
+    '- Build one focused tool page.',
+    '',
+    '## Agent Workflow Boundary',
+    '',
+    '- Agent2 waits for SPEC confirmation.',
+    '',
+    '## SEO Baseline',
+    '',
+    '- Primary keyword drives page intent.',
+    '',
+    '## Success Criteria Baseline',
+    '',
+    '- 用户打开页面后完成任务。',
+    '',
+  ].join('\n');
 }
 
 async function startLoopOnce(fixture, sent = []) {
@@ -391,6 +459,52 @@ test('long SPEC confirmation review card is split into Telegram-safe messages', 
   assert.ok(chunks.length > 1);
   assert.ok(chunks.every((chunk) => chunk.length <= 500));
   assert.match(chunks.join('\n'), /runs\/sample-site\/toolsite-spec\.md/);
+});
+
+test('generic SPEC is not sent for user confirmation', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  await setRemoteMode(fixture.remoteStatePath, true);
+
+  const answered = QUESTION_BANK.map((question, index) => {
+    const open = buildQuestionEvent({
+      question,
+      siteId: 'sample-site',
+      runDir: fixture.runDir,
+      createdAt: `2026-05-11T10:${String(index).padStart(2, '0')}:00.000Z`,
+    });
+    return buildResolvedQuestionEvent({
+      openReview: open,
+      inboxMessage: inboxMessage('1', {
+        message_id: `answered-${index}`,
+        created_at: `2026-05-11T10:${String(index).padStart(2, '0')}:30.000Z`,
+      }),
+      validation: validateReply('1', open),
+      resolvedAt: `2026-05-11T10:${String(index).padStart(2, '0')}:40.000Z`,
+    });
+  });
+  await writeJsonl(fixture.eventPath, answered);
+
+  const result = await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    pollMs: 0,
+    maxIterations: 1,
+    sender: fakeSender(sent),
+    renderSpec: () => genericWordCounterSpec(),
+    now: () => '2026-05-11T10:20:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const state = JSON.parse(await readFile(fixture.statePath, 'utf8'));
+
+  assert.equal(result.lastResult.reason, 'spec-too-generic');
+  assert.equal(result.lastResult.message, SPEC_GENERIC_BLOCK_MESSAGE);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation'), false);
+  assert.equal(sent.length, 0);
+  assert.equal(state.status, 'blocked_spec_too_generic');
 });
 
 test('Q12 completion writes SPEC confirmation and does not start Agent2', async () => {
