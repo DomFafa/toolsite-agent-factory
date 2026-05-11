@@ -35,7 +35,7 @@ async function makeRun() {
   return runDir;
 }
 
-async function writeAgent2Outputs(runDir) {
+async function writeAgent2Outputs(runDir, { compliance = true, compliancePassed = true, complianceStatus } = {}) {
   const dir = path.join(runDir, 'agent-2-output');
   await mkdir(dir, { recursive: true });
   for (const file of [
@@ -63,6 +63,16 @@ async function writeAgent2Outputs(runDir) {
     ].join('\n'),
   );
   await writeGateResult(runDir, 'page-plan.json');
+  if (compliance) {
+    await writeFile(
+      path.join(dir, 'brief-compliance-summary.md'),
+      '# Agent2 Brief Compliance Summary\n\n6. 是否可以进入 Agent2.5：是\n',
+    );
+    await writeGateResult(runDir, 'agent2-brief-compliance.json', {
+      passed: compliancePassed,
+      status: complianceStatus || (compliancePassed ? 'pass' : 'fail'),
+    });
+  }
 }
 
 async function writeWebAccessGate(runDir, { passed = true } = {}) {
@@ -87,7 +97,7 @@ async function writeWebAccessGate(runDir, { passed = true } = {}) {
   );
 }
 
-async function writeGateResult(runDir, filename, { passed = true } = {}) {
+async function writeGateResult(runDir, filename, { passed = true, status = passed ? 'pass' : 'fail' } = {}) {
   const dir = path.join(runDir, 'gate-results');
   await mkdir(dir, { recursive: true });
   await writeFile(
@@ -96,7 +106,7 @@ async function writeGateResult(runDir, filename, { passed = true } = {}) {
       {
         gate: filename.replace(/\.json$/, ''),
         runDir,
-        status: passed ? 'pass' : 'fail',
+        status,
         passed,
         failures: passed ? [] : [`${filename} failed`],
         details: {},
@@ -274,6 +284,49 @@ test('blocks Agent 2.5 when Agent 2 page plan gate has not passed', async () => 
   assert.equal(result.allowed, false);
   assert.match(result.missing.join('\n'), /page-plan\.json/);
   assert.equal(result.allowedNextStep, 'Run Agent 2 Site Brief');
+});
+
+test('blocks Agent 2.5 when Agent 2 brief compliance gate is missing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir, { compliance: false });
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    [
+      '# Gate Ledger - sample-site',
+      '',
+      '- [waived] Agent 1 Keyword Research - User supplied keyword directly.',
+      '- [passed] Agent 2 Site Brief - Required files are present.',
+    ].join('\n'),
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-2.5' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /brief-compliance-summary\.md/);
+  assert.match(result.missing.join('\n'), /agent2-brief-compliance\.json/);
+  assert.equal(result.allowedNextStep, 'Run Agent 2 Site Brief');
+});
+
+test('blocks Agent 2.5 when Agent 2 brief compliance gate is failed or uncertain', async () => {
+  for (const status of ['fail', 'uncertain']) {
+    const runDir = await makeRun();
+    await writeWebAccessGate(runDir);
+    await writeAgent2Outputs(runDir, { compliancePassed: false, complianceStatus: status });
+    await writeFile(
+      path.join(runDir, 'gate-ledger.md'),
+      [
+        '# Gate Ledger - sample-site',
+        '',
+        '- [waived] Agent 1 Keyword Research - User supplied keyword directly.',
+        '- [passed] Agent 2 Site Brief - Required files are present.',
+      ].join('\n'),
+    );
+
+    const result = await checkRunGates({ runDir, before: 'agent-2.5' });
+    assert.equal(result.allowed, false);
+    assert.match(result.missing.join('\n'), /agent2-brief-compliance\.json/);
+    assert.equal(result.allowedNextStep, 'Run Agent 2 Site Brief');
+  }
 });
 
 test('blocks Agent 4 when selected design and visual gate artifacts are missing', async () => {

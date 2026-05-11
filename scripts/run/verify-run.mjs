@@ -61,6 +61,7 @@ async function main() {
 
   if (order >= 2.5) {
     runCommand('node', ['scripts/qa/check-page-plan.mjs', '--run-dir', runDir, '--write']);
+    runCommand('node', ['scripts/run/check-agent2-brief-compliance.mjs', '--run-dir', runDir, '--write']);
     runCommand('node', ['scripts/run/check-web-access.mjs', '--run-dir', runDir, '--write']);
   }
 

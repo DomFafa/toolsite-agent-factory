@@ -73,7 +73,7 @@ Codex must write `human_review` events at these review points:
 | Review point | `review_type` | `id` | Blocks | Required user reply |
 | --- | --- | --- | --- | --- |
 | Pre-Agent2 SPEC confirmation | `pre_agent2_spec_confirmation` | `pre-agent2-spec-confirmation` | Agent 2 | Confirm the Toolsite SPEC or request changes. |
-| Agent2 brief review | `agent2_brief_review` | `agent2-brief-review` | Agent 2.5 | Confirm the Agent2 brief or request changes. |
+| Agent2 brief compliance exception | `agent2_brief_exception` | `agent2-brief-exception` | Agent 2.5 | Only when machine compliance fails or is uncertain: approve continuing, send Agent2 back for changes, request the detailed brief, or stop. |
 | Agent2.5 UI Option A/B/C selection | `agent25_option_selection` | `agent25-option-selection` | Agent 3 / implementation flow | Choose Option A, B, or C, or reject all options with instructions. |
 | Selected Assets / Design Package Gate exception confirmation | `selected_assets_design_package_exception` | `selected-assets-design-package-exception` | Agent 3 / Agent 4, depending on where the exception occurs | Approve the exception, request rework, or stop. |
 | Final QA launch approval | `final_qa_launch_approval` | `final-qa-launch-approval` | Agent 6 | Explicitly approve launch, such as `批准上线`, or decline launch. |
@@ -158,6 +158,17 @@ Agent 2 receives:
 
 It produces product, SEO, content, tool specs, and a UI reference dossier for Agent 2.5.
 
+The confirmed Toolsite SPEC is the user's primary Agent2 input and review artifact. Agent2 output files are machine working documents by default:
+
+- `agent-2-output/site-brief.md`
+- `agent-2-output/tool-spec.md`
+- `agent-2-output/content-plan.md`
+- `agent-2-output/seo-plan.md`
+- `agent-2-output/ui-reference-dossier.md`
+- `agent-2-output/design-generation-input.md`
+
+Codex must not write a default `agent2_brief_review` human review event and must not send the full Agent2 brief to the user for routine approval.
+
 Agent 2 must also produce a Toolsite Page Plan table in `page-plan.md` or `content-plan.md`:
 
 ```txt
@@ -167,6 +178,44 @@ page | type | status | reason | implementation owner
 Allowed page statuses are `required`, `optional-recommended`, `optional-not-needed`, and `rejected`. Every formal tool site must include `/`, `/privacy`, `/terms`, `/sitemap.xml`, and `/robots.txt` as `required`. Agent 2 may recommend optional SEO/support pages, but must give a reason. `/login`, `/dashboard`, `/account`, `/pricing`, `/leaderboard`, `/api`, and `/blog` are rejected unless the current user explicitly requests them.
 
 Run `node scripts/qa/check-page-plan.mjs --run-dir runs/<site-id> --write`; `gate-results/page-plan.json` must pass before Agent 2.5 can start.
+
+After Agent2 finishes, run the Agent2 Brief Compliance Check:
+
+```bash
+node scripts/run/check-agent2-brief-compliance.mjs --run-dir runs/<site-id> --write
+```
+
+This writes:
+
+- `agent-2-output/brief-compliance-summary.md`
+- `gate-results/agent2-brief-compliance.json`
+
+The compliance check must verify:
+
+1. Agent2 required outputs exist.
+2. `gate-results/page-plan.json` passed.
+3. Agent2 documents preserve the confirmed SPEC keyword, target domain, UI direction, UX direction, and non-goals.
+4. The Page Plan does not approve pages that the SPEC did not approve.
+5. Agent2 did not introduce obvious unapproved features such as login, account, dashboard, pricing, API, upload, history, or AI rewrite.
+6. Agent2.5 may start only when the compliance check passes.
+
+When `agent2-brief-compliance.json` passes, Codex writes no human review event and does not disturb the user. Agent2.5 preflight may continue.
+
+When the compliance check fails or is uncertain, Codex must write an open `agent2_brief_exception` event instead of a default brief review. Its `message` must be a short checklist, not the full brief:
+
+```txt
+Agent2 Brief Compliance Summary
+
+1. 是否符合已确认 SPEC：是/否/不确定
+2. 是否新增未批准功能：是/否
+3. 是否新增未批准页面：是/否
+4. 是否保留 UI/UX 方向：是/否/不确定
+5. Page Plan Gate 是否通过：是/否
+6. 是否可以进入 Agent2.5：是/否
+
+偏离点：
+- ...
+```
 
 ## Phase 2.5: UI design generation
 
