@@ -10,8 +10,10 @@ import {
   buildQuestionEvent,
   buildResolvedQuestionEvent,
   normalizeMaxQuestions,
+  renderSpecReviewCard,
   runPreAgent2TelegramLoop,
   shouldGenerateSpec,
+  splitTelegramMessages,
   validateReply,
 } from './pre-agent2-telegram-loop.mjs';
 
@@ -101,6 +103,16 @@ function fakeSender(sent) {
     sent.push(text);
     return { message_id: String(sent.length), chat_id: '123' };
   };
+}
+
+function assertSpecConfirmationCard(text) {
+  assert.match(text, /【Toolsite SPEC 审核卡】/);
+  assert.match(text, /工具目标/);
+  assert.match(text, /第一屏 UX/);
+  assert.match(text, /输入 \/ 输出模型/);
+  assert.match(text, /明确不做的功能/);
+  assert.match(text, /成功标准/);
+  assert.match(text, /请回复：/);
 }
 
 async function startLoopOnce(fixture, sent = []) {
@@ -316,7 +328,69 @@ test('six decision areas can trigger early SPEC generation when enabled', async 
   assert.equal(confirmation.status, 'open');
   assert.equal(confirmation.blocks, 'agent-2');
   assert.match(spec, /六个用户决策区已清楚，用户同意提前输出 SPEC。/);
-  assert.match(sent.at(-1), /Pre-Agent2 Toolsite SPEC 草稿已生成/);
+  assertSpecConfirmationCard(confirmation.message);
+  assertSpecConfirmationCard(sent.at(-1));
+  assert.doesNotMatch(sent.at(-1), /^Pre-Agent2 Toolsite SPEC 草稿已生成：.*toolsite-spec\.md\s*$/s);
+});
+
+test('long SPEC confirmation review card is split into Telegram-safe messages', () => {
+  const longText = 'word counter 专属需求。'.repeat(140);
+  const specText = [
+    '# Toolsite SPEC: sample-site',
+    '',
+    '## Required Inputs',
+    '',
+    '- Keyword: word counter',
+    '- Target Domain: wordcounter-test.local',
+    '',
+    '## Tool Purpose',
+    '',
+    `- ${longText}`,
+    '',
+    '## First Viewport UX',
+    '',
+    `- ${longText}`,
+    '',
+    '## Input / Output Model',
+    '',
+    `- ${longText}`,
+    '',
+    '## Result Experience',
+    '',
+    `- ${longText}`,
+    '',
+    '## UI / UX Direction',
+    '',
+    `- ${longText}`,
+    '',
+    '## Non-goals',
+    '',
+    `- ${longText}`,
+    '',
+    '## Technical Constraints',
+    '',
+    `- ${longText}`,
+    '',
+    '## Page Boundary',
+    '',
+    `- ${longText}`,
+    '',
+    '## Success Criteria Baseline',
+    '',
+    `- ${longText}`,
+    '',
+  ].join('\n');
+
+  const card = renderSpecReviewCard({
+    specText,
+    specPath: 'runs/sample-site/toolsite-spec.md',
+  });
+  const chunks = splitTelegramMessages(card, 500);
+
+  assertSpecConfirmationCard(card);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= 500));
+  assert.match(chunks.join('\n'), /runs\/sample-site\/toolsite-spec\.md/);
 });
 
 test('Q12 completion writes SPEC confirmation and does not start Agent2', async () => {
@@ -360,6 +434,8 @@ test('Q12 completion writes SPEC confirmation and does not start Agent2', async 
   assert.equal(await exists(fixture.specPath), true);
   assert.equal(confirmation.status, 'open');
   assert.equal(confirmation.blocks, 'agent-2');
+  assertSpecConfirmationCard(confirmation.message);
+  assertSpecConfirmationCard(sent.at(-1));
   assert.equal(await exists(path.join(fixture.runDir, 'agent-2-output', 'site-brief.md')), false);
   assert.equal(await exists(path.join(fixture.runDir, 'site', 'package.json')), false);
 });

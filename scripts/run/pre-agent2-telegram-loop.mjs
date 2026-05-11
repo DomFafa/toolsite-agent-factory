@@ -25,6 +25,7 @@ const DEFAULT_MAX_QUESTIONS = 30;
 const ABSOLUTE_MAX_QUESTIONS = 30;
 const DEFAULT_SPEC_TARGET_ROUNDS = 12;
 const SPEC_CONFIRMATION_ID = 'pre-agent2-spec-confirmation';
+const TELEGRAM_MESSAGE_MAX_CHARS = 3500;
 
 export const USER_DECISION_AREAS = [
   'Tool Purpose',
@@ -293,6 +294,50 @@ function findLabeledValue(text, aliases) {
     if (aliases.some((alias) => label.includes(normalizeLabel(alias)))) return asText(rawValue);
   }
   return '';
+}
+
+function cleanupMarkdownSection(value) {
+  return asText(value) || '- SPEC 中未单独列出，请按已确认问答和系统默认约束执行。';
+}
+
+function findMarkdownSection(text, headings) {
+  const lines = String(text || '').split(/\r?\n/);
+  const normalizedHeadings = headings.map((heading) => normalizeLabel(heading));
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (!match) continue;
+    const heading = normalizeLabel(match[1]);
+    if (!normalizedHeadings.includes(heading)) continue;
+
+    const body = [];
+    for (let bodyIndex = index + 1; bodyIndex < lines.length; bodyIndex += 1) {
+      if (/^#{1,6}\s+/.test(lines[bodyIndex])) break;
+      body.push(lines[bodyIndex]);
+    }
+    return cleanupMarkdownSection(body.join('\n'));
+  }
+
+  return '';
+}
+
+function requiredInputValue(specText, aliases) {
+  const requiredInputs = findMarkdownSection(specText, ['Required Inputs', '必填输入', '基础输入']);
+  return findLabeledValue(requiredInputs, aliases);
+}
+
+function fallbackTargetUsersAndUseCases(specText) {
+  const keyword = requiredInputValue(specText, ['Keyword', '关键词']);
+  const domain = requiredInputValue(specText, ['Target Domain', '目标域名']);
+  const toolName = keyword || domain || '这个工具';
+  return [
+    `- 目标用户是打开页面后需要快速完成 ${toolName} 任务的访问者。`,
+    '- 使用场景以已确认的工具目标、第一屏 UX 和输入 / 输出模型为准。',
+  ].join('\n');
+}
+
+function specSection(specText, headings, fallback = '') {
+  return findMarkdownSection(specText, headings) || cleanupMarkdownSection(fallback);
 }
 
 export function parseRunInput(text) {
@@ -732,7 +777,114 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
   ].join('\n');
 }
 
-function buildSpecConfirmationEvent({ siteId, runDir, createdAt = nowIso() }) {
+export function renderSpecReviewCard({ specText, specPath }) {
+  const sections = [
+    {
+      label: '工具目标',
+      content: specSection(specText, ['Tool Purpose', '工具目标']),
+    },
+    {
+      label: '目标用户和使用场景',
+      content: specSection(
+        specText,
+        ['Target Users and Use Cases', 'Target Users / Use Cases', '目标用户和使用场景'],
+        fallbackTargetUsersAndUseCases(specText),
+      ),
+    },
+    {
+      label: '第一屏 UX',
+      content: specSection(specText, ['First Viewport UX', '第一屏 UX', '第一屏体验']),
+    },
+    {
+      label: '输入 / 输出模型',
+      content: specSection(specText, ['Input / Output Model', '输入 / 输出模型', '输入输出模型']),
+    },
+    {
+      label: '核心结果展示',
+      content: specSection(specText, ['Result Experience', '核心结果展示', '结果体验']),
+    },
+    {
+      label: 'UI / UX 方向',
+      content: specSection(specText, ['UI / UX Direction', 'UI / UX 方向']),
+    },
+    {
+      label: '明确不做的功能',
+      content: specSection(specText, ['Non-goals', 'Non goals', '明确不做的功能', '非目标']),
+    },
+    {
+      label: '技术限制',
+      content: specSection(specText, ['Technical Constraints', '技术限制']),
+    },
+    {
+      label: '页面边界',
+      content: specSection(specText, ['Page Boundary', '页面边界']),
+    },
+    {
+      label: '成功标准',
+      content: specSection(specText, ['Success Criteria Baseline', 'Success Criteria', '成功标准']),
+    },
+  ];
+
+  return [
+    '【Toolsite SPEC 审核卡】',
+    '',
+    ...sections.flatMap((section, index) => [
+      `${index + 1}. ${section.label}`,
+      section.content,
+      '',
+    ]),
+    `附：SPEC 文件：${specPath}`,
+    '',
+    '请回复：',
+    '确认 SPEC',
+    '或',
+    '修改：...',
+  ].join('\n');
+}
+
+export function splitTelegramMessages(text, maxChars = TELEGRAM_MESSAGE_MAX_CHARS) {
+  const value = asText(text);
+  if (!value) return [];
+  if (value.length <= maxChars) return [value];
+
+  const chunks = [];
+  let current = '';
+
+  const pushCurrent = () => {
+    if (current) {
+      chunks.push(current);
+      current = '';
+    }
+  };
+
+  for (const rawBlock of value.split(/\n{2,}/)) {
+    const block = rawBlock.trim();
+    if (!block) continue;
+
+    if (block.length > maxChars) {
+      pushCurrent();
+      for (let index = 0; index < block.length; index += maxChars) {
+        chunks.push(block.slice(index, index + maxChars));
+      }
+      continue;
+    }
+
+    const candidate = current ? `${current}\n\n${block}` : block;
+    if (candidate.length > maxChars) {
+      pushCurrent();
+      current = block;
+    } else {
+      current = candidate;
+    }
+  }
+
+  pushCurrent();
+  return chunks;
+}
+
+function buildSpecConfirmationEvent({ siteId, runDir, specText, createdAt = nowIso() }) {
+  const specPath = path.join(runDir, 'toolsite-spec.md');
+  const message = renderSpecReviewCard({ specText, specPath });
   return {
     schema_version: HUMAN_REVIEW_SCHEMA_VERSION,
     type: 'human_review',
@@ -746,16 +898,10 @@ function buildSpecConfirmationEvent({ siteId, runDir, createdAt = nowIso() }) {
     blocking: true,
     blocks: 'agent-2',
     title: 'Pre-Agent2 SPEC 确认',
-    message: [
-      `Pre-Agent2 Toolsite SPEC 草稿已生成：${path.join(runDir, 'toolsite-spec.md')}`,
-      '',
-      '请确认是否可以作为 Agent2 之前的建站 SPEC。',
-      '',
-      '回复：确认 SPEC',
-      '或回复：需要修改：...',
-    ].join('\n'),
-    expected_reply: '回复：确认 SPEC，或回复：需要修改：...',
-    attachments: [path.join(runDir, 'toolsite-spec.md')],
+    message,
+    message_chunks: splitTelegramMessages(message),
+    expected_reply: '回复：确认 SPEC，或回复：修改：...',
+    attachments: [specPath],
     created_at: createdAt,
     created_by: 'codex',
   };
@@ -770,9 +916,10 @@ async function ensureSpecAndConfirmation({
   now = nowIso,
 }) {
   const answeredEvents = resolvedQuestionEvents(events);
+  const specText = renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec });
   await writeFile(
     path.join(runDir, 'toolsite-spec.md'),
-    renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec }),
+    specText,
     'utf8',
   );
 
@@ -781,6 +928,7 @@ async function ensureSpecAndConfirmation({
     const confirmation = buildSpecConfirmationEvent({
       siteId,
       runDir,
+      specText,
       createdAt: now(),
     });
     await appendJsonl(path.join(runDir, 'human-review-events.jsonl'), confirmation);
@@ -858,13 +1006,20 @@ export async function sendTelegramMessage({ text, inboxPath, telegramEnvPath }) 
 async function sendReviewIfNeeded({ review, state, statePath, sender, now = nowIso }) {
   const key = reviewKey(review);
   if (state.sent_review_keys.includes(key)) return { sent: false };
-  const result = await sender(review.message);
+  const messages =
+    Array.isArray(review.message_chunks) && review.message_chunks.length > 0
+      ? review.message_chunks.map(asText).filter(Boolean)
+      : splitTelegramMessages(review.message);
+  const results = [];
+  for (const message of messages) {
+    results.push(await sender(message));
+  }
   state.sent_review_keys.push(key);
   state.status = review.id === SPEC_CONFIRMATION_ID ? 'awaiting_spec_confirmation' : 'waiting_for_reply';
   state.current_question_id = review.id;
   state.current_question_number = Number(review.question_number || 0);
   await writeLoopState(statePath, state, now);
-  return { sent: true, result };
+  return { sent: true, result: results.at(-1) || null, results };
 }
 
 export async function runLoopIteration({
