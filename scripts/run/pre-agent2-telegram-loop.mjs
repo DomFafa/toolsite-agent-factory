@@ -709,6 +709,45 @@ function summaryForArea(answeredEvents, area) {
   return relevant.map((event) => `- ${decisionFor(event)}`).join('\n');
 }
 
+const KNOWN_RESULT_TERMS = [
+  'words',
+  'characters',
+  'sentences',
+  'paragraphs',
+  'reading time',
+  'speaking time',
+  'keyword density',
+  'WPM',
+  'accuracy',
+  'mistakes',
+  'completion state',
+];
+
+function resultTermSource({ intake, answeredEvents }) {
+  return [
+    intake.extra_notes,
+    ...answeredEvents.map((event) => decisionFor(event)),
+    ...answeredEvents.map((event) => event.resolution_text),
+  ].join('\n');
+}
+
+function extractResultTerms({ intake, answeredEvents }) {
+  const source = resultTermSource({ intake, answeredEvents });
+  return KNOWN_RESULT_TERMS.filter((term) => new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'i').test(source));
+}
+
+function renderResultExperienceContext({ intake, answeredEvents }) {
+  const keyword = asText(intake.keyword) || 'the current tool';
+  const terms = extractResultTerms({ intake, answeredEvents });
+  if (terms.length > 0) {
+    return [
+      `- The ${keyword} result area must directly show ${terms.join(', ')} as concrete, task-specific output metrics.`,
+      `- Users should see these ${keyword} results immediately after entering input, so they can judge the task outcome without generic result placeholders.`,
+    ].join('\n');
+  }
+  return `- The ${keyword} result area must directly show the concrete core result for this tool and let users immediately judge whether the task is complete.`;
+}
+
 function isWordCounterIntake(intake) {
   return /word\s*counter|wordcounter/i.test(`${intake.keyword || ''} ${intake.target_domain || ''}`);
 }
@@ -761,6 +800,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     '## Result Experience',
     '',
+    renderResultExperienceContext({ intake, answeredEvents }),
     '- The first viewport default metrics must include: words, characters, sentences, paragraphs, reading time, and speaking time.',
     '- Core metric cards should be visible, scannable, and stable while users type or paste long text.',
     '- Keyword density is not a first-screen core metric. It can only be considered later as an optional advanced module.',
@@ -869,7 +909,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '',
     '## Result Experience',
     '',
-    `- Results must show the concrete output users expect from ${intake.keyword}; generic "core result" language is not enough.`,
+    renderResultExperienceContext({ intake, answeredEvents }),
     summaryForArea(answeredEvents, 'Result Experience'),
     '',
     '## UI / UX Direction',

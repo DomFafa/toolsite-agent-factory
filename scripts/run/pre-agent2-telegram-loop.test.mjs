@@ -14,6 +14,7 @@ import {
   buildQuestionEvent,
   buildResolvedQuestionEvent,
   normalizeMaxQuestions,
+  renderToolsiteSpec,
   renderSpecReviewCard,
   runPreAgent2TelegramLoop,
   shouldGenerateSpec,
@@ -135,6 +136,68 @@ function assertChineseFirstSpecCard(text) {
   assert.match(text, /paragraphs/);
   assert.match(text, /reading time/);
   assert.match(text, /speaking time/);
+}
+
+function wordCounterInputMarkdown() {
+  return [
+    '# Run Input',
+    '',
+    '- Site ID: wordcounter-cn-card-test',
+    '- Target domain: wordcounter-cn-card-test.local',
+    '- Primary keyword: word counter',
+    '',
+    '## Pre-Agent2 required user inputs',
+    '',
+    '- Keyword / 关键词: word counter',
+    '- Target Domain / 目标域名: wordcounter-cn-card-test.local',
+    '- UI Reference / UI 参考: Stripe',
+    '- UX Reference / UX 参考: wordcounter.net',
+    '- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点: 第一屏必须直接可用；输入文本后实时展示 words / characters / sentences / paragraphs / reading time / speaking time；浏览器本地处理；不要登录；不要后端；不要数据库；不要 AI 改写。',
+    '',
+  ].join('\n');
+}
+
+function wordCounterIntake() {
+  return {
+    keyword: 'word counter',
+    target_domain: 'wordcounter-cn-card-test.local',
+    ui_reference: 'Stripe',
+    ux_reference: 'wordcounter.net',
+    extra_notes:
+      '第一屏必须直接可用；输入文本后实时展示 words / characters / sentences / paragraphs / reading time / speaking time；浏览器本地处理；不要登录；不要后端；不要数据库；不要 AI 改写。',
+  };
+}
+
+function answeredQuestionEvents({ siteId = 'wordcounter-cn-card-test', runDir = 'runs/wordcounter-cn-card-test' } = {}) {
+  return QUESTION_BANK.map((question, index) => {
+    const open = buildQuestionEvent({
+      question,
+      siteId,
+      runDir,
+      createdAt: `2026-05-11T10:${String(index).padStart(2, '0')}:00.000Z`,
+    });
+    return buildResolvedQuestionEvent({
+      openReview: open,
+      inboxMessage: inboxMessage('1', {
+        message_id: `answered-${index}`,
+        created_at: `2026-05-11T10:${String(index).padStart(2, '0')}:30.000Z`,
+      }),
+      validation: validateReply('1', open),
+      resolvedAt: `2026-05-11T10:${String(index).padStart(2, '0')}:40.000Z`,
+    });
+  });
+}
+
+function markdownSection(text, heading) {
+  const lines = String(text || '').split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
+  if (start === -1) return '';
+  const body = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index])) break;
+    body.push(lines[index]);
+  }
+  return body.join('\n').trim();
 }
 
 function genericWordCounterSpec() {
@@ -567,6 +630,52 @@ test('English SPEC input renders a Chinese-first Telegram review card', () => {
   assert.match(card, /成功标准/);
   assert.match(card, /浏览器本地运行/);
   assert.match(card, /仅使用静态前端/);
+});
+
+test('generated word counter SPEC result experience names keyword and metrics', () => {
+  const spec = renderToolsiteSpec({
+    siteId: 'wordcounter-cn-card-test',
+    intake: wordCounterIntake(),
+    answeredEvents: answeredQuestionEvents(),
+  });
+  const resultExperience = markdownSection(spec, 'Result Experience');
+
+  assert.match(resultExperience, /word counter/);
+  assert.match(resultExperience, /words/);
+  assert.match(resultExperience, /characters/);
+  assert.match(resultExperience, /reading time/);
+  assert.match(resultExperience, /speaking time/);
+});
+
+test('word counter generated SPEC passes specificity before confirmation card', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
+  await writeJsonl(fixture.eventPath, answeredQuestionEvents({
+    siteId: 'sample-site',
+    runDir: fixture.runDir,
+  }));
+
+  const result = await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    pollMs: 0,
+    maxIterations: 1,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:20:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const confirmation = events.find((event) => event.id === 'pre-agent2-spec-confirmation');
+
+  assert.notEqual(result.lastResult.reason, 'spec-too-generic');
+  assert.equal(confirmation.status, 'open');
+  assert.equal(confirmation.blocks, 'agent-2');
+  assertChineseFirstSpecCard(confirmation.message);
+  assertChineseFirstSpecCard(sent.at(-1));
 });
 
 test('generic SPEC is not sent for user confirmation', async () => {
