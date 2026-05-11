@@ -29,6 +29,9 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 - The design must include interaction semantics for the real user task flow. Main choices, presets, empty states, and clearing actions must visibly update state and results in predictable ways.
 - Do not put text inside food photos, preset thumbnails, ingredient thumbnails, chart images, or decorative assets. Thumbnail images must be clean visual assets; labels, nutrition numbers, and UI copy must be rendered as real HTML text.
 - Selecting an option is not the end of Agent 2.5. After the selected option is confirmed, Agent 2.5 must continue interacting with the external design model until it obtains a high-resolution asset pack for every image slot in the selected design, or records a hard blocker with exact retry evidence.
+- UI option selection must be visual. Before writing an open `agent25-option-selection` human review event, Agent 2.5 must create `agent-2-5-output/chat-delivery/options-board.png` as a real reviewable image containing Option A, Option B, and Option C. Text summaries, markdown files, image paths, option-summary files, or a local HTML board without an exported image are not sufficient.
+- The `agent25-option-selection` human review event must attach `agent-2-5-output/chat-delivery/options-board.png` with `kind: "image"`. The message may explain the choices, but it cannot replace the image.
+- If `options-board.png` is missing or not a real image, Agent 2.5 must stop and output exactly: `Agent2.5 UI Option Selection is blocked because no reviewable UI images were generated.` It must not write a resolved option selection, must not enter Agent 3, and must not treat pure text Option A/B/C descriptions as formal UI review.
 
 ## Required Inputs
 
@@ -149,12 +152,14 @@ node scripts/design/import-generated-ui.mjs \
 12. Select the strongest option based on visual quality, codability, asset completeness, usability, real-data fit, and expected restoration fidelity.
 13. Save source proof under `external-design-evidence/`: raw/exported GPT response, real conversation screenshot, source-provenance map, selected-design lineage, and `external-design-proof.json`.
 14. Build `chat-delivery/options-board.png` from GPT option source images only. Do not use local HTML/CSS, manual mockups, reconstructed targets, or Codex-created option boards as formal evidence.
-15. Stop for explicit user selection in the current chat. Formal projects do not allow the 3-minute default path; timeout default is allowed only for test/dry-run and must be recorded as such.
-16. Run `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`. Agent 3 is blocked until `gate-results/agent25-external-design-proof.json` passes.
-17. After the selected option is confirmed, run the mandatory post-selection high-resolution asset acquisition loop and download `selected-option-assets.zip`.
-18. Extract selected high-resolution assets into `agent-2-5-output/selected-design/assets/` and preserve the original zip in `agent-2-5-output/selected-design/downloads/`.
-19. Run `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` when selected assets are wired into the run. Treat failures as design package blockers.
-20. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
+15. Write an open `agent25-option-selection` human review event whose attachments include `agent-2-5-output/chat-delivery/options-board.png` with `kind: "image"`.
+16. Run `node scripts/run/check-agent25-option-images.mjs --run-dir runs/<site-id> --write`. If `gate-results/agent25-option-images.json` does not pass, stop with `Agent2.5 UI Option Selection is blocked because no reviewable UI images were generated.`
+17. Stop for explicit user selection in the current chat. Formal projects do not allow the 3-minute default path; timeout default is allowed only for test/dry-run and must be recorded as such.
+18. Run `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`. Agent 3 is blocked until `gate-results/agent25-external-design-proof.json` passes.
+19. After the selected option is confirmed, run the mandatory post-selection high-resolution asset acquisition loop and download `selected-option-assets.zip`.
+20. Extract selected high-resolution assets into `agent-2-5-output/selected-design/assets/` and preserve the original zip in `agent-2-5-output/selected-design/downloads/`.
+21. Run `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` when selected assets are wired into the run. Treat failures as design package blockers.
+22. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
 
 ## Outputs
 

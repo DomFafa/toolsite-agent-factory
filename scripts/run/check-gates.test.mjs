@@ -119,7 +119,7 @@ async function writeGateResult(runDir, filename, { passed = true, status = passe
   );
 }
 
-async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
+async function writeAgent25Outputs(runDir, { externalEvidence = false, optionImagesGate = true } = {}) {
   const root = path.join(runDir, 'agent-2-5-output');
   const selected = path.join(root, 'selected-design');
   await mkdir(path.join(selected, 'target'), { recursive: true });
@@ -166,6 +166,7 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false } = {}) {
     ].join('\n'),
   );
   await writeGateResult(runDir, 'agent25-lineage.json');
+  if (optionImagesGate) await writeGateResult(runDir, 'agent25-option-images.json');
   await writeGateResult(runDir, 'selected-assets.json');
   if (externalEvidence) {
     const evidence = path.join(root, 'external-design-evidence');
@@ -361,6 +362,22 @@ test('blocks Agent 3 when Agent 2.5 lacks external GPT provenance evidence', asy
   assert.match(result.missing.join('\n'), /external-design-evidence\/conversation-screenshot\.png/);
   assert.match(result.missing.join('\n'), /external-design-evidence\/source-provenance\.md/);
   assert.match(result.missing.join('\n'), /external-design-evidence\/selected-design-lineage\.md/);
+  assert.equal(result.allowedNextStep, 'Run Agent 2.5 UI Design Generation');
+});
+
+test('blocks Agent 3 when Agent 2.5 option image gate is missing', async () => {
+  const runDir = await makeRun();
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true, optionImagesGate: false });
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /agent25-option-images\.json/);
   assert.equal(result.allowedNextStep, 'Run Agent 2.5 UI Design Generation');
 });
 

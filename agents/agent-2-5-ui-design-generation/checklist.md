@@ -33,6 +33,9 @@
 - [ ] `external-design-evidence/selected-design-lineage.md` states the selected design came from the GPT option, not a Codex local mock
 - [ ] `external-design-evidence/external-design-proof.json` maps the raw response, conversation screenshot, GPT option source images, option board, user selection, selected targets, and selected package
 - [ ] The three generated options were sent to the current chat as one comparison image built from GPT option sources before proceeding
+- [ ] `agent-2-5-output/chat-delivery/options-board.png` exists as a real reviewable image; text summaries, markdown files, paths, and option-summary docs were not used as a substitute
+- [ ] `human-review-events.jsonl` latest open `agent25-option-selection` event attaches `agent-2-5-output/chat-delivery/options-board.png` with `kind: image`
+- [ ] `node scripts/run/check-agent25-option-images.mjs --run-dir runs/<site-id> --write` passed and wrote `gate-results/agent25-option-images.json`
 - [ ] Formal project: user explicitly selected an option in the current chat; no 3-minute default was used
 - [ ] Test/dry-run only: any 3-minute default is explicitly marked as test/dry-run
 - [ ] `chat-delivery/options-board.png` and `chat-delivery/option-selection.md` exist and record the chat delivery/selection evidence
