@@ -85,8 +85,22 @@ Agent 3 must compare against target screenshots derived from the external design
 
 `chat-delivery/` must contain the user-visible option selection record:
 
-- `options-board.png` showing all three GPT-generated options in one review image, or a side-by-side board assembled from the three GPT option screenshots.
+- `options-board.png` showing all three GPT-generated options in one review image, or a side-by-side board assembled from the three GPT option screenshots. This image is mandatory before `agent25-option-selection` may be opened. Text summaries, markdown files, image paths, option-summary docs, and local HTML boards without an exported image are not valid substitutes.
 - `option-selection.md` with `Decision: PASS`, the three option names, evidence that the board was sent to the current chat, and the user-selected option.
+
+The open `agent25-option-selection` human review event must attach `agent-2-5-output/chat-delivery/options-board.png` with `kind: "image"`. Its `message` may describe Option A/B/C, but the message cannot replace the image attachment.
+
+Run after writing the open `agent25-option-selection` event and before resolving Agent 2.5 option selection:
+
+```bash
+node scripts/run/check-agent25-option-images.mjs --run-dir runs/<site-id> --write
+```
+
+This writes `gate-results/agent25-option-images.json`. If it does not pass, Agent 2.5 must stop and output:
+
+```txt
+Agent2.5 UI Option Selection is blocked because no reviewable UI images were generated.
+```
 
 Agent 2.5 must stop after sending the three options to the current chat. Formal projects may proceed only after the user chooses an option in the current chat. A 3-minute timeout/default is allowed only in `test` or `dry-run` mode and must be recorded in `option-selection.md`.
 

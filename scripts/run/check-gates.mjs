@@ -198,6 +198,7 @@ async function checkAgent25(runDir) {
       'Agent 2.5 external GPT source proof',
     )),
   );
+  missing.push(...(await requirePassingGateResult(runDir, 'agent25-option-images.json', 'Agent 2.5 reviewable UI option images')));
   missing.push(...(await requirePassingGateResult(runDir, 'agent25-lineage.json', 'Agent 2.5 lineage')));
   missing.push(...(await requirePassingGateResult(runDir, 'selected-assets.json', 'post-selection independent selected image assets')));
 

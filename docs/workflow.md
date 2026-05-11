@@ -47,7 +47,7 @@ Each JSONL line must use this field structure:
   "agent": "agent-2.5-ui-design-generation",
   "status": "open",
   "blocking": true,
-  "blocks": "agent-4",
+  "blocks": "agent-3",
   "title": "Choose UI option",
   "message": "Please choose Option A, Option B, or Option C. Codex must not choose for you.",
   "expected_reply": "Reply with: Choose Option A / Choose Option B / Choose Option C / Reject all and regenerate: ...",
@@ -67,6 +67,8 @@ Each JSONL line must use this field structure:
 Required fields are `schema_version`, `type`, `review_type`, `id`, `site_id`, `run_dir`, `phase`, `agent`, `status`, `blocking`, `blocks`, `title`, `message`, `expected_reply`, `attachments`, `created_at`, and `created_by`. Attachment paths are relative to the run directory. The event `message` field is the exact user-facing text that Hermes may forward. Hermes is not responsible for explaining, summarizing, rewriting, or adding recommendations to this message.
 
 This stage only defines the event protocol. Hermes polling, Telegram delivery, event resolution automation, and gate-script enforcement are separate later work.
+
+For `agent25_option_selection`, the human review must include a visible UI image. Text summaries, markdown files, image paths, option-summary files, or local HTML boards without an exported image do not count as reviewable UI options.
 
 Codex must write `human_review` events at these review points:
 
@@ -230,6 +232,14 @@ The default restoration target is 90%. Agent 2.5 must request codable and usable
 Agent 2.5's GPT prompt must explicitly require: Astro + HTML/CSS/vanilla JS restoration, 90% screenshot similarity, first viewport as the real tool, no dynamic-data overflow, usable mobile layout, complete interaction states, no pretty-but-unusable UI, and no UX sacrifice for visual impact.
 
 Agent 2.5 must prove the options and selected design came from GPT or an approved external design surface. It must save `external-design-evidence/external-response.md`, `conversation-screenshot.png`, `source-provenance.md`, `selected-design-lineage.md`, and `external-design-proof.json`. The proof must map Option A/B/C, `chat-delivery/options-board.png`, the selected option, desktop/mobile targets, and selected package back to the GPT response or GPT option source images. Local HTML/CSS option boards, manual mocks, reconstructed screenshots, locally generated targets, Codex-local packages, and formal-project 3-minute defaults are blockers.
+
+Agent 2.5 UI Option Selection is blocked unless `agent-2-5-output/chat-delivery/options-board.png` exists as a real reviewable image and the open `agent25-option-selection` human review event attaches that file with `kind: "image"`. Agent 2.5 must not write a resolved option selection, must not enter Agent 3, and must not treat pure text Option A/B/C descriptions as formal UI review. If no reviewable option image exists, Codex must stop and output:
+
+```txt
+Agent2.5 UI Option Selection is blocked because no reviewable UI images were generated.
+```
+
+Run `node scripts/run/check-agent25-option-images.mjs --run-dir runs/<site-id> --write`; `gate-results/agent25-option-images.json` must pass before Agent 3 can start.
 
 Run `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`; `gate-results/agent25-external-design-proof.json` must pass before Agent 3 can start.
 
