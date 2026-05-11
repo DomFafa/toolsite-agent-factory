@@ -143,6 +143,10 @@ Codex fills these baseline sections from system defaults. They do not need to be
 - Confirmed at:
 ```
 
+The SPEC must also pass a specificity check. It is not enough to restate generic tool-site language such as "quickly complete a calculation/checking task", "core results are prominent", or "use repository standard constraints". The substantive sections must preserve the current tool's five elements, the important Pre-Agent2 Q&A answers, the target keyword/domain, the chosen UI and UX references, and the user's extra constraints.
+
+For a `word counter` run, the SPEC must explicitly describe the word counter behavior instead of a generic utility. It must include plain text input, real-time statistics, words, characters, sentences, paragraphs, reading time, speaking time, local browser processing, the Stripe UI direction, the `wordcounter.net` UX reference, and the confirmed non-goals such as no login/account/database/AI rewrite/spelling check/grammar check/history.
+
 Run `node scripts/qa/check-pre-agent2-toolsite-spec.mjs --run-dir runs/<site-id> --write`; `gate-results/pre-agent2-toolsite-spec.json` must pass before Agent 2 can start.
 
 If any condition is missing, Codex must stop and output exactly:
@@ -150,6 +154,14 @@ If any condition is missing, Codex must stop and output exactly:
 ```txt
 Pre-Agent2 Toolsite SPEC Gate is not complete. Agent2 is blocked.
 ```
+
+If the SPEC exists but is too generic, Codex must stop and output exactly:
+
+```txt
+Toolsite SPEC is too generic. Agent2 is blocked.
+```
+
+The Pre-Agent2 Telegram loop must run this specificity check before it sends the SPEC confirmation card. If the generated SPEC is too generic, it must not ask the user to confirm that SPEC.
 
 ## Phase 2: Build brief
 

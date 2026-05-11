@@ -12,6 +12,8 @@ This SPEC is the required hard gate before Agent 2 starts. Agent 2 is blocked un
 
 UI Reference and UX Reference are required fields, but they do not require URLs. The user may explicitly write "no clear reference", "open exploration", or "follow tool-site best practices".
 
+The SPEC must be specific to these five elements. Do not leave the substantive sections as generic tool-site boilerplate. The current keyword, target domain, UI reference, UX reference, and extra constraints must appear in the relevant sections below.
+
 ## Lightweight Q&A Record
 
 - Question rounds:
@@ -22,21 +24,34 @@ Target question range is 12-20 rounds. Complex tools may use up to 30 rounds. If
 
 ## Tool Purpose
 
+<!-- Name the exact tool and its concrete user task. Do not replace this with generic "calculation/conversion/checking task" language. -->
 
 ## First Viewport UX
 
+<!-- Describe the actual first-screen tool experience for this keyword/domain and the approved UI reference. -->
 
 ## Input / Output Model
 
+<!-- Preserve the concrete input and output model from the Q&A, including key user answers. -->
 
 ## Result Experience
 
+<!-- List the concrete results/metrics the current tool must show. -->
 
 ## UI / UX Direction
 
+<!-- Include the approved UI reference and UX reference, with tool-specific interpretation. -->
 
 ## Non-goals
 
+<!-- List the exact excluded features from the Q&A and extra constraints. -->
+
+## Specificity Requirements
+
+- Preserve the current keyword, target domain, UI reference, UX reference, and extra constraints in substantive sections, not only in the five-element list.
+- Preserve the key Pre-Agent2 Q&A answers.
+- Do not use generic template language as a substitute for tool-specific behavior.
+- For `word counter`, include plain text input, real-time statistics, words, characters, sentences, paragraphs, reading time, speaking time, local browser processing, Stripe direction, `wordcounter.net`, and the confirmed non-goals: no login/account/database/AI rewrite/spelling check/grammar check/history.
 
 ## Technical Constraints
 

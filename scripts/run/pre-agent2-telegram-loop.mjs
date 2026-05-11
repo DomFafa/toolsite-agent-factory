@@ -4,6 +4,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import {
+  SPEC_GENERIC_BLOCK_MESSAGE,
+  validateToolsiteSpecSpecificity,
+} from '../qa/check-pre-agent2-toolsite-spec.mjs';
+
 export const DEFAULT_HERMES_INBOX =
   '/Users/dom/agents/hermes-toolsite-monitor/hermes-home/state/toolsite-inbox.jsonl';
 export const DEFAULT_HERMES_REMOTE_STATE =
@@ -704,7 +709,11 @@ function summaryForArea(answeredEvents, area) {
   return relevant.map((event) => `- ${decisionFor(event)}`).join('\n');
 }
 
-export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
+function isWordCounterIntake(intake) {
+  return /word\s*counter|wordcounter/i.test(`${intake.keyword || ''} ${intake.target_domain || ''}`);
+}
+
+function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
   const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
   return [
     `# Toolsite SPEC: ${siteId}`,
@@ -725,31 +734,160 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '',
     '## Tool Purpose',
     '',
+    `- Build ${intake.keyword} for ${intake.target_domain}: a browser-local word counter that lets users paste or type plain text and see real-time text statistics.`,
+    '- The core task is not content creation or AI rewriting. It is fast, trustworthy counting for writers, editors, students, SEO/content operators, and anyone checking text length.',
     summaryForArea(answeredEvents, 'Tool Purpose'),
+    '',
+    '## Target Users and Use Cases',
+    '',
+    '- Writers and editors checking draft length before publishing.',
+    '- Students or professionals checking text length for forms, essays, blurbs, or platform limits.',
+    '- SEO/content users who need quick text statistics without login, upload, or saving private text.',
     '',
     '## First Viewport UX',
     '',
+    `- The first viewport must be a clean Stripe-style tool surface inspired by ${intake.ui_reference}: a short title and description, a large text input, and core stat cards below or to the right.`,
+    '- On mobile, the text input comes first and the stat cards follow immediately below it. The tool must be usable before any SEO content.',
+    `- Preserve the user constraint: ${intake.extra_notes}.`,
     summaryForArea(answeredEvents, 'First Viewport UX'),
     '',
     '## Input / Output Model',
     '',
+    '- Input is plain text only. Users paste or type into one large text area.',
+    '- Output updates in real time without a submit button.',
+    '- Include lightweight actions: clear text, copy results, and insert example text.',
+    '- Text must be processed in the local browser only. Do not upload it and do not store user input.',
     summaryForArea(answeredEvents, 'Input / Output Model'),
     '',
     '## Result Experience',
     '',
+    '- The first viewport default metrics must include: words, characters, sentences, paragraphs, reading time, and speaking time.',
+    '- Core metric cards should be visible, scannable, and stable while users type or paste long text.',
+    '- Keyword density is not a first-screen core metric. It can only be considered later as an optional advanced module.',
     summaryForArea(answeredEvents, 'Result Experience'),
     '',
     '## UI / UX Direction',
     '',
+    `- UI reference: ${intake.ui_reference}. Use a clean, professional Stripe-style visual system with whitespace, subtle cards, clear hierarchy, and restrained color.`,
+    `- UX reference: ${intake.ux_reference}. Match the immediacy of wordcounter.net style live statistics, but do not copy its layout or visual design.`,
+    '- The experience should feel like a focused utility, not a marketing landing page or dashboard.',
     summaryForArea(answeredEvents, 'UI / UX Direction'),
     '',
     '## Non-goals',
     '',
+    '- Do not build login, accounts, database, backend, API keys, AI rewrite, spelling check, grammar check, cloud sync, history, leaderboard, or saved documents.',
+    '- Do not make keyword density a first-screen core feature.',
+    '- Do not require users to click submit before seeing results.',
+    summaryForArea(answeredEvents, 'Non-goals'),
+    '',
+    '## Privacy',
+    '',
+    '- User text must stay in the browser. The site must not upload, persist, log, sync, or send the pasted text to a server.',
+    '',
+    '## Technical Constraints',
+    '',
+    '- Static frontend only.',
+    '- No backend, database, login, account system, API key, AI service, server-side text processing, or analytics that captures user text.',
+    '- Counting logic must run locally in the browser and handle long text without overflow.',
+    '',
+    '## Page Boundary',
+    '',
+    '- Required pages: `/`, `/privacy`, `/terms`, `/sitemap.xml`, and `/robots.txt`.',
+    '- The `/` page is the word counter tool page. First-screen tool experience has priority over SEO content.',
+    '- Forbidden by default: `/login`, `/dashboard`, `/account`, `/pricing`, `/leaderboard`, `/api`, `/history`, and `/blog`.',
+    '',
+    '## Agent Workflow Boundary',
+    '',
+    'Agent2 must not start until this Toolsite SPEC has explicit user confirmation and the Pre-Agent2 SPEC gate passes.',
+    '',
+    '## SEO Baseline',
+    '',
+    `- Primary keyword is ${intake.keyword}. The title, description, H1, and page intent must stay aligned with a browser-local word counter.`,
+    '- SEO explanation and FAQ content may appear below the tool, but must not push the tool out of the first viewport.',
+    '',
+    '## Success Criteria Baseline',
+    '',
+    '- Users understand within 3 seconds that they can paste or type text and immediately see text statistics.',
+    '- Pasting text immediately updates words, characters, sentences, paragraphs, reading time, and speaking time.',
+    '- Mobile is usable, long text does not overflow, and the first viewport remains a working tool rather than SEO filler.',
+    '',
+    '## User Confirmation',
+    '',
+    '- [ ] User confirmed this Toolsite SPEC before Agent2 starts.',
+    '- Confirmation text:',
+    '- Confirmed by:',
+    '- Confirmed at:',
+    '',
+  ].join('\n');
+}
+
+export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
+  if (isWordCounterIntake(intake)) {
+    return renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec });
+  }
+
+  const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
+  return [
+    `# Toolsite SPEC: ${siteId}`,
+    '',
+    '## Required Inputs',
+    '',
+    `- Keyword: ${intake.keyword}`,
+    `- Target Domain: ${intake.target_domain}`,
+    `- UI Reference: ${intake.ui_reference}`,
+    `- UX Reference: ${intake.ux_reference}`,
+    `- Extra Ideas / Constraints / Mimic Points: ${intake.extra_notes}`,
+    '',
+    '## Lightweight Q&A Record',
+    '',
+    `- Question rounds: ${answeredEvents.length}`,
+    '- Complex tool: no',
+    ...(early ? ['- 六个用户决策区已清楚，用户同意提前输出 SPEC。'] : []),
+    '',
+    '## Tool Purpose',
+    '',
+    `- Build ${intake.keyword} for ${intake.target_domain}. The tool purpose must stay specific to this keyword and not become a generic utility template.`,
+    `- Preserve the user-provided constraint and mimic point: ${intake.extra_notes}.`,
+    summaryForArea(answeredEvents, 'Tool Purpose'),
+    '',
+    '## Target Users and Use Cases',
+    '',
+    `- Target users are visitors who search for ${intake.keyword} and need to complete that specific tool task on ${intake.target_domain}.`,
+    `- The accepted user constraints are: ${intake.extra_notes}.`,
+    '',
+    '## First Viewport UX',
+    '',
+    `- The first viewport must be specific to ${intake.keyword}; it cannot be a generic calculator/checker shell.`,
+    `- Use ${intake.ui_reference} as the visual reference and keep ${intake.extra_notes} visible in the first-screen product behavior.`,
+    summaryForArea(answeredEvents, 'First Viewport UX'),
+    '',
+    '## Input / Output Model',
+    '',
+    `- Inputs and outputs must match the concrete ${intake.keyword} workflow for ${intake.target_domain}.`,
+    `- The output model must reflect the user-provided UX reference ${intake.ux_reference}, without copying it blindly.`,
+    summaryForArea(answeredEvents, 'Input / Output Model'),
+    '',
+    '## Result Experience',
+    '',
+    `- Results must show the concrete output users expect from ${intake.keyword}; generic "core result" language is not enough.`,
+    summaryForArea(answeredEvents, 'Result Experience'),
+    '',
+    '## UI / UX Direction',
+    '',
+    `- UI reference: ${intake.ui_reference}.`,
+    `- UX reference: ${intake.ux_reference}.`,
+    `- Apply those references to ${intake.keyword}, while respecting: ${intake.extra_notes}.`,
+    summaryForArea(answeredEvents, 'UI / UX Direction'),
+    '',
+    '## Non-goals',
+    '',
+    `- Do not add features, pages, or workflows outside the confirmed ${intake.keyword} scope for ${intake.target_domain}.`,
+    `- Keep the first version within the user constraints: ${intake.extra_notes}.`,
     summaryForArea(answeredEvents, 'Non-goals'),
     '',
     '## Technical Constraints',
     '',
-    'Use the repository standard static frontend tool constraints unless a later approved brief changes them. Do not add backend, database, login, or API key requirements by default.',
+    `Use static frontend constraints for ${intake.keyword} unless a later approved brief changes them. Do not add backend, database, login, or API key requirements by default.`,
     '',
     '## Page Boundary',
     '',
@@ -765,7 +903,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '',
     '## Success Criteria Baseline',
     '',
-    'A visitor can open the page, understand the tool, complete the core task, and trust the result without login or unnecessary setup.',
+    `A visitor can open ${intake.target_domain}, understand the ${intake.keyword} task, complete it, and trust the result without login or unnecessary setup.`,
     '',
     '## User Confirmation',
     '',
@@ -913,15 +1051,27 @@ async function ensureSpecAndConfirmation({
   intake,
   events,
   allowEarlySpec,
+  renderSpec = renderToolsiteSpec,
   now = nowIso,
 }) {
   const answeredEvents = resolvedQuestionEvents(events);
-  const specText = renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec });
+  const specText = renderSpec({ siteId, intake, answeredEvents, allowEarlySpec });
   await writeFile(
     path.join(runDir, 'toolsite-spec.md'),
     specText,
     'utf8',
   );
+  const specificity = validateToolsiteSpecSpecificity(specText, { requireFiveElements: true });
+  if (!specificity.passed) {
+    return {
+      blocked: true,
+      id: SPEC_CONFIRMATION_ID,
+      status: 'blocked',
+      reason: 'spec-too-generic',
+      message: SPEC_GENERIC_BLOCK_MESSAGE,
+      failures: specificity.failures,
+    };
+  }
 
   const latest = latestReviewStates(events);
   if (!latest.some((event) => event.id === SPEC_CONFIRMATION_ID)) {
@@ -1028,6 +1178,7 @@ export async function runLoopIteration({
   telegramEnvPath = DEFAULT_TELEGRAM_ENV,
   maxQuestions = DEFAULT_MAX_QUESTIONS,
   allowEarlySpec = false,
+  renderSpec = renderToolsiteSpec,
   sender,
   now = nowIso,
 }) {
@@ -1052,6 +1203,7 @@ export async function runLoopIteration({
         intake,
         events: reviewEvents,
         allowEarlySpec,
+        renderSpec,
         now,
       });
     } else {
@@ -1063,6 +1215,7 @@ export async function runLoopIteration({
           intake,
           events: reviewEvents,
           allowEarlySpec,
+          renderSpec,
           now,
         });
       } else {
@@ -1081,6 +1234,18 @@ export async function runLoopIteration({
     state.status = 'stopped';
     await writeLoopState(statePath, state, now);
     return { action: 'stopped', reason: 'no-open-review' };
+  }
+
+  if (openReview.blocked) {
+    state.status = 'blocked_spec_too_generic';
+    await writeLoopState(statePath, state, now);
+    return {
+      action: 'stopped',
+      reason: openReview.reason,
+      message: SPEC_GENERIC_BLOCK_MESSAGE,
+      failures: openReview.failures || [],
+      review: openReview,
+    };
   }
 
   await sendReviewIfNeeded({ review: openReview, state, statePath, sender: send, now });
@@ -1158,6 +1323,7 @@ export async function runPreAgent2TelegramLoop({
   pollMs = DEFAULT_POLL_MS,
   maxQuestions = DEFAULT_MAX_QUESTIONS,
   allowEarlySpec = false,
+  renderSpec = renderToolsiteSpec,
   sender,
   maxIterations = Infinity,
   now = nowIso,
@@ -1184,6 +1350,7 @@ export async function runPreAgent2TelegramLoop({
       telegramEnvPath,
       maxQuestions: normalizedMaxQuestions,
       allowEarlySpec,
+      renderSpec,
       sender,
       now,
     });
@@ -1229,7 +1396,11 @@ async function main() {
     return;
   }
 
-  console.log(`Pre-Agent2 Telegram loop stopped: ${result.lastResult?.reason || result.code}`);
+  if (result.lastResult?.message) {
+    console.log(result.lastResult.message);
+  } else {
+    console.log(`Pre-Agent2 Telegram loop stopped: ${result.lastResult?.reason || result.code}`);
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
