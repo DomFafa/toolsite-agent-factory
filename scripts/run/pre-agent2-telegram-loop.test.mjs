@@ -152,7 +152,7 @@ function wordCounterInputMarkdown() {
     '- Target Domain / 目标域名: wordcounter-cn-card-test.local',
     '- UI Reference / UI 参考: Stripe',
     '- UX Reference / UX 参考: wordcounter.net',
-    '- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点: 第一屏必须直接可用；输入文本后实时展示 words / characters / sentences / paragraphs / reading time / speaking time；浏览器本地处理；不要登录；不要后端；不要数据库；不要 AI 改写。',
+    '- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点: 第一屏必须直接可用；输入文本后实时展示 words / characters / sentences / paragraphs / reading time / speaking time；浏览器本地处理；不要登录；不要后端；不要数据库；不要 AI 改写；不要历史保存；页面底部可以有 /privacy /terms /sitemap.xml /robots.txt。',
     '',
   ].join('\n');
 }
@@ -164,12 +164,17 @@ function wordCounterIntake() {
     ui_reference: 'Stripe',
     ux_reference: 'wordcounter.net',
     extra_notes:
-      '第一屏必须直接可用；输入文本后实时展示 words / characters / sentences / paragraphs / reading time / speaking time；浏览器本地处理；不要登录；不要后端；不要数据库；不要 AI 改写。',
+      '第一屏必须直接可用；输入文本后实时展示 words / characters / sentences / paragraphs / reading time / speaking time；浏览器本地处理；不要登录；不要后端；不要数据库；不要 AI 改写；不要历史保存；页面底部可以有 /privacy /terms /sitemap.xml /robots.txt。',
   };
 }
 
-function answeredQuestionEvents({ siteId = 'wordcounter-cn-card-test', runDir = 'runs/wordcounter-cn-card-test' } = {}) {
+function answeredQuestionEvents({
+  siteId = 'wordcounter-cn-card-test',
+  runDir = 'runs/wordcounter-cn-card-test',
+  answers = {},
+} = {}) {
   return QUESTION_BANK.map((question, index) => {
+    const answer = answers[question.number] || '1';
     const open = buildQuestionEvent({
       question,
       siteId,
@@ -178,14 +183,31 @@ function answeredQuestionEvents({ siteId = 'wordcounter-cn-card-test', runDir = 
     });
     return buildResolvedQuestionEvent({
       openReview: open,
-      inboxMessage: inboxMessage('1', {
+      inboxMessage: inboxMessage(answer, {
         message_id: `answered-${index}`,
         created_at: `2026-05-11T10:${String(index).padStart(2, '0')}:30.000Z`,
       }),
-      validation: validateReply('1', open),
+      validation: validateReply(answer, open),
       resolvedAt: `2026-05-11T10:${String(index).padStart(2, '0')}:40.000Z`,
     });
   });
+}
+
+function wordCounterQualityAnswers() {
+  return {
+    1: '1',
+    2: '1',
+    3: '单一文本输入框，用户粘贴或输入文本后实时输出 words、characters、sentences、paragraphs、reading time、speaking time。',
+    4: 'word counter 的结果区必须突出 words 和 characters，并同时展示 sentences、paragraphs、reading time、speaking time，结果要实时变化且方便复制参考。',
+    5: '2',
+    6: '4',
+    7: '3',
+    8: '1',
+    9: '1',
+    10: '1',
+    11: '3',
+    12: '1',
+  };
 }
 
 function markdownSection(text, heading) {
@@ -198,6 +220,30 @@ function markdownSection(text, heading) {
     body.push(lines[index]);
   }
   return body.join('\n').trim();
+}
+
+function reviewCardSection(text, heading) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = String(text || '').match(new RegExp(`${escaped}\\n([\\s\\S]*?)(?=\\n\\d+\\. |\\n附：|$)`));
+  return match?.[1]?.trim() || '';
+}
+
+function duplicateBulletLines(text) {
+  const seen = new Set();
+  const duplicates = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!/^\s*-\s+/.test(line)) continue;
+    const normalized = line
+      .replace(/^\s*-\s+/, '')
+      .replace(/[。.!！?？]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    if (!normalized) continue;
+    if (seen.has(normalized)) duplicates.push(line.trim());
+    seen.add(normalized);
+  }
+  return duplicates;
 }
 
 function genericWordCounterSpec() {
@@ -676,6 +722,76 @@ test('word counter generated SPEC passes specificity before confirmation card', 
   assert.equal(confirmation.blocks, 'agent-2');
   assertChineseFirstSpecCard(confirmation.message);
   assertChineseFirstSpecCard(sent.at(-1));
+});
+
+test('full word counter SPEC quality contract passes without manual Telegram dry run', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
+  await writeJsonl(fixture.eventPath, answeredQuestionEvents({
+    siteId: 'sample-site',
+    runDir: fixture.runDir,
+    answers: wordCounterQualityAnswers(),
+  }));
+
+  const result = await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    pollMs: 0,
+    maxIterations: 1,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:20:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const confirmation = events.find((event) => event.id === 'pre-agent2-spec-confirmation');
+  const spec = await readFile(fixture.specPath, 'utf8');
+  const message = confirmation.message;
+  const nonGoals = markdownSection(spec, 'Non-goals');
+  const pageBoundary = markdownSection(spec, 'Page Boundary');
+  const seoBaseline = markdownSection(spec, 'SEO Baseline');
+  const resultExperience = markdownSection(spec, 'Result Experience');
+  const cardResultExperience = reviewCardSection(message, '核心结果展示');
+  const forbiddenConflictPatterns = [
+    /后续高级功能可以需要上传或 API/,
+    /可以需要上传或 API/,
+    /backend later/i,
+    /database later/i,
+    /API advanced features/i,
+  ];
+  const forbiddenCopyPatterns = [
+    /任何搜索内容/,
+    /。。/,
+    /、and speaking time/i,
+    /and speaking time/i,
+  ];
+
+  assert.notEqual(result.lastResult.reason, 'spec-too-generic');
+  assert.equal(await exists(fixture.specPath), true);
+  assert.equal(confirmation.status, 'open');
+  assert.equal(confirmation.blocks, 'agent-2');
+  assertChineseFirstSpecCard(message);
+  assertChineseFirstSpecCard(sent.at(-1));
+  for (const pattern of forbiddenConflictPatterns) {
+    assert.doesNotMatch(spec, pattern);
+    assert.doesNotMatch(message, pattern);
+  }
+  assert.doesNotMatch(nonGoals, /工具下方提供 FAQ 和使用说明/);
+  assert.match(`${pageBoundary}\n${seoBaseline}`, /FAQ/);
+  assert.match(`${pageBoundary}\n${seoBaseline}`, /使用说明/);
+  for (const pattern of forbiddenCopyPatterns) {
+    assert.doesNotMatch(message, pattern);
+  }
+  for (const term of ['word counter', 'words', 'characters', 'sentences', 'paragraphs', 'reading time', 'speaking time']) {
+    assert.match(resultExperience, new RegExp(term));
+    assert.match(cardResultExperience, new RegExp(term));
+  }
+  assert.deepEqual(duplicateBulletLines(message), []);
+  assert.equal(await exists(path.join(fixture.runDir, 'agent-2-output', 'site-brief.md')), false);
+  assert.equal(await exists(path.join(fixture.runDir, 'site', 'package.json')), false);
 });
 
 test('generic SPEC is not sent for user confirmation', async () => {

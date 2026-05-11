@@ -703,10 +703,105 @@ async function writeQaRecord({ runDir, intake, events }) {
   await writeFile(path.join(runDir, 'pre-agent2-qa.md'), renderQaRecord({ intake, answeredEvents }), 'utf8');
 }
 
-function summaryForArea(answeredEvents, area) {
-  const relevant = answeredEvents.filter((event) => event.decision_area === area);
+const SEO_BOUNDARY_QUESTION_ID = 'pre-agent2-q11-seo-boundary';
+
+function hasStrictLocalConstraint({ intake, answeredEvents }) {
+  const source = [
+    intake.extra_notes,
+    ...answeredEvents.map((event) => event.resolution_text),
+    ...answeredEvents.map((event) => decisionFor(event)),
+  ].join('\n');
+  return /不要\s*(?:后端|数据库|登录|API|AI\s*改写)|浏览器本地处理|本地浏览器|不上传|不保存(?:历史|用户输入)|no\s+(?:backend|database|login|api)|local\s+browser/i.test(source);
+}
+
+function explicitlyAllowsFutureUploadApi({ intake, answeredEvents }) {
+  const source = [
+    intake.extra_notes,
+    ...answeredEvents.map((event) => event.resolution_text),
+    ...answeredEvents.map((event) => decisionFor(event)),
+  ].join('\n');
+  return !hasStrictLocalConstraint({ intake, answeredEvents }) &&
+    /(?:未来|后续|advanced|later)[^\n。]*(?:上传|upload|API)|(?:上传|upload|API)[^\n。]*(?:未来|后续|advanced|later)/i.test(source);
+}
+
+function isFutureUploadApiLine(value) {
+  return /后续高级功能可以需要上传或\s*API|可以需要上传或\s*API|API advanced features|backend later|database later/i.test(value);
+}
+
+function cleanSpecText(value) {
+  return String(value || '')
+    .replace(/任何搜索内容/g, 'SEO 内容')
+    .replace(/,\s+and\s+speaking time/gi, ', speaking time')
+    .replace(/、\s*and\s+speaking time/gi, '、speaking time')
+    .replace(/。。+/g, '。')
+    .replace(/\.\.+/g, '.')
+    .replace(/\s+$/g, '');
+}
+
+function bulletKey(line) {
+  return cleanSpecText(line)
+    .replace(/^[-*]\s+/, '')
+    .replace(/[。.!！?？]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function sanitizeDecision(decision, context) {
+  const value = cleanSpecText(decision);
+  if (!value) return '';
+  if (isFutureUploadApiLine(value) && !explicitlyAllowsFutureUploadApi(context)) return '';
+  return value;
+}
+
+function summaryForArea(answeredEvents, area, { excludeIds = [], context = {} } = {}) {
+  const excluded = new Set(excludeIds);
+  const relevant = answeredEvents.filter((event) => event.decision_area === area && !excluded.has(event.id));
   if (relevant.length === 0) return 'Use the baseline toolsite defaults for this area.';
-  return relevant.map((event) => `- ${decisionFor(event)}`).join('\n');
+  return relevant
+    .map((event) => sanitizeDecision(decisionFor(event), context))
+    .filter(Boolean)
+    .map((decision) => `- ${decision}`)
+    .join('\n') || 'Use the baseline toolsite defaults for this area.';
+}
+
+function seoBoundarySummary(answeredEvents, context) {
+  return answeredEvents
+    .filter((event) => event.id === SEO_BOUNDARY_QUESTION_ID)
+    .map((event) => sanitizeDecision(decisionFor(event), context))
+    .filter(Boolean)
+    .map((decision) => `- ${decision}`)
+    .join('\n');
+}
+
+function sanitizeSpecDocument(lines, context = {}) {
+  const output = [];
+  let currentSection = '';
+  let sectionBulletKeys = new Set();
+
+  for (const rawLine of lines) {
+    let line = cleanSpecText(rawLine);
+    const heading = line.match(/^##\s+(.+?)\s*$/);
+    if (heading) {
+      currentSection = heading[1];
+      sectionBulletKeys = new Set();
+      output.push(line);
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      const content = line.replace(/^[-*]\s+/, '').trim();
+      if (isFutureUploadApiLine(content) && !explicitlyAllowsFutureUploadApi(context)) continue;
+      if (currentSection === 'Non-goals' && /工具下方提供\s*FAQ\s*和使用说明/i.test(content)) continue;
+      const key = bulletKey(line);
+      if (key && sectionBulletKeys.has(key)) continue;
+      if (key) sectionBulletKeys.add(key);
+    }
+
+    output.push(line);
+  }
+
+  return output.join('\n');
 }
 
 const KNOWN_RESULT_TERMS = [
@@ -754,7 +849,8 @@ function isWordCounterIntake(intake) {
 
 function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
   const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
-  return [
+  const context = { intake, answeredEvents };
+  return sanitizeSpecDocument([
     `# Toolsite SPEC: ${siteId}`,
     '',
     '## Required Inputs',
@@ -775,7 +871,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     `- Build ${intake.keyword} for ${intake.target_domain}: a browser-local word counter that lets users paste or type plain text and see real-time text statistics.`,
     '- The core task is not content creation or AI rewriting. It is fast, trustworthy counting for writers, editors, students, SEO/content operators, and anyone checking text length.',
-    summaryForArea(answeredEvents, 'Tool Purpose'),
+    summaryForArea(answeredEvents, 'Tool Purpose', { context }),
     '',
     '## Target Users and Use Cases',
     '',
@@ -788,7 +884,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     `- The first viewport must be a clean Stripe-style tool surface inspired by ${intake.ui_reference}: a short title and description, a large text input, and core stat cards below or to the right.`,
     '- On mobile, the text input comes first and the stat cards follow immediately below it. The tool must be usable before any SEO content.',
     `- Preserve the user constraint: ${intake.extra_notes}.`,
-    summaryForArea(answeredEvents, 'First Viewport UX'),
+    summaryForArea(answeredEvents, 'First Viewport UX', { context }),
     '',
     '## Input / Output Model',
     '',
@@ -796,29 +892,32 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '- Output updates in real time without a submit button.',
     '- Include lightweight actions: clear text, copy results, and insert example text.',
     '- Text must be processed in the local browser only. Do not upload it and do not store user input.',
-    summaryForArea(answeredEvents, 'Input / Output Model'),
+    summaryForArea(answeredEvents, 'Input / Output Model', { context }),
     '',
     '## Result Experience',
     '',
     renderResultExperienceContext({ intake, answeredEvents }),
-    '- The first viewport default metrics must include: words, characters, sentences, paragraphs, reading time, and speaking time.',
+    '- The first viewport default metrics must include: words, characters, sentences, paragraphs, reading time, speaking time.',
     '- Core metric cards should be visible, scannable, and stable while users type or paste long text.',
     '- Keyword density is not a first-screen core metric. It can only be considered later as an optional advanced module.',
-    summaryForArea(answeredEvents, 'Result Experience'),
+    summaryForArea(answeredEvents, 'Result Experience', { context }),
     '',
     '## UI / UX Direction',
     '',
     `- UI reference: ${intake.ui_reference}. Use a clean, professional Stripe-style visual system with whitespace, subtle cards, clear hierarchy, and restrained color.`,
     `- UX reference: ${intake.ux_reference}. Match the immediacy of wordcounter.net style live statistics, but do not copy its layout or visual design.`,
     '- The experience should feel like a focused utility, not a marketing landing page or dashboard.',
-    summaryForArea(answeredEvents, 'UI / UX Direction'),
+    summaryForArea(answeredEvents, 'UI / UX Direction', { context }),
     '',
     '## Non-goals',
     '',
     '- Do not build login, accounts, database, backend, API keys, AI rewrite, spelling check, grammar check, cloud sync, history, leaderboard, or saved documents.',
     '- Do not make keyword density a first-screen core feature.',
     '- Do not require users to click submit before seeing results.',
-    summaryForArea(answeredEvents, 'Non-goals'),
+    summaryForArea(answeredEvents, 'Non-goals', {
+      context,
+      excludeIds: [SEO_BOUNDARY_QUESTION_ID],
+    }),
     '',
     '## Privacy',
     '',
@@ -834,6 +933,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     '- Required pages: `/`, `/privacy`, `/terms`, `/sitemap.xml`, and `/robots.txt`.',
     '- The `/` page is the word counter tool page. First-screen tool experience has priority over SEO content.',
+    seoBoundarySummary(answeredEvents, context),
     '- Forbidden by default: `/login`, `/dashboard`, `/account`, `/pricing`, `/leaderboard`, `/api`, `/history`, and `/blog`.',
     '',
     '## Agent Workflow Boundary',
@@ -844,11 +944,12 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     `- Primary keyword is ${intake.keyword}. The title, description, H1, and page intent must stay aligned with a browser-local word counter.`,
     '- SEO explanation and FAQ content may appear below the tool, but must not push the tool out of the first viewport.',
+    seoBoundarySummary(answeredEvents, context),
     '',
     '## Success Criteria Baseline',
     '',
     '- Users understand within 3 seconds that they can paste or type text and immediately see text statistics.',
-    '- Pasting text immediately updates words, characters, sentences, paragraphs, reading time, and speaking time.',
+    '- Pasting text immediately updates words, characters, sentences, paragraphs, reading time, speaking time.',
     '- Mobile is usable, long text does not overflow, and the first viewport remains a working tool rather than SEO filler.',
     '',
     '## User Confirmation',
@@ -858,7 +959,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '- Confirmed by:',
     '- Confirmed at:',
     '',
-  ].join('\n');
+  ], context);
 }
 
 export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
@@ -867,7 +968,8 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
   }
 
   const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
-  return [
+  const context = { intake, answeredEvents };
+  return sanitizeSpecDocument([
     `# Toolsite SPEC: ${siteId}`,
     '',
     '## Required Inputs',
@@ -888,7 +990,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '',
     `- Build ${intake.keyword} for ${intake.target_domain}. The tool purpose must stay specific to this keyword and not become a generic utility template.`,
     `- Preserve the user-provided constraint and mimic point: ${intake.extra_notes}.`,
-    summaryForArea(answeredEvents, 'Tool Purpose'),
+    summaryForArea(answeredEvents, 'Tool Purpose', { context }),
     '',
     '## Target Users and Use Cases',
     '',
@@ -899,31 +1001,34 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '',
     `- The first viewport must be specific to ${intake.keyword}; it cannot be a generic calculator/checker shell.`,
     `- Use ${intake.ui_reference} as the visual reference and keep ${intake.extra_notes} visible in the first-screen product behavior.`,
-    summaryForArea(answeredEvents, 'First Viewport UX'),
+    summaryForArea(answeredEvents, 'First Viewport UX', { context }),
     '',
     '## Input / Output Model',
     '',
     `- Inputs and outputs must match the concrete ${intake.keyword} workflow for ${intake.target_domain}.`,
     `- The output model must reflect the user-provided UX reference ${intake.ux_reference}, without copying it blindly.`,
-    summaryForArea(answeredEvents, 'Input / Output Model'),
+    summaryForArea(answeredEvents, 'Input / Output Model', { context }),
     '',
     '## Result Experience',
     '',
     renderResultExperienceContext({ intake, answeredEvents }),
-    summaryForArea(answeredEvents, 'Result Experience'),
+    summaryForArea(answeredEvents, 'Result Experience', { context }),
     '',
     '## UI / UX Direction',
     '',
     `- UI reference: ${intake.ui_reference}.`,
     `- UX reference: ${intake.ux_reference}.`,
     `- Apply those references to ${intake.keyword}, while respecting: ${intake.extra_notes}.`,
-    summaryForArea(answeredEvents, 'UI / UX Direction'),
+    summaryForArea(answeredEvents, 'UI / UX Direction', { context }),
     '',
     '## Non-goals',
     '',
     `- Do not add features, pages, or workflows outside the confirmed ${intake.keyword} scope for ${intake.target_domain}.`,
     `- Keep the first version within the user constraints: ${intake.extra_notes}.`,
-    summaryForArea(answeredEvents, 'Non-goals'),
+    summaryForArea(answeredEvents, 'Non-goals', {
+      context,
+      excludeIds: [SEO_BOUNDARY_QUESTION_ID],
+    }),
     '',
     '## Technical Constraints',
     '',
@@ -932,6 +1037,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '## Page Boundary',
     '',
     'Build one focused tool page for the target domain. The first viewport must prioritize the usable tool experience.',
+    seoBoundarySummary(answeredEvents, context),
     '',
     '## Agent Workflow Boundary',
     '',
@@ -940,6 +1046,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '## SEO Baseline',
     '',
     'Use the keyword and target domain from Required Inputs. Keep SEO content below or around the tool without blocking first-viewport tool usage.',
+    seoBoundarySummary(answeredEvents, context),
     '',
     '## Success Criteria Baseline',
     '',
@@ -952,7 +1059,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '- Confirmed by:',
     '- Confirmed at:',
     '',
-  ].join('\n');
+  ], context);
 }
 
 function cleanedReviewLine(value) {
@@ -960,7 +1067,7 @@ function cleanedReviewLine(value) {
 }
 
 function withBullet(value) {
-  return value ? `- ${value}` : '';
+  return value ? `- ${cleanSpecText(value)}` : '';
 }
 
 function hasChinese(value) {
@@ -1172,7 +1279,7 @@ function translateEnglishReviewLine(line, label) {
   match = raw.match(/^A visitor can open (.+?), understand the (.+?) task, complete it, and trust the result without login or unnecessary setup\.$/i);
   if (match) return withBullet(`访问者打开 ${match[1]} 后，能理解并完成 ${match[2]} 任务，且无需登录或额外设置即可信任结果。`);
 
-  if (hasChinese(raw)) return line;
+  if (hasChinese(raw)) return cleanSpecText(line);
 
   const terms = [...new Set(allowedEnglishTerms(raw))];
   const fallback = terms.length > 0
