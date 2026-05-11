@@ -54,6 +54,7 @@ function parseArgs(argv) {
     chatId: '',
     send: false,
     write: false,
+    force: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -71,6 +72,8 @@ function parseArgs(argv) {
       args.send = true;
     } else if (arg === '--write') {
       args.write = true;
+    } else if (arg === '--force') {
+      args.force = true;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
     } else {
@@ -207,6 +210,20 @@ function buildOpenReviewEvent({ runDir, chatId, messageId, sentAt = nowIso(), cr
   };
 }
 
+function buildSupersededReviewEvent({ existingOpen, supersededAt = nowIso() }) {
+  return {
+    ...existingOpen,
+    status: 'superseded',
+    blocking: false,
+    created_at: supersededAt,
+    created_by: 'codex',
+    superseded_at: supersededAt,
+    superseded_by: 'codex',
+    superseded_reason: 'Replaced by a forced Agent2.5 option board resend.',
+    superseded_review_created_at: existingOpen.created_at || '',
+  };
+}
+
 async function realSendPhoto({ token, chatId, photoPath, caption }) {
   const bytes = await readFile(photoPath);
   const form = new FormData();
@@ -234,6 +251,7 @@ export async function sendAgent25OptionReview({
   chatId = '',
   send = false,
   write = false,
+  force = false,
   sendPhoto = realSendPhoto,
   now = nowIso,
 } = {}) {
@@ -265,7 +283,7 @@ export async function sendAgent25OptionReview({
   const eventsPath = path.join(absoluteRunDir, HUMAN_REVIEW_EVENTS_PATH);
   const events = parseJsonl(await readOptional(eventsPath));
   const existingOpen = currentOpenOptionSelection(events);
-  if (existingOpen) {
+  if (existingOpen && !force) {
     return {
       ok: true,
       code: 'already-open',
@@ -288,6 +306,13 @@ export async function sendAgent25OptionReview({
       wrote: false,
       image,
       caption: OPTION_REVIEW_CAPTION,
+      existingReview: existingOpen
+        ? {
+            id: existingOpen.id,
+            created_at: existingOpen.created_at,
+            would_supersede_with_force: true,
+          }
+        : null,
     };
   }
 
@@ -312,8 +337,12 @@ export async function sendAgent25OptionReview({
     sentAt,
     createdAt: sentAt,
   });
+  const supersededEvent = existingOpen && force
+    ? buildSupersededReviewEvent({ existingOpen, supersededAt: sentAt })
+    : null;
 
   if (write) {
+    if (supersededEvent) await appendFile(eventsPath, `${JSON.stringify(supersededEvent)}\n`, 'utf8');
     await appendFile(eventsPath, `${JSON.stringify(event)}\n`, 'utf8');
   }
 
@@ -327,6 +356,8 @@ export async function sendAgent25OptionReview({
     wrote: write,
     image,
     telegram_delivery: event.telegram_delivery,
+    superseded: Boolean(supersededEvent),
+    superseded_event: write ? supersededEvent : null,
     event: write ? event : null,
   };
 }
@@ -342,6 +373,7 @@ function usage() {
     '  --chat-id <id>',
     '  --send',
     '  --write',
+    '  --force',
   ].join('\n');
 }
 

@@ -190,6 +190,83 @@ test('does not repeat send when current open agent25-option-selection exists', a
   assert.equal(after, before);
 });
 
+test('--force supersedes existing open review and writes a new open review', async () => {
+  const { runDir, telegramEnvPath } = await makeRun();
+  await writeOptionsBoard(runDir);
+  await writeFile(
+    path.join(runDir, 'human-review-events.jsonl'),
+    `${JSON.stringify({
+      schema_version: 'human-review-event.v1',
+      type: 'human_review',
+      review_type: 'agent25_option_selection',
+      id: 'agent25-option-selection',
+      site_id: 'sample-site',
+      run_dir: runDir,
+      phase: 'agent-2.5',
+      status: 'open',
+      blocking: true,
+      blocks: 'agent-3',
+      title: '请选择 UI 方案',
+      message: 'old board',
+      expected_reply: 'old reply',
+      attachments: [
+        {
+          label: 'Options board',
+          path: 'agent-2-5-output/chat-delivery/options-board.png',
+          kind: 'image',
+          required: true,
+        },
+      ],
+      telegram_delivery: {
+        chat_id: '12345',
+        message_id: 'old-message',
+        sent_at: '2026-05-11T00:00:00.000Z',
+      },
+      created_at: '2026-05-11T00:00:00.000Z',
+      created_by: 'codex',
+    })}\n`,
+  );
+  const calls = [];
+
+  const result = await sendAgent25OptionReview({
+    runDir,
+    telegramEnvPath,
+    send: true,
+    write: true,
+    force: true,
+    sendPhoto: fakeSender(calls, { chat_id: '12345', message_id: '999' }),
+    now: () => '2026-05-11T00:10:00.000Z',
+  });
+
+  const events = await readEvents(runDir);
+  assert.equal(result.ok, true);
+  assert.equal(result.code, 'sent-and-written');
+  assert.equal(result.superseded, true);
+  assert.equal(calls.length, 1);
+  assert.equal(events.length, 3);
+
+  const [original, superseded, replacement] = events;
+  assert.equal(original.status, 'open');
+  assert.equal(superseded.id, 'agent25-option-selection');
+  assert.equal(superseded.status, 'superseded');
+  assert.equal(superseded.blocking, false);
+  assert.equal(superseded.superseded_at, '2026-05-11T00:10:00.000Z');
+  assert.equal(superseded.superseded_review_created_at, '2026-05-11T00:00:00.000Z');
+  assert.equal(replacement.id, 'agent25-option-selection');
+  assert.equal(replacement.status, 'open');
+  assert.equal(replacement.blocking, true);
+  assert.equal(replacement.telegram_delivery.message_id, '999');
+  assert.equal(replacement.telegram_delivery.sent_at, '2026-05-11T00:10:00.000Z');
+  assert.deepEqual(replacement.attachments, [
+    {
+      label: 'Options board',
+      path: 'agent-2-5-output/chat-delivery/options-board.png',
+      kind: 'image',
+      required: true,
+    },
+  ]);
+});
+
 test('does not enter Agent3 or create site source', async () => {
   const { runDir, telegramEnvPath } = await makeRun();
   await writeOptionsBoard(runDir);
