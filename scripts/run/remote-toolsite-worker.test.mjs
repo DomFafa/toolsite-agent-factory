@@ -447,7 +447,7 @@ test('existing SPEC change request open review triggers targeted question genera
   assert.equal(statusMessages.some((text) => text.includes('401K Calculator 第一版计算复杂度选哪一档')), true);
 });
 
-test('worker consumes targeted Pre-Agent2 answer and sends fresh SPEC confirmation', async () => {
+test('worker consumes targeted Pre-Agent2 answer and sends next dynamic question when gaps remain', async () => {
   const fixture = await makeFixture();
   const runDir = await createActive401kRun(fixture.root);
   await writeFile(
@@ -521,8 +521,10 @@ test('worker consumes targeted Pre-Agent2 answer and sends fresh SPEC confirmati
 
   assert.equal(result.code, ACTIVE_HUMAN_REVIEW_PROCESSED);
   assert.equal(events.some((event) => event.id === 'pre-agent2-dynamic-401k-calculator-complexity' && event.status === 'resolved' && event.selected_option === '2'), true);
-  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'open'), true);
-  assert.equal(statusMessages.some((text) => text.includes('【Toolsite SPEC 审核卡】')), true);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-dynamic-401k-calculator-default-assumptions' && event.status === 'open'), true);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'open'), false);
+  assert.equal(statusMessages.some((text) => text.includes('401K Calculator 的默认假设要怎么设置')), true);
+  assert.equal(statusMessages.some((text) => text.includes('【Toolsite SPEC 审核卡】')), false);
   assert.equal(await exists(path.join(runDir, 'agent-2-output/site-brief.md')), false);
 });
 

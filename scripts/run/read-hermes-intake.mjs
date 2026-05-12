@@ -225,7 +225,7 @@ export function hasProductionStartIntent(text) {
 
 export function intakeRequiresAttachment(text) {
   const body = String(text || '');
-  if (/参考我发的.*(?:图|图片|插画)|用我发的.*(?:图|图片|插画)|黑白人物插画/.test(body)) {
+  if (/参考我发的.*(?:图|图片|插画)|用我发的.*(?:图|图片|插画)|黑白人物插画|附图|截图|插画参考/.test(body)) {
     return true;
   }
   return [
@@ -234,6 +234,9 @@ export function intakeRequiresAttachment(text) {
     '参考我发的图',
     '参考我发的图片',
     '参考我发的插画',
+    '附图',
+    '截图',
+    '插画参考',
     '按附件',
     '按照附件',
     '见附件',

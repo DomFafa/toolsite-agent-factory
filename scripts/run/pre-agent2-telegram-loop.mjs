@@ -671,6 +671,7 @@ export function shouldGenerateSpec({
   if (intake) {
     const plan = planPreAgent2Questions({ intake, attachments, answeredEvents });
     if (plan.information_sufficient) return true;
+    return answeredEvents.length >= normalizeMaxQuestions(maxQuestions);
   }
   const answeredCount = answeredEvents.length;
   const normalizedMax = normalizeMaxQuestions(maxQuestions);
@@ -686,7 +687,7 @@ function nextQuestionFor({ intake, attachments, answeredEvents, maxQuestions }) 
   if (plan.information_sufficient) return null;
   const nextNumber = answeredEvents.length + 1;
   if (nextNumber > normalizeMaxQuestions(maxQuestions)) return null;
-  return plan.questions[0] || null;
+  return plan.next_question || plan.questions[0] || null;
 }
 
 function selectInboxReply({ messages, openReview, reviewEvents, rejectedInboxKeys }) {

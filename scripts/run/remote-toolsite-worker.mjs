@@ -770,7 +770,8 @@ export async function runRemoteToolsiteWorkerIteration({
     inboxPath,
     remoteStatePath,
     remote: true,
-    pollMs,
+    pollMs: 0,
+    maxIdleIterations: 1,
   });
   const result = {
     ok: true,
