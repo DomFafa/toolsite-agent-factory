@@ -8,6 +8,7 @@ import {
   SPEC_GENERIC_BLOCK_MESSAGE,
   validateToolsiteSpecSpecificity,
 } from '../qa/check-pre-agent2-toolsite-spec.mjs';
+import { attachmentPurpose, planPreAgent2Questions } from './pre-agent2-question-planner.mjs';
 
 export const DEFAULT_HERMES_INBOX =
   '/Users/dom/agents/hermes-toolsite-monitor/hermes-home/state/toolsite-inbox.jsonl';
@@ -346,6 +347,19 @@ function specSection(specText, headings, fallback = '') {
 }
 
 export function parseRunInput(text) {
+  const inputAssets = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = line.match(/-\s+image:\s+(.+?)\s+\(source:\s+(.+?)(?:,\s*telegram_file_id:\s*(.+?))?\)\s*$/i);
+    if (match) {
+      inputAssets.push({
+        kind: 'image',
+        run_path: asText(match[1]),
+        source_local_path: asText(match[2]),
+        telegram_file_id: asText(match[3]),
+        purpose: 'design_reference',
+      });
+    }
+  }
   return {
     keyword: findLabeledValue(text, ['keyword', 'primary keyword', '关键词']),
     target_domain: findLabeledValue(text, ['target domain', 'target domain / 目标域名', '目标域名']),
@@ -359,6 +373,7 @@ export function parseRunInput(text) {
       '限制',
       '模仿点',
     ]),
+    input_assets: inputAssets,
   };
 }
 
@@ -596,6 +611,8 @@ export function buildQuestionEvent({
     reply_mode: QUESTION_REPLY_MODE,
     question_number: question.number,
     decision_area: question.decision_area,
+    why_needed: question.why_needed || '',
+    option_decisions: question.option_decisions || {},
     attachments: [],
     created_at: createdAt,
     created_by: createdBy,
@@ -648,7 +665,13 @@ export function shouldGenerateSpec({
   answeredEvents,
   maxQuestions = DEFAULT_MAX_QUESTIONS,
   allowEarlySpec = false,
+  intake = null,
+  attachments = [],
 }) {
+  if (intake) {
+    const plan = planPreAgent2Questions({ intake, attachments, answeredEvents });
+    if (plan.information_sufficient) return true;
+  }
   const answeredCount = answeredEvents.length;
   const normalizedMax = normalizeMaxQuestions(maxQuestions);
   if (answeredCount >= Math.min(DEFAULT_SPEC_TARGET_ROUNDS, normalizedMax)) return true;
@@ -658,11 +681,12 @@ export function shouldGenerateSpec({
   return USER_DECISION_AREAS.every((area) => covered.has(area));
 }
 
-function nextQuestionFor(answeredEvents, maxQuestions) {
+function nextQuestionFor({ intake, attachments, answeredEvents, maxQuestions }) {
+  const plan = planPreAgent2Questions({ intake, attachments, answeredEvents });
+  if (plan.information_sufficient) return null;
   const nextNumber = answeredEvents.length + 1;
   if (nextNumber > normalizeMaxQuestions(maxQuestions)) return null;
-  if (nextNumber > QUESTION_BANK.length) return null;
-  return questionByNumber(nextNumber);
+  return plan.questions[0] || null;
 }
 
 function selectInboxReply({ messages, openReview, reviewEvents, rejectedInboxKeys }) {
@@ -712,8 +736,7 @@ export function buildResolvedQuestionEvent({
 }
 
 function decisionFor(event) {
-  const question = questionById(event.id);
-  if (!question) return event.resolution_text;
+  const question = questionById(event.id) || event;
   if (event.answer_type === 'option') {
     return question.option_decisions?.[event.resolution_text] || event.resolution_text;
   }
@@ -731,6 +754,11 @@ export function renderQaRecord({ intake, answeredEvents }) {
     `- UI reference: ${intake.ui_reference}`,
     `- UX reference: ${intake.ux_reference}`,
     `- Extra ideas / constraints / mimic points: ${intake.extra_notes}`,
+    ...(Array.isArray(intake.input_assets) && intake.input_assets.length > 0
+      ? [
+          `- Input assets: ${intake.input_assets.map((asset) => `${asset.run_path} (${asset.purpose})`).join(', ')}`,
+        ]
+      : []),
     '',
     '## Lightweight Q&A Record',
     '',
@@ -906,6 +934,148 @@ function isWordCounterIntake(intake) {
   return /word\s*counter|wordcounter/i.test(`${intake.keyword || ''} ${intake.target_domain || ''}`);
 }
 
+function assetLines(intake, { includeSource = false } = {}) {
+  if (!Array.isArray(intake.input_assets) || intake.input_assets.length === 0) return [];
+  return intake.input_assets.map((asset) => {
+    const purpose = attachmentPurpose(intake) || asset.purpose || 'design_reference';
+    const base = `- ${asset.run_path} must be used as ${purpose}; it is a visual reference, not a question for the user.`;
+    if (!includeSource || !asset.source_local_path) return base;
+    return `${base} Source: ${asset.source_local_path}.`;
+  });
+}
+
+function is401kIntake(intake) {
+  return /401\s*k|401k/i.test(`${intake.keyword || ''} ${intake.target_domain || ''}`);
+}
+
+function render401kToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
+  const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
+  const context = { intake, answeredEvents };
+  const assets = assetLines(intake, { includeSource: true });
+  return sanitizeSpecDocument([
+    `# Toolsite SPEC: ${siteId}`,
+    '',
+    '## Required Inputs',
+    '',
+    `- Keyword: ${intake.keyword}`,
+    `- Target Domain: ${intake.target_domain}`,
+    `- UI Reference: ${intake.ui_reference}`,
+    `- UX Reference: ${intake.ux_reference}`,
+    `- Extra Ideas / Constraints / Mimic Points: ${intake.extra_notes}`,
+    ...(assets.length ? ['- Input Assets:', ...assets.map((line) => `  ${line}`)] : []),
+    '',
+    '## Lightweight Q&A Record',
+    '',
+    `- Question rounds: ${answeredEvents.length}`,
+    '- Complex tool: no',
+    ...(early ? ['- 六个用户决策区已清楚，用户同意提前输出 SPEC。'] : []),
+    '',
+    '## Tool Purpose',
+    '',
+    `- 为 ${intake.target_domain} 构建 ${intake.keyword}：一个浏览器本地运行的 401K retirement estimate calculator，用于 educational planning。`,
+    '- 用户通过简单输入估算退休时的 401(k) balance；结果只用于教育性估算，不提供 investment、tax 或 financial advice。',
+    '- 第一屏必须是真实可用的计算器，不是营销 hero。',
+    summaryForArea(answeredEvents, 'Tool Purpose', { context }),
+    '',
+    '## Target Users and Use Cases',
+    '',
+    '- 目标用户是美国用户、正在规划退休或接近退休的人，以及想理解 401(k) contribution 结果的人。',
+    '- 体验必须对老人家友好：大字体、高对比、输入简单、标签清晰。',
+    '- 用户无需登录、创建账户、后端存储或保存个人输入，就能完成 educational estimate。',
+    '',
+    '## First Viewport UX',
+    '',
+    `- ${intake.keyword} 第一屏必须优先展示 retirement calculator 本体，任何 SEO 内容都不能挤占计算器。`,
+    '- 第一屏结构是：清楚标题、简短 educational disclaimer、大号易读输入项，以及桌面端无需滚动即可看到的结果区。',
+    '- 移动端先展示输入项，再紧跟 estimated retirement result 和拆分结果。',
+    '- 使用高对比、大点击区域、明确帮助文案和简单分组输入。',
+    summaryForArea(answeredEvents, 'First Viewport UX', { context }),
+    '',
+    '## Input / Output Model',
+    '',
+    `- ${intake.keyword} 的输入模型是对老人家友好的 401(k) estimate form，使用清晰标签和简单数字控件。`,
+    '- 必填输入项：current age、retirement age、current 401(k) balance、annual salary、employee contribution、employer match、expected annual return、salary increase。',
+    '- 输出项：estimated 401(k) balance at retirement、total employee contributions、employer match total、investment growth。',
+    '- 用户调整输入后结果应即时更新，不需要登录，也不保存用户数据。',
+    '- 只有在不干扰主估算任务时，才提供 reset 或 example defaults。',
+    summaryForArea(answeredEvents, 'Input / Output Model', { context }),
+    '',
+    '## Result Experience',
+    '',
+    `- ${intake.keyword} 的结果区必须突出 estimated 401(k) balance at retirement、total contributions、employer match 和 investment growth。`,
+    '- 结果必须明确标注为 educational estimate，用简单说明避免被理解为 financial advice。',
+    '- 用户应能立即看懂 employee contribution、employer match、expected return 和 retirement age 如何影响估算结果。',
+    summaryForArea(answeredEvents, 'Result Experience', { context }),
+    '',
+    '## UI / UX Direction',
+    '',
+    `- UI 参考 ${intake.ui_reference}：借鉴清晰、可信、政府服务感的表达方式，包括 plain language、高对比、强表单标签和稳定留白；不要照搬 usa.gov 视觉。`,
+    `- UX 参考 ${intake.ux_reference}：借鉴 401K calculator 的信息结构和 calculator-first 交互模型；不要照搬布局或样式。`,
+    ...(assets.length
+      ? [
+          '- Image reference:',
+          ...assetLines(intake).map((line) => `  ${line}`),
+          '- 黑白人物插画应作为辅助点缀，不得抢占计算器主体。',
+        ]
+      : []),
+    summaryForArea(answeredEvents, 'UI / UX Direction', { context }),
+    '',
+    '## Non-goals',
+    '',
+    `- ${intake.keyword} 只做 educational retirement estimate calculator。`,
+    '- 不做登录、账户、后端、数据库、保存用户输入、云同步、API key、advisor matching、investment recommendations、tax advice、financial advice 或 AI rewrite。',
+    '- 不暗示估算结果有保证，也不包装成个性化专业建议。',
+    '- 不让插画或 SEO 内容抢占第一屏计算器。',
+    summaryForArea(answeredEvents, 'Non-goals', {
+      context,
+      excludeIds: [SEO_BOUNDARY_QUESTION_ID],
+    }),
+    '',
+    '## Legal Boundary',
+    '',
+    '- 仅用于 educational estimate。页面必须明确说明不提供 investment、tax、legal 或 financial advice。',
+    '',
+    '## Technical Constraints',
+    '',
+    '- 静态前端实现。',
+    '- 所有计算在浏览器本地运行。',
+    '- 不做后端、数据库、登录、账户系统、API key、服务端计算或保存用户输入。',
+    '- 不把 salary、balance、age、contribution 或其他用户输入发送到服务器。',
+    '',
+    '## Page Boundary',
+    '',
+    '- 必须包含页面：`/`、`/privacy`、`/terms`、`/sitemap.xml`、`/robots.txt`。',
+    '- `/` 是 401K Calculator 工具页，第一屏计算器体验优先于 SEO 内容。',
+    '- 计算器下方可以用 educational copy 解释 401(k) estimate、assumptions 和为什么结果只是 estimates。',
+    '- 默认禁止：`/login`、`/dashboard`、`/account`、`/pricing`、`/advisor`、`/api`、`/history`、`/blog`。',
+    '',
+    '## Agent Workflow Boundary',
+    '',
+    'Agent2 必须等用户明确确认 Toolsite SPEC 且 Pre-Agent2 SPEC gate 通过后才能开始。',
+    '',
+    '## SEO Baseline',
+    '',
+    `- Primary keyword 是 ${intake.keyword}。title、description、H1 和 intro copy 必须保持 educational 401K Calculator 语境。`,
+    '- SEO 内容可以在第一屏计算器下方解释 contribution、employer match、expected return 和 assumptions。',
+    '',
+    '## Success Criteria Baseline',
+    '',
+    '- 用户打开页面后 3 秒内知道这是 401K retirement estimate calculator。',
+    '- 用户可以输入 current age、retirement age、current balance、annual salary、employee contribution、employer match、expected annual return 和 salary increase。',
+    '- 页面清楚展示 estimated 401(k) balance at retirement、total contributions、employer match 和 investment growth。',
+    '- 页面在移动端和桌面端都保持对老人家友好，包括大号可读输入和高对比。',
+    '- 页面不保存用户输入，也不声称提供 investment、tax 或 financial advice。',
+    '',
+    '## User Confirmation',
+    '',
+    '- [ ] User confirmed this Toolsite SPEC before Agent2 starts.',
+    '- Confirmation text:',
+    '- Confirmed by:',
+    '- Confirmed at:',
+    '',
+  ], context);
+}
+
 function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
   const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
   const context = { intake, answeredEvents };
@@ -940,6 +1110,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     '## First Viewport UX',
     '',
+    `- The ${intake.keyword} first viewport must make the word counter input and live statistics immediately visible.`,
     `- The first viewport must be a clean Stripe-style tool surface inspired by ${intake.ui_reference}: a short title and description, a large text input, and core stat cards below or to the right.`,
     '- On mobile, the text input comes first and the stat cards follow immediately below it. The tool must be usable before any SEO content.',
     `- Preserve the user constraint: ${intake.extra_notes}.`,
@@ -947,6 +1118,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     '## Input / Output Model',
     '',
+    `- The ${intake.keyword} input and output model is plain text in, live text statistics out.`,
     '- Input is plain text only. Users paste or type into one large text area.',
     '- Output updates in real time without a submit button.',
     '- Include lightweight actions: clear text, copy results, and insert example text.',
@@ -970,6 +1142,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     '## Non-goals',
     '',
+    `- Keep ${intake.keyword} focused on live text statistics only.`,
     '- Do not build login, accounts, database, backend, API keys, AI rewrite, spelling check, grammar check, cloud sync, history, leaderboard, or saved documents.',
     '- Do not make keyword density a first-screen core feature.',
     '- Do not require users to click submit before seeing results.',
@@ -1022,6 +1195,9 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
 }
 
 export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
+  if (is401kIntake(intake)) {
+    return render401kToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec });
+  }
   if (isWordCounterIntake(intake)) {
     return renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec });
   }
@@ -1078,6 +1254,9 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     `- UI reference: ${intake.ui_reference}.`,
     `- UX reference: ${intake.ux_reference}.`,
     `- Apply those references to ${intake.keyword}, while respecting: ${intake.extra_notes}.`,
+    ...(assetLines(intake).length
+      ? ['- Image and attachment references:', ...assetLines(intake).map((line) => `  ${line}`)]
+      : []),
     summaryForArea(answeredEvents, 'UI / UX Direction', { context }),
     '',
     '## Non-goals',
@@ -1495,6 +1674,7 @@ async function ensureSpecAndConfirmation({
   now = nowIso,
 }) {
   const answeredEvents = resolvedQuestionEvents(events);
+  await writeQaRecord({ runDir, intake, events });
   const specText = renderSpec({ siteId, intake, answeredEvents, allowEarlySpec });
   await writeFile(
     path.join(runDir, 'toolsite-spec.md'),
@@ -1631,6 +1811,7 @@ export async function runLoopIteration({
   const inputPath = path.join(absoluteRunDir, 'input.md');
   const statePath = path.join(absoluteRunDir, 'pre-agent2-telegram-loop-state.json');
   const intake = parseRunInput(await readFile(inputPath, 'utf8'));
+  const attachments = Array.isArray(intake.input_assets) ? intake.input_assets : [];
   const state = await readLoopState(statePath, { siteId, runDir: runDirForEvents });
   const reviewEvents = await readJsonl(eventPath, { missingOk: true });
   let openReview = latestOpenPreAgent2Review(reviewEvents);
@@ -1638,25 +1819,25 @@ export async function runLoopIteration({
   const send = sender || ((text) => sendTelegramMessage({ text, inboxPath, telegramEnvPath }));
 
   if (!openReview) {
-    if (shouldGenerateSpec({ answeredEvents, maxQuestions, allowEarlySpec })) {
+    if (shouldGenerateSpec({ answeredEvents, maxQuestions, allowEarlySpec, intake, attachments })) {
       openReview = await ensureSpecAndConfirmation({
         runDir: absoluteRunDir,
         siteId,
         intake,
         events: reviewEvents,
-        allowEarlySpec,
+        allowEarlySpec: allowEarlySpec || answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS,
         renderSpec,
         now,
       });
     } else {
-      const nextQuestion = nextQuestionFor(answeredEvents, maxQuestions);
+      const nextQuestion = nextQuestionFor({ intake, attachments, answeredEvents, maxQuestions });
       if (!nextQuestion) {
         openReview = await ensureSpecAndConfirmation({
           runDir: absoluteRunDir,
           siteId,
           intake,
           events: reviewEvents,
-          allowEarlySpec,
+          allowEarlySpec: allowEarlySpec || answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS,
           renderSpec,
           now,
         });

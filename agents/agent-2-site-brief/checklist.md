@@ -9,8 +9,9 @@
 - [ ] Tool behavior is defined
 - [ ] SEO metadata is drafted
 - [ ] UI reference and UX reference fields from the Toolsite SPEC are organized, or explicit open-exploration/tool-site-best-practice wording is preserved
+- [ ] Any `input-assets/...` image attachments are preserved as `design_reference` / `illustration_reference` with run-local paths
 - [ ] `ui-reference-dossier.md` is written
-- [ ] `design-generation-input.md` is written for Agent 2.5
+- [ ] `design-generation-input.md` is written for Agent 2.5 and includes any image attachment paths and purposes
 - [ ] `brief-compliance-summary.md` is written
 - [ ] Toolsite Page Plan table is written in `page-plan.md` or `content-plan.md`
 - [ ] Page Plan includes required rows for `/`, `/privacy`, `/terms`, `/sitemap.xml`, and `/robots.txt`

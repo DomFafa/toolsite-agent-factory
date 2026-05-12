@@ -4,7 +4,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { GATES_BLOCKED, REVIEW_RESOLVED, SMOKE_NOT_DEPLOYABLE } from './continue-human-review.mjs';
+import {
+  GATES_BLOCKED,
+  INVALID_REPLY,
+  NO_REPLY_FOUND,
+  REVIEW_CHANGE_REQUESTED,
+  REVIEW_RESOLVED,
+  SMOKE_NOT_DEPLOYABLE,
+} from './continue-human-review.mjs';
 import {
   ATTACHMENT_FILE_MISSING,
   createProductionRunFromHermesIntake,
@@ -144,6 +151,7 @@ test('run:toolsite consumes open review in remote mode and stops at next human_r
     runDir,
     inboxPath,
     remote: true,
+    maxIdleIterations: 1,
     continueReview: async () => {
       await appendJsonl(eventPath, { ...review(), status: 'resolved', blocking: false, selected_option: 'A' });
       await appendJsonl(eventPath, {
@@ -163,6 +171,182 @@ test('run:toolsite consumes open review in remote mode and stops at next human_r
   assert.equal(result.openReviews[0].id, 'pre-deploy-approval');
 });
 
+test('remote mode keeps polling after sending review when no reply exists yet', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeJsonl(eventPath, [review()]);
+  let calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 2,
+    continueReview: async () => {
+      calls += 1;
+      return { ok: false, code: NO_REPLY_FOUND, message: NO_REPLY_FOUND };
+    },
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.code, NO_REPLY_FOUND);
+});
+
+test('Telegram reply after review is consumed without manual rerun', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# Toolsite SPEC\n');
+  await writeJsonl(eventPath, [review()]);
+  let calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 3,
+    continueReview: async () => {
+      calls += 1;
+      if (calls === 1) return { ok: false, code: NO_REPLY_FOUND, message: NO_REPLY_FOUND };
+      await appendJsonl(eventPath, { ...review(), status: 'resolved', blocking: false, selected_option: 'A' });
+      return { ok: true, code: REVIEW_RESOLVED };
+    },
+  });
+
+  const events = await readEvents(eventPath);
+  assert.equal(calls, 2);
+  assert.equal(events.some((event) => event.status === 'resolved' && event.selected_option === 'A'), true);
+  assert.equal(result.code, NEXT_STAGE_READY);
+});
+
+test('remote mode consumes SPEC confirmation reply and enters Agent2', async () => {
+  const { runDir, inboxPath, eventPath } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# Toolsite SPEC\n');
+  await writeJsonl(eventPath, [
+    review({
+      review_type: 'pre_agent2_spec_confirmation',
+      id: 'pre-agent2-spec-confirmation',
+      phase: 'pre-agent2',
+      blocks: 'agent-2',
+      expected_reply: '确认 SPEC / 修改：...',
+    }),
+  ]);
+  await writeJsonl(inboxPath, [inbox({ text: '确认 SPEC' })]);
+  const stages = [];
+  let preAgent2Calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    inboxPath,
+    remote: true,
+    pollMs: 0,
+    preAgent2Runner: async () => {
+      preAgent2Calls += 1;
+      throw new Error('SPEC confirmation must not be routed into runLoopIteration');
+    },
+    stageRunner: async ({ stage }) => {
+      stages.push(stage);
+      return { ok: true, code: NEXT_STAGE_READY, stage };
+    },
+  });
+
+  const events = await readEvents(eventPath);
+  const resolved = events.find((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'resolved');
+  assert.equal(preAgent2Calls, 0);
+  assert.equal(result.code, NEXT_STAGE_READY);
+  assert.deepEqual(stages, ['agent-2']);
+  assert.equal(resolved.resolution_text, '确认 SPEC');
+  assert.equal(resolved.blocking, false);
+});
+
+test('remote SPEC change request does not enter Agent2', async () => {
+  const { runDir, inboxPath, eventPath } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# Toolsite SPEC\n');
+  await writeJsonl(eventPath, [
+    review({
+      review_type: 'pre_agent2_spec_confirmation',
+      id: 'pre-agent2-spec-confirmation',
+      phase: 'pre-agent2',
+      blocks: 'agent-2',
+      expected_reply: '确认 SPEC / 修改：...',
+    }),
+  ]);
+  await writeJsonl(inboxPath, [inbox({ text: '修改：请调整 SPEC' })]);
+  let stageCalls = 0;
+  let preAgent2Calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    inboxPath,
+    remote: true,
+    pollMs: 0,
+    preAgent2Runner: async () => {
+      preAgent2Calls += 1;
+      throw new Error('SPEC confirmation change request must not be routed into runLoopIteration');
+    },
+    stageRunner: async () => {
+      stageCalls += 1;
+      throw new Error('Agent2 must not start after a SPEC change request');
+    },
+  });
+
+  const events = await readEvents(eventPath);
+  assert.equal(preAgent2Calls, 0);
+  assert.equal(stageCalls, 0);
+  assert.equal(result.code, REVIEW_CHANGE_REQUESTED);
+  assert.equal(events.some((event) => event.status === 'resolved' && event.change_requested === true), true);
+  assert.equal(
+    events.some((event) => event.id === 'pre-agent2-spec-confirmation-change-request' && event.status === 'open'),
+    true,
+  );
+});
+
+test('remote Pre-Agent2 interview question still uses Pre-Agent2 loop', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeJsonl(eventPath, [
+    review({
+      review_type: 'pre_agent2_interview_question',
+      id: 'pre-agent2-dynamic-sample-inputs',
+      phase: 'pre-agent2',
+      blocks: 'pre-agent2-spec',
+      expected_reply: '1 / 2 / 3 / 4 / 5',
+    }),
+  ]);
+  let preAgent2Calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 1,
+    preAgent2Runner: async () => {
+      preAgent2Calls += 1;
+      return { action: 'waiting', reason: 'awaiting-targeted-answer' };
+    },
+    continueReview: async () => {
+      throw new Error('Pre-Agent2 interview question must be handled by runLoopIteration');
+    },
+  });
+
+  assert.equal(preAgent2Calls, 1);
+  assert.equal(result.action, 'waiting');
+  assert.equal(result.reason, 'awaiting-targeted-answer');
+});
+
+test('invalid remote reply does not advance', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeJsonl(eventPath, [review()]);
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 1,
+    continueReview: async () => ({ ok: false, code: INVALID_REPLY, message: INVALID_REPLY }),
+  });
+
+  const events = await readEvents(eventPath);
+  assert.equal(result.code, INVALID_REPLY);
+  assert.equal(events.some((event) => event.status === 'resolved'), false);
+});
+
 test('run:toolsite starts next stage and stops when that stage opens a review', async () => {
   const { runDir, eventPath } = await makeFixture();
   await writeFile(path.join(runDir, 'toolsite-spec.md'), '# SPEC\n');
@@ -170,6 +354,7 @@ test('run:toolsite starts next stage and stops when that stage opens a review', 
   const result = await runToolsiteOrchestrator({
     runDir,
     remote: true,
+    maxIdleIterations: 1,
     stageRunner: async ({ stage }) => {
       assert.equal(stage, 'agent-2');
       await appendJsonl(
@@ -376,11 +561,26 @@ test('production run records attachment provenance and copies input assets', asy
   const runMeta = JSON.parse(await readFile(path.join(result.runDir, 'run-meta.json'), 'utf8'));
   assert.equal(runMeta.intake_attachments.length, 1);
   assert.equal(runMeta.intake_attachments[0].telegram_file_id, 'tg-photo');
+  assert.equal(runMeta.intake_attachments[0].purpose, 'illustration_reference');
   assert.match(runMeta.intake_attachments[0].run_path, /^input-assets\/01-elder-friendly-reference\.jpg$/);
   assert.equal(await readFile(path.join(result.runDir, runMeta.intake_attachments[0].run_path), 'utf8'), 'real-image-bytes');
   const input = await readFile(path.join(result.runDir, 'input.md'), 'utf8');
   assert.match(input, /## Input assets/);
   assert.match(input, /input-assets\/01-elder-friendly-reference\.jpg/);
+  assert.match(input, /illustration_reference/);
+  assert.match(input, /design agents/);
+});
+
+test('Agent2 contract requires design-generation-input to preserve image references', async () => {
+  const prompt = await readFile(path.resolve('agents/agent-2-site-brief/prompt.md'), 'utf8');
+  const checklist = await readFile(path.resolve('agents/agent-2-site-brief/checklist.md'), 'utf8');
+  const schema = await readFile(path.resolve('agents/agent-2-site-brief/output.schema.md'), 'utf8');
+
+  for (const text of [prompt, checklist, schema]) {
+    assert.match(text, /input-assets/);
+    assert.match(text, /design-generation-input\.md/);
+    assert.match(text, /design_reference|illustration_reference/);
+  }
 });
 
 test('production intake requiring attachment but lacking one does not create run', async () => {

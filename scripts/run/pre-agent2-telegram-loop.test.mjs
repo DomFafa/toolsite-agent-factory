@@ -158,6 +158,32 @@ function wordCounterInputMarkdown() {
   ].join('\n');
 }
 
+function fourOhOneKInputMarkdown({ concise = false } = {}) {
+  const extra = concise
+    ? '希望页面简单。'
+    : '对老人家友好，大字体、高对比、输入简单；第一屏就是计算器；用我发的黑白人物插画做点缀；只做 educational estimate，不提供投资/税务建议；不要登录、不要后端、不要数据库、不要保存用户输入。';
+  return [
+    '# Run Input',
+    '',
+    '- Site ID: 401k-calculator',
+    '- Target domain: 401k-calculator.net',
+    '- Primary keyword: 401K Calculator',
+    '',
+    '## Pre-Agent2 required user inputs',
+    '',
+    '- Keyword / 关键词: 401K Calculator',
+    '- Target Domain / 目标域名: 401k-calculator.net',
+    '- UI Reference / UI 参考: https://www.usa.gov',
+    '- UX Reference / UX 参考: https://www.calculator.net/401k-calculator.html',
+    `- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点: ${extra}`,
+    '',
+    '## Input assets',
+    '',
+    '- image: input-assets/01-reference.jpg (source: /tmp/reference.jpg, telegram_file_id: tg-photo)',
+    '',
+  ].join('\n');
+}
+
 function wordCounterIntake() {
   return {
     keyword: 'word counter',
@@ -429,7 +455,7 @@ test('remote_mode=false refuses to start before reading inbox', async () => {
   assert.equal(await exists(fixture.eventPath), false);
 });
 
-test('Q1 is written as an open review and pushed to Telegram', async () => {
+test('dynamic targeted question is written as an open review and pushed to Telegram', async () => {
   const fixture = await makeFixture();
   const sent = [];
 
@@ -438,16 +464,73 @@ test('Q1 is written as an open review and pushed to Telegram', async () => {
 
   assert.equal(result.ok, true);
   assert.equal(events.length, 1);
-  assert.equal(events[0].id, 'pre-agent2-q1-tool-purpose');
+  assert.equal(events[0].id, 'pre-agent2-dynamic-sample-tool-inputs');
   assert.equal(events[0].status, 'open');
+  assert.match(events[0].message, /sample tool/);
+  assert.doesNotMatch(events[0].message, /这个工具站最核心要帮用户完成什么任务/);
   assert.deepEqual(events[0].allowed_replies, ['1', '2', '3', '4', '5']);
   assert.equal(events[0].allow_custom_text, true);
   assert.equal(events[0].reply_mode, 'single_choice_with_custom_text');
   assert.equal(sent.length, 1);
-  assert.match(sent[0], /^Q1\./);
+  assert.match(sent[0], /sample tool/);
+  assert.doesNotMatch(sent[0], /^Q1\./);
 });
 
-test('legal option 4 resolves, records QA as option, and enters next question', async () => {
+test('production complete intake never sends generic Q1 and opens SPEC confirmation', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), fourOhOneKInputMarkdown());
+
+  await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    pollMs: 0,
+    maxIterations: 1,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:00:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const confirmation = events.find((event) => event.id === 'pre-agent2-spec-confirmation');
+  const combined = `${sent.join('\n')}\n${events.map((event) => event.message).join('\n')}`;
+
+  assert.equal(confirmation.status, 'open');
+  assert.equal(events.some((event) => event.review_type === 'pre_agent2_interview_question'), false);
+  assert.doesNotMatch(combined, /这个工具站最核心要帮用户完成什么任务/);
+  assert.doesNotMatch(combined, /Pre-Agent2 Q1/);
+  assert.doesNotMatch(combined, /这张图是什么意思|重新解释.*图片|附件.*什么意思/);
+  assert.match(confirmation.message, /401K Calculator/);
+  assert.match(confirmation.message, /retirement|退休/i);
+});
+
+test('production 401K incomplete detail intake creates targeted project-specific question', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), fourOhOneKInputMarkdown({ concise: true }));
+
+  await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    pollMs: 0,
+    maxIterations: 1,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:00:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  assert.equal(events[0].review_type, 'pre_agent2_interview_question');
+  assert.match(events[0].message, /401K Calculator/);
+  assert.match(events[0].message, /401k|retirement|calculator/i);
+  assert.doesNotMatch(events[0].message, /这个工具站最核心要帮用户完成什么任务/);
+});
+
+test('legal option 4 resolves, records QA as option, and enters next targeted question', async () => {
   const fixture = await makeFixture();
   const sent = [];
   await startLoopOnce(fixture, sent);
@@ -465,8 +548,8 @@ test('legal option 4 resolves, records QA as option, and enters next question', 
   });
 
   const events = await readJsonl(fixture.eventPath);
-  const resolved = events.find((event) => event.id === 'pre-agent2-q1-tool-purpose' && event.status === 'resolved');
-  const q2 = events.find((event) => event.id === 'pre-agent2-q2-first-viewport' && event.status === 'open');
+  const resolved = events.find((event) => event.id === 'pre-agent2-dynamic-sample-tool-inputs' && event.status === 'resolved');
+  const q2 = events.find((event) => event.id === 'pre-agent2-dynamic-sample-tool-results' && event.status === 'open');
   const qa = await readFile(fixture.qaPath, 'utf8');
 
   assert.equal(resolved.answer_type, 'option');
@@ -475,7 +558,7 @@ test('legal option 4 resolves, records QA as option, and enters next question', 
   assert.match(qa, /Answer type: option/);
   assert.match(qa, /Answer: 4/);
   assert.equal(sent.length, 2);
-  assert.match(sent[1], /^Q2\./);
+  assert.match(sent[1], /sample tool/);
 });
 
 for (const invalid of ['8', '0', '9', '12']) {
@@ -498,12 +581,13 @@ for (const invalid of ['8', '0', '9', '12']) {
 
     const events = await readJsonl(fixture.eventPath);
     assert.equal(events.filter((event) => event.status === 'resolved').length, 0);
-    assert.equal(events.some((event) => event.id === 'pre-agent2-q2-first-viewport'), false);
+    assert.equal(events.some((event) => event.id === 'pre-agent2-dynamic-sample-tool-results'), false);
     assert.equal(await exists(fixture.qaPath), false);
     assert.equal(await exists(fixture.specPath), false);
     assert.equal(sent.length, 2);
     assert.match(sent[1], /^你回复的选项不在本题范围内/);
-    assert.match(sent[1], /Q1\. 这个工具站最核心要帮用户完成什么任务/);
+    assert.match(sent[1], /sample tool/);
+    assert.doesNotMatch(sent[1], /这个工具站最核心要帮用户完成什么任务/);
   });
 }
 
@@ -803,7 +887,7 @@ test('full word counter SPEC quality contract passes without manual Telegram dry
   assert.equal(await exists(path.join(fixture.runDir, 'site', 'package.json')), false);
 });
 
-test('batch answers file resolves Q1-Q12 without Telegram inbox polling', async () => {
+test('complete intake with answers file generates SPEC without Telegram inbox polling', async () => {
   const fixture = await makeFixture();
   const sent = [];
   const answersFile = path.join(fixture.runDir, 'pre-agent2-answers.md');
@@ -825,17 +909,15 @@ test('batch answers file resolves Q1-Q12 without Telegram inbox polling', async 
   });
 
   const events = await readJsonl(fixture.eventPath);
-  const resolvedQuestions = events.filter((event) => event.review_type === 'pre_agent2_interview_question' && event.status === 'resolved');
   const confirmation = events.find((event) => event.id === 'pre-agent2-spec-confirmation');
   const qa = await readFile(fixture.qaPath, 'utf8');
 
   assert.equal(result.lastResult.reason, 'awaiting-spec-confirmation');
-  assert.equal(resolvedQuestions.length, 12);
-  assert.ok(resolvedQuestions.every((event) => event.resolution_source === 'batch_answers'));
+  assert.equal(events.some((event) => event.review_type === 'pre_agent2_interview_question'), false);
   assert.equal(confirmation.status, 'open');
   assert.equal(confirmation.blocks, 'agent-2');
   assert.equal(await exists(fixture.specPath), true);
-  assert.match(qa, /Question rounds: 12/);
+  assert.match(qa, /Question rounds: 0/);
   assert.equal(sent.some((message) => /^Q\d+\./.test(message)), false);
   assertSpecConfirmationCard(sent.at(-1));
 });
@@ -845,7 +927,7 @@ test('invalid numeric batch answer blocks and does not generate SPEC', async () 
   const sent = [];
   const answersFile = path.join(fixture.runDir, 'pre-agent2-answers.md');
   await setRemoteMode(fixture.remoteStatePath, true);
-  await writeFile(answersFile, batchAnswersMarkdown({ 1: '8' }));
+  await writeFile(answersFile, 'Pre-Agent2 Answers:\nQ1: 8\n');
   await writeFile(fixture.inboxPath, 'not valid jsonl');
 
   const result = await runPreAgent2TelegramLoop({
@@ -866,7 +948,7 @@ test('invalid numeric batch answer blocks and does not generate SPEC', async () 
   assert.equal(result.lastResult.reason, 'invalid-batch-answer');
   assert.equal(result.lastResult.validation.value, '8');
   assert.equal(events.length, 1);
-  assert.equal(events[0].id, 'pre-agent2-q1-tool-purpose');
+  assert.equal(events[0].id, 'pre-agent2-dynamic-sample-tool-inputs');
   assert.equal(events[0].status, 'open');
   assert.equal(await exists(fixture.qaPath), false);
   assert.equal(await exists(fixture.specPath), false);

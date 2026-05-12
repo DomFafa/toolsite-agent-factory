@@ -233,6 +233,36 @@ test('intake requiring attachment but lacking one returns MISSING_REQUIRED_ATTAC
   assert.equal(result.message, MISSING_REQUIRED_ATTACHMENT);
 });
 
+test('black-and-white illustration reference requires attachment', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(
+      [
+        '开始正式建站',
+        '关键词: 401K Calculator',
+        '目标域名: 401k-calculator.net',
+        'UI 参考: https://www.usa.gov',
+        'UX 参考: https://www.calculator.net/401k-calculator.html',
+        '额外要求: 参考我发的黑白人物插画；不要登录。',
+      ].join('\n'),
+      { created_at: '2026-05-12T00:00:01.000Z' },
+    ),
+  ]);
+
+  const result = await readHermesIntake({
+    remoteStatePath,
+    inboxPath,
+    freshAfter: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: false,
+    requireProductionStartIntent: true,
+  });
+
+  assert.equal(result.found, false);
+  assert.equal(result.code, 'missing-required-attachment');
+  assert.equal(result.message, MISSING_REQUIRED_ATTACHMENT);
+});
+
 test('generates suggested_site_id from target domain', async () => {
   const { remoteStatePath, inboxPath } = await makeFixture();
   await writeRemote(remoteStatePath, true);
