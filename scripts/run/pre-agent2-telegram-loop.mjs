@@ -32,7 +32,6 @@ const DEFAULT_ALLOWED_REPLIES = ['1', '2', '3', '4', '5'];
 const DEFAULT_POLL_MS = 10_000;
 const DEFAULT_MAX_QUESTIONS = 30;
 const ABSOLUTE_MAX_QUESTIONS = 30;
-const DEFAULT_SPEC_TARGET_ROUNDS = 12;
 const SPEC_CONFIRMATION_ID = 'pre-agent2-spec-confirmation';
 const TELEGRAM_MESSAGE_MAX_CHARS = 3500;
 
@@ -43,237 +42,6 @@ export const USER_DECISION_AREAS = [
   'Result Experience',
   'UI / UX Direction',
   'Non-goals',
-];
-
-export const QUESTION_BANK = [
-  {
-    number: 1,
-    id: 'pre-agent2-q1-tool-purpose',
-    title: 'Pre-Agent2 Q1：工具目的',
-    decision_area: 'Tool Purpose',
-    message:
-      'Q1. 这个工具站最核心要帮用户完成什么任务？\n\n' +
-      '1. 快速完成一个明确计算/转换/检查任务\n' +
-      '2. 帮用户做内容、写作或 SEO 判断\n' +
-      '3. 帮用户整理输入并输出可复制结果\n' +
-      '4. 做一个专业但轻量的工作流工具\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '工具目的偏快速完成明确计算、转换或检查任务。',
-      2: '工具目的偏帮助用户做内容、写作或 SEO 判断。',
-      3: '工具目的偏整理输入并输出可复制结果。',
-      4: '工具目的偏专业但轻量的工作流工具。',
-    },
-  },
-  {
-    number: 2,
-    id: 'pre-agent2-q2-first-viewport',
-    title: 'Pre-Agent2 Q2：第一屏体验',
-    decision_area: 'First Viewport UX',
-    message:
-      'Q2. 第一屏应该优先呈现什么体验？\n\n' +
-      '1. 用户一打开页面就能直接输入并得到结果\n' +
-      '2. 上方一句简短说明，下方立即是工具主体\n' +
-      '3. 工具主体和关键结果并排展示\n' +
-      '4. 先突出核心结果，再让用户补充输入\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '第一屏优先直接可用，用户打开页面即可输入并得到结果。',
-      2: '第一屏使用短说明加工具主体的结构。',
-      3: '第一屏将工具主体和关键结果并排展示。',
-      4: '第一屏先突出核心结果，再让用户补充输入。',
-    },
-  },
-  {
-    number: 3,
-    id: 'pre-agent2-q3-input-output-model',
-    title: 'Pre-Agent2 Q3：输入输出模型',
-    decision_area: 'Input / Output Model',
-    message:
-      'Q3. 输入和输出模型应该怎么设计？\n\n' +
-      '1. 单一文本输入，实时输出结果\n' +
-      '2. 多个输入字段，输出结构化结果\n' +
-      '3. 支持粘贴内容，并提供复制结果\n' +
-      '4. 支持更复杂输入，例如文件、URL 或批量数据\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '输入输出模型为单一文本输入并实时输出结果。',
-      2: '输入输出模型为多个输入字段并输出结构化结果。',
-      3: '输入输出模型支持粘贴内容并复制结果。',
-      4: '输入输出模型支持更复杂输入，例如文件、URL 或批量数据。',
-    },
-  },
-  {
-    number: 4,
-    id: 'pre-agent2-q4-result-experience',
-    title: 'Pre-Agent2 Q4：结果体验',
-    decision_area: 'Result Experience',
-    message:
-      'Q4. 结果区应该给用户什么感觉？\n\n' +
-      '1. 非常快，核心数字或结果最醒目\n' +
-      '2. 信息更完整，但保持克制和可扫描\n' +
-      '3. 先给结论，再给详细解释\n' +
-      '4. 支持用户复制、保存或继续调整输入\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '结果体验强调速度，核心数字或结果最醒目。',
-      2: '结果体验信息完整但克制，便于扫描。',
-      3: '结果体验先给结论，再给详细解释。',
-      4: '结果体验支持复制、保存或继续调整输入。',
-    },
-  },
-  {
-    number: 5,
-    id: 'pre-agent2-q5-ui-ux-direction',
-    title: 'Pre-Agent2 Q5：UI / UX 方向',
-    decision_area: 'UI / UX Direction',
-    message:
-      'Q5. UI / UX 方向更应该偏哪一种？\n\n' +
-      '1. 极简白底、细边框、清晰层级\n' +
-      '2. 精致 SaaS 工具感，带轻量色块和卡片\n' +
-      '3. 专业编辑器/控制台感，密度更高\n' +
-      '4. 更接近参考站点的交互和信息组织\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: 'UI / UX 方向偏极简白底、细边框、清晰层级。',
-      2: 'UI / UX 方向偏精致 SaaS 工具感，带轻量色块和卡片。',
-      3: 'UI / UX 方向偏专业编辑器或控制台感，密度更高。',
-      4: 'UI / UX 方向更接近参考站点的交互和信息组织。',
-    },
-  },
-  {
-    number: 6,
-    id: 'pre-agent2-q6-non-goals',
-    title: 'Pre-Agent2 Q6：第一版非目标',
-    decision_area: 'Non-goals',
-    message:
-      'Q6. 第一版明确不要做哪些事情？\n\n' +
-      '1. 不要登录、账户、保存历史\n' +
-      '2. 不要 AI 生成/改写，只做工具任务\n' +
-      '3. 不要复杂上传、批量处理或团队功能\n' +
-      '4. 以上都不要做\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '第一版不要登录、账户或保存历史。',
-      2: '第一版不要 AI 生成或改写，只做工具任务。',
-      3: '第一版不要复杂上传、批量处理或团队功能。',
-      4: '第一版不做登录、账户、保存历史、AI 改写、复杂上传、批量处理或团队功能。',
-    },
-  },
-  {
-    number: 7,
-    id: 'pre-agent2-q7-result-depth',
-    title: 'Pre-Agent2 Q7：结果深度',
-    decision_area: 'Result Experience',
-    message:
-      'Q7. 结果详情应该做到什么深度？\n\n' +
-      '1. 只展示核心结果，不增加解释\n' +
-      '2. 增加少量说明，帮助用户理解结果\n' +
-      '3. 增加可展开的详细指标或诊断\n' +
-      '4. 增加可操作建议，但不喧宾夺主\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '结果详情只展示核心结果，不增加解释。',
-      2: '结果详情增加少量说明，帮助用户理解结果。',
-      3: '结果详情增加可展开的详细指标或诊断。',
-      4: '结果详情增加可操作建议，但不喧宾夺主。',
-    },
-  },
-  {
-    number: 8,
-    id: 'pre-agent2-q8-mobile-experience',
-    title: 'Pre-Agent2 Q8：移动端体验',
-    decision_area: 'First Viewport UX',
-    message:
-      'Q8. 移动端第一屏最需要保证什么？\n\n' +
-      '1. 输入优先，结果紧跟在下方\n' +
-      '2. 核心结果优先可见，输入区适中\n' +
-      '3. 保持桌面布局的简化版本\n' +
-      '4. 移动端只保证可用，桌面体验优先\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '移动端输入优先，结果紧跟在下方。',
-      2: '移动端核心结果优先可见，输入区适中。',
-      3: '移动端保持桌面布局的简化版本。',
-      4: '移动端只保证可用，桌面体验优先。',
-    },
-  },
-  {
-    number: 9,
-    id: 'pre-agent2-q9-primary-action',
-    title: 'Pre-Agent2 Q9：关键成功动作',
-    decision_area: 'Tool Purpose',
-    message:
-      'Q9. 用户完成什么动作时，算这个工具站成功？\n\n' +
-      '1. 输入内容后立刻拿到可信结果\n' +
-      '2. 复制结果用于别处\n' +
-      '3. 根据结果做出判断或下一步操作\n' +
-      '4. 反复调整输入，直到结果满意\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '成功动作是输入内容后立刻拿到可信结果。',
-      2: '成功动作是复制结果用于别处。',
-      3: '成功动作是根据结果做出判断或下一步操作。',
-      4: '成功动作是反复调整输入，直到结果满意。',
-    },
-  },
-  {
-    number: 10,
-    id: 'pre-agent2-q10-trust-privacy',
-    title: 'Pre-Agent2 Q10：信任和隐私',
-    decision_area: 'Input / Output Model',
-    message:
-      'Q10. 输入内容的隐私和信任预期应该怎么处理？\n\n' +
-      '1. 明确本地浏览器内处理，不上传输入\n' +
-      '2. 给轻量隐私提示，但不占第一屏重点\n' +
-      '3. 不强调隐私，只保持简洁工具体验\n' +
-      '4. 后续高级功能可以需要上传或 API\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '隐私预期为本地浏览器内处理，不上传输入。',
-      2: '提供轻量隐私提示，但不占第一屏重点。',
-      3: '不强调隐私，只保持简洁工具体验。',
-      4: '后续高级功能可以需要上传或 API。',
-    },
-  },
-  {
-    number: 11,
-    id: 'pre-agent2-q11-seo-boundary',
-    title: 'Pre-Agent2 Q11：SEO 内容边界',
-    decision_area: 'Non-goals',
-    message:
-      'Q11. SEO 内容和工具主体之间应该怎么平衡？\n\n' +
-      '1. 第一屏只放工具，SEO 内容放在下方\n' +
-      '2. 第一屏有一句说明，但不影响工具使用\n' +
-      '3. 工具下方提供 FAQ 和使用说明\n' +
-      '4. 页面更像完整指南，但工具仍在第一屏\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: 'SEO 内容放在下方，第一屏只放工具。',
-      2: '第一屏有一句说明，但不影响工具使用。',
-      3: '工具下方提供 FAQ 和使用说明。',
-      4: '页面更像完整指南，但工具仍在第一屏。',
-    },
-  },
-  {
-    number: 12,
-    id: 'pre-agent2-q12-final-priority',
-    title: 'Pre-Agent2 Q12：最终优先级',
-    decision_area: 'UI / UX Direction',
-    message:
-      'Q12. 如果第一版只能把一个方向做到最好，你最看重什么？\n\n' +
-      '1. 工具速度和结果准确感\n' +
-      '2. 第一屏视觉完成度\n' +
-      '3. 输入输出交互顺手\n' +
-      '4. SEO 可读内容和工具体验平衡\n' +
-      '5. 其他，请直接描述',
-    option_decisions: {
-      1: '最终优先工具速度和结果准确感。',
-      2: '最终优先第一屏视觉完成度。',
-      3: '最终优先输入输出交互顺手。',
-      4: '最终优先 SEO 可读内容和工具体验平衡。',
-    },
-  },
 ];
 
 function nowIso() {
@@ -536,14 +304,6 @@ function consumedInboxKeys(events) {
   );
 }
 
-function questionById(id) {
-  return QUESTION_BANK.find((question) => question.id === id) || null;
-}
-
-function questionByNumber(number) {
-  return QUESTION_BANK.find((question) => question.number === number) || null;
-}
-
 function reviewKey(event) {
   return `${event.id}:${event.created_at}`;
 }
@@ -680,7 +440,6 @@ function coveredDecisionAreas(answeredEvents) {
 export function shouldGenerateSpec({
   answeredEvents,
   maxQuestions = DEFAULT_MAX_QUESTIONS,
-  allowEarlySpec = false,
   intake = null,
   attachments = [],
 }) {
@@ -691,9 +450,7 @@ export function shouldGenerateSpec({
   }
   const answeredCount = answeredEvents.length;
   const normalizedMax = normalizeMaxQuestions(maxQuestions);
-  if (answeredCount >= Math.min(DEFAULT_SPEC_TARGET_ROUNDS, normalizedMax)) return true;
   if (answeredCount >= normalizedMax) return true;
-  if (!allowEarlySpec) return false;
   const covered = coveredDecisionAreas(answeredEvents);
   return USER_DECISION_AREAS.every((area) => covered.has(area));
 }
@@ -753,9 +510,8 @@ export function buildResolvedQuestionEvent({
 }
 
 function decisionFor(event) {
-  const question = questionById(event.id) || event;
   if (event.answer_type === 'option') {
-    return question.option_decisions?.[event.resolution_text] || event.resolution_text;
+    return event.option_decisions?.[event.resolution_text] || event.resolution_text;
   }
   return event.resolution_text;
 }
@@ -1017,7 +773,7 @@ function is401kIntake(intake) {
 }
 
 function render401kToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
-  const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
+  const early = allowEarlySpec && answeredEvents.length > 0;
   const context = { intake, answeredEvents };
   const assets = assetLines(intake);
   return sanitizeSpecDocument([
@@ -1145,7 +901,7 @@ function render401kToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec
 }
 
 function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
-  const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
+  const early = allowEarlySpec && answeredEvents.length > 0;
   const context = { intake, answeredEvents };
   return sanitizeSpecDocument([
     `# Toolsite SPEC: ${siteId}`,
@@ -1270,7 +1026,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     return renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec });
   }
 
-  const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
+  const early = allowEarlySpec && answeredEvents.length > 0;
   const context = { intake, answeredEvents };
   return sanitizeSpecDocument([
     `# Toolsite SPEC: ${siteId}`,
@@ -1913,7 +1669,7 @@ export async function runLoopIteration({
         siteId,
         intake,
         events: reviewEvents,
-        allowEarlySpec: allowEarlySpec || answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS,
+        allowEarlySpec,
         renderSpec,
         now,
       });
@@ -1925,7 +1681,7 @@ export async function runLoopIteration({
           siteId,
           intake,
           events: reviewEvents,
-          allowEarlySpec: allowEarlySpec || answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS,
+          allowEarlySpec,
           renderSpec,
           now,
         });
