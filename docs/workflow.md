@@ -110,6 +110,8 @@ If there is no fresh intake, Codex exits with `WAITING_FOR_FRESH_INTAKE` and cre
 
 Production runs created from Hermes intake must write `run-meta.json` with `run_type: "production"`, `deployable: true`, `status: "active"`, `source: "hermes-intake"`, `intake_message_key`, `intake_created_at`, and `run_created_at`.
 
+If the Hermes intake includes image attachments, Codex must copy those real local files into `runs/<site-id>/input-assets/`, record their Telegram provenance in `run-meta.json`, and list the run-local paths in `input.md` so later design agents can use them. If the intake text asks to use an attached image but Hermes provides no attachment metadata, Codex must stop with `MISSING_REQUIRED_ATTACHMENT` and must not pretend the image was read.
+
 When the run is waiting at a human review point, Codex can consume the latest valid Hermes inbox reply and continue to the next workflow step:
 
 ```bash

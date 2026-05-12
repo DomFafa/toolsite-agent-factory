@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, appendFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { GATES_BLOCKED, REVIEW_RESOLVED, SMOKE_NOT_DEPLOYABLE } from './continue-human-review.mjs';
 import {
+  ATTACHMENT_FILE_MISSING,
   createProductionRunFromHermesIntake,
   DEPLOY_BLOCKED,
   NEXT_STAGE_READY,
@@ -17,6 +18,7 @@ import {
 } from './run-toolsite-orchestrator.mjs';
 import {
   INCOMPLETE_INTAKE,
+  MISSING_REQUIRED_ATTACHMENT,
   MISSING_PRODUCTION_START_INTENT,
   STALE_INTAKE_REJECTED,
 } from './read-hermes-intake.mjs';
@@ -62,6 +64,15 @@ async function readEvents(eventPath) {
     .split(/\n+/)
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+async function fileExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function review(overrides = {}) {
@@ -317,6 +328,131 @@ test('fresh Hermes intake with production intent creates production run', async 
   assert.equal(runMeta.intake_message_key, 'telegram:123:fresh:2026-05-12T00:00:01.000Z');
   assert.equal(runMeta.intake_created_at, '2026-05-12T00:00:01.000Z');
   assert.equal(runMeta.run_created_at, '2026-05-12T00:00:02.000Z');
+});
+
+test('production run records attachment provenance and copies input assets', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  const sourceImage = path.join(root, 'hermes-home/state/toolsite-attachments/123/asset.jpg');
+  await mkdir(path.dirname(sourceImage), { recursive: true });
+  await writeFile(sourceImage, 'real-image-bytes');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: [
+        '开始正式建站',
+        '关键词: 401K Calculator',
+        '目标域名: 401k-calculator.net',
+        'UI 参考: https://www.usa.gov',
+        'UX 参考: https://www.calculator.net/401k-calculator.html',
+        '额外要求: 对老人家友好；用我发的图做黑白人物插画点缀；不要登录。',
+      ].join('\n'),
+      created_at: '2026-05-12T00:00:01.000Z',
+      attachments: [
+        {
+          kind: 'image',
+          telegram_file_id: 'tg-photo',
+          local_path: sourceImage,
+          mime_type: 'image/jpeg',
+          file_name: 'elder-friendly-reference.jpg',
+          width: 1600,
+          height: 1200,
+        },
+      ],
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+    now: () => '2026-05-12T00:00:02.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.code, PRODUCTION_RUN_CREATED);
+  const runMeta = JSON.parse(await readFile(path.join(result.runDir, 'run-meta.json'), 'utf8'));
+  assert.equal(runMeta.intake_attachments.length, 1);
+  assert.equal(runMeta.intake_attachments[0].telegram_file_id, 'tg-photo');
+  assert.match(runMeta.intake_attachments[0].run_path, /^input-assets\/01-elder-friendly-reference\.jpg$/);
+  assert.equal(await readFile(path.join(result.runDir, runMeta.intake_attachments[0].run_path), 'utf8'), 'real-image-bytes');
+  const input = await readFile(path.join(result.runDir, 'input.md'), 'utf8');
+  assert.match(input, /## Input assets/);
+  assert.match(input, /input-assets\/01-elder-friendly-reference\.jpg/);
+});
+
+test('production intake requiring attachment but lacking one does not create run', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: [
+        '开始正式建站',
+        '关键词: 401K Calculator',
+        '目标域名: 401k-calculator.net',
+        'UI 参考: https://www.usa.gov',
+        'UX 参考: https://www.calculator.net/401k-calculator.html',
+        '额外想法/限制/模仿点: 参考我发的插画；不要登录。',
+      ].join('\n'),
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.code, MISSING_REQUIRED_ATTACHMENT);
+  assert.equal(await fileExists(path.join(root, 'runs/401k-calculator')), false);
+});
+
+test('production run creation fails if attachment metadata points to a missing file', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: [
+        '开始正式建站',
+        '关键词: 401K Calculator',
+        '目标域名: 401k-missing-asset.net',
+        'UI 参考: https://www.usa.gov',
+        'UX 参考: https://www.calculator.net/401k-calculator.html',
+        '额外要求: 用我发的图片做点缀；不要登录。',
+      ].join('\n'),
+      created_at: '2026-05-12T00:00:01.000Z',
+      attachments: [
+        {
+          kind: 'image',
+          telegram_file_id: 'tg-photo',
+          local_path: path.join(root, 'missing.jpg'),
+          mime_type: 'image/jpeg',
+          file_name: 'missing.jpg',
+          width: 1600,
+          height: 1200,
+        },
+      ],
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, ATTACHMENT_FILE_MISSING);
 });
 
 test('fresh Hermes intake without production intent is rejected', async () => {
