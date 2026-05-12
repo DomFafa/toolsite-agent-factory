@@ -440,9 +440,7 @@ function isTransientRemoteWait(result) {
 }
 
 function isPreAgent2Review(review) {
-  return String(review?.phase || '') === 'pre-agent2' ||
-    String(review?.review_type || '') === 'pre_agent2_interview_question' ||
-    String(review?.review_type || '') === 'pre_agent2_spec_confirmation';
+  return String(review?.review_type || '') === 'pre_agent2_interview_question';
 }
 
 async function guardAgent6(runDir) {

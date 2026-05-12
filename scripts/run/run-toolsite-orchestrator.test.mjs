@@ -8,6 +8,7 @@ import {
   GATES_BLOCKED,
   INVALID_REPLY,
   NO_REPLY_FOUND,
+  REVIEW_CHANGE_REQUESTED,
   REVIEW_RESOLVED,
   SMOKE_NOT_DEPLOYABLE,
 } from './continue-human-review.mjs';
@@ -213,6 +214,120 @@ test('Telegram reply after review is consumed without manual rerun', async () =>
   assert.equal(calls, 2);
   assert.equal(events.some((event) => event.status === 'resolved' && event.selected_option === 'A'), true);
   assert.equal(result.code, NEXT_STAGE_READY);
+});
+
+test('remote mode consumes SPEC confirmation reply and enters Agent2', async () => {
+  const { runDir, inboxPath, eventPath } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# Toolsite SPEC\n');
+  await writeJsonl(eventPath, [
+    review({
+      review_type: 'pre_agent2_spec_confirmation',
+      id: 'pre-agent2-spec-confirmation',
+      phase: 'pre-agent2',
+      blocks: 'agent-2',
+      expected_reply: '确认 SPEC / 修改：...',
+    }),
+  ]);
+  await writeJsonl(inboxPath, [inbox({ text: '确认 SPEC' })]);
+  const stages = [];
+  let preAgent2Calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    inboxPath,
+    remote: true,
+    pollMs: 0,
+    preAgent2Runner: async () => {
+      preAgent2Calls += 1;
+      throw new Error('SPEC confirmation must not be routed into runLoopIteration');
+    },
+    stageRunner: async ({ stage }) => {
+      stages.push(stage);
+      return { ok: true, code: NEXT_STAGE_READY, stage };
+    },
+  });
+
+  const events = await readEvents(eventPath);
+  const resolved = events.find((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'resolved');
+  assert.equal(preAgent2Calls, 0);
+  assert.equal(result.code, NEXT_STAGE_READY);
+  assert.deepEqual(stages, ['agent-2']);
+  assert.equal(resolved.resolution_text, '确认 SPEC');
+  assert.equal(resolved.blocking, false);
+});
+
+test('remote SPEC change request does not enter Agent2', async () => {
+  const { runDir, inboxPath, eventPath } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# Toolsite SPEC\n');
+  await writeJsonl(eventPath, [
+    review({
+      review_type: 'pre_agent2_spec_confirmation',
+      id: 'pre-agent2-spec-confirmation',
+      phase: 'pre-agent2',
+      blocks: 'agent-2',
+      expected_reply: '确认 SPEC / 修改：...',
+    }),
+  ]);
+  await writeJsonl(inboxPath, [inbox({ text: '修改：请调整 SPEC' })]);
+  let stageCalls = 0;
+  let preAgent2Calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    inboxPath,
+    remote: true,
+    pollMs: 0,
+    preAgent2Runner: async () => {
+      preAgent2Calls += 1;
+      throw new Error('SPEC confirmation change request must not be routed into runLoopIteration');
+    },
+    stageRunner: async () => {
+      stageCalls += 1;
+      throw new Error('Agent2 must not start after a SPEC change request');
+    },
+  });
+
+  const events = await readEvents(eventPath);
+  assert.equal(preAgent2Calls, 0);
+  assert.equal(stageCalls, 0);
+  assert.equal(result.code, REVIEW_CHANGE_REQUESTED);
+  assert.equal(events.some((event) => event.status === 'resolved' && event.change_requested === true), true);
+  assert.equal(
+    events.some((event) => event.id === 'pre-agent2-spec-confirmation-change-request' && event.status === 'open'),
+    true,
+  );
+});
+
+test('remote Pre-Agent2 interview question still uses Pre-Agent2 loop', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeJsonl(eventPath, [
+    review({
+      review_type: 'pre_agent2_interview_question',
+      id: 'pre-agent2-dynamic-sample-inputs',
+      phase: 'pre-agent2',
+      blocks: 'pre-agent2-spec',
+      expected_reply: '1 / 2 / 3 / 4 / 5',
+    }),
+  ]);
+  let preAgent2Calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 1,
+    preAgent2Runner: async () => {
+      preAgent2Calls += 1;
+      return { action: 'waiting', reason: 'awaiting-targeted-answer' };
+    },
+    continueReview: async () => {
+      throw new Error('Pre-Agent2 interview question must be handled by runLoopIteration');
+    },
+  });
+
+  assert.equal(preAgent2Calls, 1);
+  assert.equal(result.action, 'waiting');
+  assert.equal(result.reason, 'awaiting-targeted-answer');
 });
 
 test('invalid remote reply does not advance', async () => {
