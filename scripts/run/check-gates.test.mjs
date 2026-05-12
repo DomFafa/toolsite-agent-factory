@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { checkRunGates, reportHasPassDecision } from './check-gates.mjs';
+import { checkRunGates, reportHasPassDecision, SMOKE_RUN_BLOCK_MESSAGE } from './check-gates.mjs';
 
 async function makeRun() {
   const root = await mkdtemp(path.join(tmpdir(), 'gate-check-'));
@@ -117,6 +117,10 @@ async function writeGateResult(runDir, filename, { passed = true, status = passe
       2,
     ),
   );
+}
+
+async function writeRunMeta(runDir, meta) {
+  await writeFile(path.join(runDir, 'run-meta.json'), JSON.stringify(meta, null, 2));
 }
 
 async function writeAgent25Outputs(runDir, { externalEvidence = false, optionImagesGate = true } = {}) {
@@ -501,6 +505,85 @@ test('blocks Agent 6 when gate evidence integrity fails', async () => {
   assert.equal(result.allowed, false);
   assert.match(result.missing.join('\n'), /gate evidence integrity:/);
   assert.equal(result.allowedNextStep, 'Run gate evidence integrity check');
+});
+
+test('blocks smoke runs before Agent 6 with a clear non-deployable reason', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    run_type: 'smoke',
+    deployable: false,
+    created_for: 'pipeline smoke test',
+  });
+
+  const result = await checkRunGates({ runDir, before: 'agent-6' });
+  assert.equal(result.allowed, false);
+  assert.deepEqual(result.missing, [SMOKE_RUN_BLOCK_MESSAGE]);
+  assert.equal(result.failedStages[0].stage, 'runDeployability');
+  assert.equal(result.allowedNextStep, 'Start a production run for Agent6 deployment');
+});
+
+test('production runs before Agent 6 still require gate evidence integrity', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    run_type: 'production',
+    deployable: true,
+    created_for: 'production toolsite run',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeAgent3Outputs(runDir);
+  await writeGateResult(runDir, 'visual-restoration-similarity.json');
+  await mkdir(path.join(runDir, 'agent-4-output'), { recursive: true });
+  await writeFile(path.join(runDir, 'agent-4-output/implementation-report.md'), '# Implementation\n');
+  await writeFile(path.join(runDir, 'agent-4-output/changed-files.md'), '# Changed Files\n');
+  await mkdir(path.join(runDir, 'site'), { recursive: true });
+  await writeFile(path.join(runDir, 'site/package.json'), '{"type":"module"}\n');
+  await writeFile(path.join(runDir, 'state.json'), JSON.stringify({ qa: { passed: true } }, null, 2));
+  await mkdir(path.join(runDir, 'agent-5-output/chat-delivery'), { recursive: true });
+  await writeFile(path.join(runDir, 'agent-5-output/qa-report.md'), '# QA\n');
+  await writeFile(
+    path.join(runDir, 'agent-5-output/chat-delivery/final-screenshot-delivery.md'),
+    'Decision: PASS\nGPT target and final page screenshots sent to chat.\n',
+  );
+  for (const gate of [
+    'final-visual-lock.json',
+    'final-visual-similarity.json',
+    'rendered-assets.json',
+    'tool-spec.json',
+    'page-plan.json',
+    'final-qa-evidence.json',
+  ]) {
+    await writeGateResult(runDir, gate);
+  }
+  await writeFile(path.join(runDir, 'approval.md'), '- [x] Final QA passed\n- [x] Production approval granted\n');
+  await writeFile(path.join(runDir, 'gate-ledger.md'), '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n');
+
+  const result = await checkRunGates({ runDir, before: 'agent-6' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /gate evidence integrity:/);
+  assert.doesNotMatch(result.missing.join('\n'), /smoke run/i);
+});
+
+test('smoke runs can still use earlier smoke checks', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    run_type: 'smoke',
+    deployable: false,
+    created_for: 'pipeline smoke test',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, { externalEvidence: true });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeAgent3Outputs(runDir);
+  await writeFile(path.join(runDir, 'gate-ledger.md'), '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n');
+
+  const result = await checkRunGates({ runDir, before: 'agent-4' });
+  assert.equal(result.allowed, false);
+  assert.doesNotMatch(result.missing.join('\n'), /smoke run/i);
+  assert.match(result.missing.join('\n'), /visual-restoration-similarity\.json/);
 });
 
 test('does not run gate evidence integrity before Agent 4', async () => {

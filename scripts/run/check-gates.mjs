@@ -82,6 +82,9 @@ const BEFORE_ORDER = new Map([
   ['agent6', 6],
 ]);
 
+export const SMOKE_RUN_BLOCK_MESSAGE =
+  'This is a smoke run and is not deployable. Smoke runs are not deployable. Start a production run for Agent6 deployment.';
+
 async function exists(filePath) {
   try {
     await access(filePath);
@@ -96,6 +99,16 @@ async function readOptional(filePath) {
     return await readFile(filePath, 'utf8');
   } catch {
     return '';
+  }
+}
+
+async function readJsonOptional(filePath) {
+  const text = await readOptional(filePath);
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }
 
@@ -341,6 +354,14 @@ async function checkGateEvidenceIntegrity(runDir) {
   return result.passed ? [] : result.failures.map((failure) => `gate evidence integrity: ${failure}`);
 }
 
+async function checkRunDeployability(runDir) {
+  const meta = await readJsonOptional(path.join(runDir, 'run-meta.json'));
+  if (String(meta?.run_type || '').toLowerCase() === 'smoke' || meta?.deployable === false) {
+    return [SMOKE_RUN_BLOCK_MESSAGE];
+  }
+  return [];
+}
+
 async function checkApproval(runDir) {
   const approval = await readOptional(path.join(runDir, 'approval.md'));
   if (!approval.trim()) return ['approval.md'];
@@ -365,6 +386,7 @@ function firstAllowedNextStep(failedStages) {
       visualRestorationGate: 'Run Agent 5 Visual Restoration Gate',
       agent4: 'Run Agent 4 Astro Implementation',
       finalQa: 'Run Agent 5 Final QA',
+      runDeployability: 'Start a production run for Agent6 deployment',
       gateEvidenceIntegrity: 'Run gate evidence integrity check',
       approval: 'Complete production approval checklist',
     }[first] || 'No next step available'
@@ -379,6 +401,20 @@ export async function checkRunGates({ runDir, before }) {
   const ledgerText = await readOptional(path.join(absoluteRunDir, 'gate-ledger.md'));
   const ledgerStatuses = parseLedgerStatuses(ledgerText);
   const failedStages = [];
+
+  if (beforeOrder >= 6) {
+    const deployabilityMissing = await checkRunDeployability(absoluteRunDir);
+    if (deployabilityMissing.length > 0) {
+      return {
+        allowed: false,
+        before,
+        runDir: absoluteRunDir,
+        missing: deployabilityMissing,
+        failedStages: [{ stage: 'runDeployability', missing: deployabilityMissing }],
+        allowedNextStep: firstAllowedNextStep([{ stage: 'runDeployability', missing: deployabilityMissing }]),
+      };
+    }
+  }
 
   const checks = [
     { stage: 'preAgent2Spec', applies: beforeOrder === 2, run: () => checkPreAgent2Spec(absoluteRunDir) },

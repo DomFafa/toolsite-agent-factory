@@ -29,6 +29,7 @@
     "test:tool-spec-gate": "node --test scripts/qa/check-tool-spec.test.mjs",
     "test:selected-assets": "node --test scripts/qa/check-selected-assets.test.mjs",
     "test:toolsite-design-review": "node --test scripts/qa/check-toolsite-design-review.test.mjs",
+    "smoke:pre-agent2-batch": "node scripts/run/smoke-pre-agent2-batch.mjs",
     "check:gates": "node scripts/run/check-gates.mjs",
     "check:web-access": "node scripts/run/check-web-access.mjs",
     "verify:run": "node scripts/run/verify-run.mjs",
