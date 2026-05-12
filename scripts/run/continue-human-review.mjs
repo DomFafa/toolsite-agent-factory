@@ -181,7 +181,15 @@ async function ensureProductionDeployable(runDir) {
   return { ok: true, gateResult };
 }
 
-async function handleSpecConfirmation({ runDir, eventPath, openReview, inboxMessage, advance, now }) {
+async function handleSpecConfirmation({
+  runDir,
+  eventPath,
+  openReview,
+  inboxMessage,
+  advance,
+  onSpecChangeRequest,
+  now,
+}) {
   const resolvedAt = now();
   const text = normalizeText(inboxMessage.text);
   if (isSpecConfirmation(text)) {
@@ -208,6 +216,17 @@ async function handleSpecConfirmation({ runDir, eventPath, openReview, inboxMess
     });
     const pendingReview = buildPendingChangeReview({ openReview, inboxMessage, createdAt: resolvedAt });
     await appendJsonl(eventPath, pendingReview);
+    const changeResult = typeof onSpecChangeRequest === 'function'
+      ? await onSpecChangeRequest({
+          runDir,
+          eventPath,
+          openReview,
+          inboxMessage,
+          resolvedEvent,
+          pendingReview,
+          createdAt: resolvedAt,
+        })
+      : null;
     return {
       ok: true,
       code: REVIEW_CHANGE_REQUESTED,
@@ -215,6 +234,7 @@ async function handleSpecConfirmation({ runDir, eventPath, openReview, inboxMess
       inboxMessage,
       resolvedEvent,
       pendingReview,
+      changeResult,
       nextStage: null,
     };
   }
@@ -360,6 +380,7 @@ export async function continueHumanReview({
   inboxPath = DEFAULT_HERMES_INBOX,
   advance = defaultAdvance,
   resendOptionReview = defaultResendOptionReview,
+  onSpecChangeRequest = null,
   now = DEFAULT_NOW,
 } = {}) {
   if (!runDir) throw new Error('Missing --run-dir');
@@ -404,6 +425,7 @@ export async function continueHumanReview({
     },
     advance,
     resendOptionReview,
+    onSpecChangeRequest,
     now,
   });
 }
