@@ -48,6 +48,14 @@ cat > "$RUN_DIR/state.json" <<JSON
 }
 JSON
 
+cat > "$RUN_DIR/run-meta.json" <<JSON
+{
+  "run_type": "production",
+  "deployable": true,
+  "created_for": "production toolsite run"
+}
+JSON
+
 cat > "$RUN_DIR/README.md" <<MD
 # Run: $SITE_ID
 
