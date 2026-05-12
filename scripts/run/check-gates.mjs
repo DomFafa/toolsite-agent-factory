@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { PRE_AGENT2_BLOCK_MESSAGE } from '../qa/check-pre-agent2-toolsite-spec.mjs';
+import { runGateEvidenceIntegrityCheck } from './check-gate-evidence-integrity.mjs';
 import { requirePassingGateResult } from './gate-result-utils.mjs';
 
 const AGENT_2_FILES = [
@@ -335,6 +336,11 @@ async function checkFinalQa(runDir, state) {
   return missing;
 }
 
+async function checkGateEvidenceIntegrity(runDir) {
+  const result = await runGateEvidenceIntegrityCheck({ runDir, before: 'agent-6' });
+  return result.passed ? [] : result.failures.map((failure) => `gate evidence integrity: ${failure}`);
+}
+
 async function checkApproval(runDir) {
   const approval = await readOptional(path.join(runDir, 'approval.md'));
   if (!approval.trim()) return ['approval.md'];
@@ -359,6 +365,7 @@ function firstAllowedNextStep(failedStages) {
       visualRestorationGate: 'Run Agent 5 Visual Restoration Gate',
       agent4: 'Run Agent 4 Astro Implementation',
       finalQa: 'Run Agent 5 Final QA',
+      gateEvidenceIntegrity: 'Run gate evidence integrity check',
       approval: 'Complete production approval checklist',
     }[first] || 'No next step available'
   );
@@ -384,6 +391,7 @@ export async function checkRunGates({ runDir, before }) {
     { stage: 'visualRestorationGate', applies: beforeOrder >= 4, run: () => checkVisualRestorationGate(absoluteRunDir) },
     { stage: 'agent4', applies: beforeOrder >= 5.9, run: () => checkAgent4(absoluteRunDir) },
     { stage: 'finalQa', applies: beforeOrder >= 6, run: () => checkFinalQa(absoluteRunDir, state) },
+    { stage: 'gateEvidenceIntegrity', applies: beforeOrder >= 6, run: () => checkGateEvidenceIntegrity(absoluteRunDir) },
     { stage: 'approval', applies: beforeOrder >= 6, run: () => checkApproval(absoluteRunDir) },
   ];
 

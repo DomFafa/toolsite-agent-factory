@@ -43,6 +43,7 @@
     "send:agent25-option-review": "node scripts/run/send-agent25-option-review.mjs",
     "check:agent25-lineage": "node scripts/run/check-agent25-lineage.mjs",
     "check:agent6-completion": "node scripts/run/check-agent6-completion.mjs",
+    "check:gate-evidence-integrity": "node scripts/run/check-gate-evidence-integrity.mjs",
     "check:page-plan": "node scripts/qa/check-page-plan.mjs",
     "check:rendered-assets": "node scripts/qa/check-rendered-assets.mjs",
     "check:final-visual-lock": "node scripts/qa/check-final-visual-lock.mjs",
