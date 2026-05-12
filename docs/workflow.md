@@ -100,6 +100,14 @@ For a remote production run, keep the computer-side orchestrator running and use
 npm run run:toolsite -- --run-dir runs/<site-id> --remote
 ```
 
+To let the machine create production runs from fresh Telegram intake without a manual start command, run the remote worker:
+
+```bash
+npm run remote:toolsite-worker
+```
+
+The worker is long-running. It polls Hermes inbox for a fresh production-start intake, requires the explicit `开始正式建站`-style intent, validates the five required fields, enforces required image attachments, creates a deployable production run, copies any images into `runs/<site-id>/input-assets/`, then starts `npm run run:toolsite -- --run-dir runs/<site-id> --remote`. Worker state, logs, and lock files live under `.toolsite-worker/`; the lock prevents two workers from processing the same intake. Processed intake message keys are recorded so the same Telegram message cannot create duplicate runs.
+
 To create a production run from Telegram intake, the user must first send a fresh Telegram message after the command starts. The message must include a production-start intent phrase such as `开始正式建站`, `新建 production run`, `创建生产站`, `开始生产运行`, or `正式开始这个站`, and it must include all five intake fields. Codex must not create a production run from historical Hermes inbox messages by default:
 
 ```bash
