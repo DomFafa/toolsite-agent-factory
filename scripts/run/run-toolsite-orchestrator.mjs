@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { checkRunGates, SMOKE_RUN_BLOCK_MESSAGE } from './check-gates.mjs';
 import {
   continueHumanReview,
+  INVALID_REPLY,
+  NO_REPLY_FOUND,
   NO_OPEN_REVIEW,
   REVIEW_RESOLVED,
   AGENT6_READY,
@@ -18,6 +20,8 @@ import {
   readHermesIntake,
   STALE_INTAKE_REJECTED,
 } from './read-hermes-intake.mjs';
+import { runLoopIteration } from './pre-agent2-telegram-loop.mjs';
+import { attachmentPurpose } from './pre-agent2-question-planner.mjs';
 import { summarizeReviewEvents } from './resolve-human-review-from-hermes-inbox.mjs';
 
 export const STOPPED_AT_HUMAN_REVIEW = 'STOPPED_AT_HUMAN_REVIEW';
@@ -109,6 +113,11 @@ function safeFileName(value, fallback = 'attachment') {
 async function prepareAttachmentCopyPlan({ runDir, intake }) {
   const attachments = Array.isArray(intake.attachments) ? intake.attachments : [];
   const copyPlan = [];
+  const purpose = attachmentPurpose({
+    keyword: intake.keyword,
+    target_domain: intake.target_domain,
+    extra_notes: intake.extra_notes,
+  }) || 'design_reference';
   for (const [index, attachment] of attachments.entries()) {
     if (attachment.kind !== 'image') continue;
     const sourcePath = String(attachment.local_path || '').trim();
@@ -136,6 +145,7 @@ async function prepareAttachmentCopyPlan({ runDir, intake }) {
         telegram_file_id: attachment.telegram_file_id || '',
         source_local_path: sourcePath,
         run_path: runRelativePath,
+        purpose,
         mime_type: attachment.mime_type || '',
         file_name: attachment.file_name || fileName,
         width: attachment.width ?? null,
@@ -156,7 +166,7 @@ function inputAssetsSection(attachmentPlan) {
     '- The following assets came from the fresh Hermes Telegram intake and must be visible to later design agents.',
     ...attachmentPlan.map(
       ({ metadata }) =>
-        `- ${metadata.kind}: ${metadata.run_path} (source: ${metadata.source_local_path}, telegram_file_id: ${metadata.telegram_file_id || 'unknown'})`,
+        `- ${metadata.kind}: ${metadata.run_path} (purpose: ${metadata.purpose}, source: ${metadata.source_local_path}, telegram_file_id: ${metadata.telegram_file_id || 'unknown'})`,
     ),
     '',
   ];
@@ -416,6 +426,25 @@ async function defaultStageRunner({ stage }) {
   };
 }
 
+async function defaultPreAgent2Runner({ runDir, inboxPath }) {
+  return runLoopIteration({ runDir, inboxPath });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientRemoteWait(result) {
+  return result?.code === NO_REPLY_FOUND || result?.code === INVALID_REPLY ||
+    result?.action === 'waiting' || result?.action === 'invalid-reply';
+}
+
+function isPreAgent2Review(review) {
+  return String(review?.phase || '') === 'pre-agent2' ||
+    String(review?.review_type || '') === 'pre_agent2_interview_question' ||
+    String(review?.review_type || '') === 'pre_agent2_spec_confirmation';
+}
+
 async function guardAgent6(runDir) {
   const runMeta = await readRunMeta(runDir);
   if (runMeta?.run_type === 'smoke' || runMeta?.deployable === false) {
@@ -457,7 +486,10 @@ export async function runToolsiteOrchestrator({
   rootDir = process.cwd(),
   continueReview = continueHumanReview,
   stageRunner = defaultStageRunner,
-  maxSteps = 20,
+  preAgent2Runner = defaultPreAgent2Runner,
+  maxSteps = remote ? Infinity : 20,
+  pollMs = 10_000,
+  maxIdleIterations = Infinity,
 } = {}) {
   let absoluteRunDir = runDir ? path.resolve(runDir) : '';
   let productionStart = null;
@@ -491,7 +523,15 @@ export async function runToolsiteOrchestrator({
         };
       }
 
-      const result = await continueReview({ runDir: absoluteRunDir, inboxPath });
+      const latestOpenReview = summary.openReviews.at(-1);
+      const result = isPreAgent2Review(latestOpenReview)
+        ? await preAgent2Runner({ runDir: absoluteRunDir, inboxPath, openReview: latestOpenReview })
+        : await continueReview({ runDir: absoluteRunDir, inboxPath });
+      if (isTransientRemoteWait(result)) {
+        if (step + 1 >= maxIdleIterations) return result;
+        if (pollMs > 0) await sleep(pollMs);
+        continue;
+      }
       if (result.code !== REVIEW_RESOLVED && result.code !== AGENT6_READY) {
         return result;
       }
@@ -516,9 +556,25 @@ export async function runToolsiteOrchestrator({
     const stage = await detectNextStage(absoluteRunDir);
     if (stage === 'agent-6') return guardAgent6(absoluteRunDir);
 
-    const stageResult = await stageRunner({ runDir: absoluteRunDir, stage, remote });
+    const stageResult = stage === 'pre-agent2'
+      ? await preAgent2Runner({ runDir: absoluteRunDir, inboxPath })
+      : await stageRunner({ runDir: absoluteRunDir, stage, remote });
     const afterStage = await readHumanReviewSummary(absoluteRunDir);
     if (afterStage.openReviews.length > 0) {
+      if (remote) {
+        if (step + 1 >= maxIdleIterations) {
+          return {
+            ok: true,
+            code: STOPPED_AT_HUMAN_REVIEW,
+            stage,
+            stageResult,
+            openReviews: afterStage.openReviews,
+            productionStart,
+          };
+        }
+        if (pollMs > 0) await sleep(pollMs);
+        continue;
+      }
       return {
         ok: true,
         code: STOPPED_AT_HUMAN_REVIEW,
@@ -597,6 +653,7 @@ async function main() {
     resumeExistingRun: Boolean(args.resumeExistingRun),
     startedAt: args['started-at'] || commandStartedAt,
     remote: Boolean(args.remote),
+    pollMs: args['poll-ms'] ? Number(args['poll-ms']) : 10_000,
   });
   printResult(result);
   process.exitCode = result.ok ? 0 : 1;

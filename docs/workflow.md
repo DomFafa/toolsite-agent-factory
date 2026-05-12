@@ -110,7 +110,7 @@ If there is no fresh intake, Codex exits with `WAITING_FOR_FRESH_INTAKE` and cre
 
 Production runs created from Hermes intake must write `run-meta.json` with `run_type: "production"`, `deployable: true`, `status: "active"`, `source: "hermes-intake"`, `intake_message_key`, `intake_created_at`, and `run_created_at`.
 
-If the Hermes intake includes image attachments, Codex must copy those real local files into `runs/<site-id>/input-assets/`, record their Telegram provenance in `run-meta.json`, and list the run-local paths in `input.md` so later design agents can use them. If the intake text asks to use an attached image but Hermes provides no attachment metadata, Codex must stop with `MISSING_REQUIRED_ATTACHMENT` and must not pretend the image was read.
+If the Hermes intake includes image attachments, Codex must copy those real local files into `runs/<site-id>/input-assets/`, record their Telegram provenance in `run-meta.json`, and list the run-local paths in `input.md` so later design agents can use them. Attachments referenced as `用我发的图`, `参考我发的插画`, or `按附件` are design inputs, not questions for the user; downstream Agent2 and Agent2.5 handoff documents must preserve the run-local path and purpose such as `design_reference` or `illustration_reference`. If the intake text asks to use an attached image but Hermes provides no attachment metadata, Codex must stop with `MISSING_REQUIRED_ATTACHMENT` and must not pretend the image was read.
 
 When the run is waiting at a human review point, Codex can consume the latest valid Hermes inbox reply and continue to the next workflow step:
 
@@ -126,7 +126,7 @@ Supported mobile replies are intentionally short:
 - `重发`, `resend`, or `force` resends the Agent2.5 option image review without entering Agent3.
 - `确认部署` is only valid for deployable production runs after `check:gates --before agent-6` and gate evidence integrity pass.
 
-The orchestrator must stop at the next open `human_review`. It must not skip gates, must not auto-confirm reviews, must not deploy smoke runs, and must not modify Hermes inbox. Smoke runs remain useful for pipeline checks but are blocked from Agent6 deployment gates.
+In `--remote` mode, the orchestrator must keep polling Hermes inbox after it sends or detects a `human_review`. When a valid Telegram reply arrives, it resolves the current review and advances until the next review, fatal error, explicit completion, or user interrupt. It must not skip gates, must not auto-confirm reviews, must not deploy smoke runs, and must not modify Hermes inbox. Smoke runs remain useful for pipeline checks but are blocked from Agent6 deployment gates.
 
 ## Phase 1: Keyword research
 
@@ -136,7 +136,7 @@ Use Agent 1 only when keyword validation is needed. Agent 1 stops after producin
 
 Agent 2 is blocked until the Pre-Agent2 Toolsite SPEC Gate passes.
 
-Codex must complete a lightweight user Q&A and write `runs/<site-id>/toolsite-spec.md` before Agent 2 starts. The target Q&A length is 12-20 rounds. Complex tools may use up to 30 rounds. If the six user decision areas are already clear before 12 rounds, Codex may output the SPEC early only when `toolsite-spec.md` explicitly records:
+Codex must complete dynamic gap analysis and write `runs/<site-id>/toolsite-spec.md` before Agent 2 starts. Production, remote, smoke, and fallback user flows must not show the old fixed generic Q1-Q12 questionnaire. If the five intake fields and any supplied attachments already make the six decision areas clear, Codex should generate the SPEC directly. If gaps remain, Codex may ask up to four project-specific questions that reference the current keyword, domain, UI reference, UX reference, constraints, or attachments; it must not ask for information already present in the five required fields. If the six user decision areas are already clear before 12 rounds, Codex may output the SPEC early only when `toolsite-spec.md` explicitly records:
 
 ```txt
 六个用户决策区已清楚，用户同意提前输出 SPEC。

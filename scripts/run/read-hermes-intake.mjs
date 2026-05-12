@@ -216,6 +216,9 @@ export function hasProductionStartIntent(text) {
 
 export function intakeRequiresAttachment(text) {
   const body = String(text || '');
+  if (/参考我发的.*(?:图|图片|插画)|用我发的.*(?:图|图片|插画)|黑白人物插画/.test(body)) {
+    return true;
+  }
   return [
     '用我发的图',
     '用我发的图片',

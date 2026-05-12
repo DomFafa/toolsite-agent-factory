@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { GATES_BLOCKED, REVIEW_RESOLVED, SMOKE_NOT_DEPLOYABLE } from './continue-human-review.mjs';
+import {
+  GATES_BLOCKED,
+  INVALID_REPLY,
+  NO_REPLY_FOUND,
+  REVIEW_RESOLVED,
+  SMOKE_NOT_DEPLOYABLE,
+} from './continue-human-review.mjs';
 import {
   ATTACHMENT_FILE_MISSING,
   createProductionRunFromHermesIntake,
@@ -144,6 +150,7 @@ test('run:toolsite consumes open review in remote mode and stops at next human_r
     runDir,
     inboxPath,
     remote: true,
+    maxIdleIterations: 1,
     continueReview: async () => {
       await appendJsonl(eventPath, { ...review(), status: 'resolved', blocking: false, selected_option: 'A' });
       await appendJsonl(eventPath, {
@@ -163,6 +170,68 @@ test('run:toolsite consumes open review in remote mode and stops at next human_r
   assert.equal(result.openReviews[0].id, 'pre-deploy-approval');
 });
 
+test('remote mode keeps polling after sending review when no reply exists yet', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeJsonl(eventPath, [review()]);
+  let calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 2,
+    continueReview: async () => {
+      calls += 1;
+      return { ok: false, code: NO_REPLY_FOUND, message: NO_REPLY_FOUND };
+    },
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.code, NO_REPLY_FOUND);
+});
+
+test('Telegram reply after review is consumed without manual rerun', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# Toolsite SPEC\n');
+  await writeJsonl(eventPath, [review()]);
+  let calls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 3,
+    continueReview: async () => {
+      calls += 1;
+      if (calls === 1) return { ok: false, code: NO_REPLY_FOUND, message: NO_REPLY_FOUND };
+      await appendJsonl(eventPath, { ...review(), status: 'resolved', blocking: false, selected_option: 'A' });
+      return { ok: true, code: REVIEW_RESOLVED };
+    },
+  });
+
+  const events = await readEvents(eventPath);
+  assert.equal(calls, 2);
+  assert.equal(events.some((event) => event.status === 'resolved' && event.selected_option === 'A'), true);
+  assert.equal(result.code, NEXT_STAGE_READY);
+});
+
+test('invalid remote reply does not advance', async () => {
+  const { runDir, eventPath } = await makeFixture();
+  await writeJsonl(eventPath, [review()]);
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    pollMs: 0,
+    maxIdleIterations: 1,
+    continueReview: async () => ({ ok: false, code: INVALID_REPLY, message: INVALID_REPLY }),
+  });
+
+  const events = await readEvents(eventPath);
+  assert.equal(result.code, INVALID_REPLY);
+  assert.equal(events.some((event) => event.status === 'resolved'), false);
+});
+
 test('run:toolsite starts next stage and stops when that stage opens a review', async () => {
   const { runDir, eventPath } = await makeFixture();
   await writeFile(path.join(runDir, 'toolsite-spec.md'), '# SPEC\n');
@@ -170,6 +239,7 @@ test('run:toolsite starts next stage and stops when that stage opens a review', 
   const result = await runToolsiteOrchestrator({
     runDir,
     remote: true,
+    maxIdleIterations: 1,
     stageRunner: async ({ stage }) => {
       assert.equal(stage, 'agent-2');
       await appendJsonl(
@@ -376,11 +446,26 @@ test('production run records attachment provenance and copies input assets', asy
   const runMeta = JSON.parse(await readFile(path.join(result.runDir, 'run-meta.json'), 'utf8'));
   assert.equal(runMeta.intake_attachments.length, 1);
   assert.equal(runMeta.intake_attachments[0].telegram_file_id, 'tg-photo');
+  assert.equal(runMeta.intake_attachments[0].purpose, 'illustration_reference');
   assert.match(runMeta.intake_attachments[0].run_path, /^input-assets\/01-elder-friendly-reference\.jpg$/);
   assert.equal(await readFile(path.join(result.runDir, runMeta.intake_attachments[0].run_path), 'utf8'), 'real-image-bytes');
   const input = await readFile(path.join(result.runDir, 'input.md'), 'utf8');
   assert.match(input, /## Input assets/);
   assert.match(input, /input-assets\/01-elder-friendly-reference\.jpg/);
+  assert.match(input, /illustration_reference/);
+  assert.match(input, /design agents/);
+});
+
+test('Agent2 contract requires design-generation-input to preserve image references', async () => {
+  const prompt = await readFile(path.resolve('agents/agent-2-site-brief/prompt.md'), 'utf8');
+  const checklist = await readFile(path.resolve('agents/agent-2-site-brief/checklist.md'), 'utf8');
+  const schema = await readFile(path.resolve('agents/agent-2-site-brief/output.schema.md'), 'utf8');
+
+  for (const text of [prompt, checklist, schema]) {
+    assert.match(text, /input-assets/);
+    assert.match(text, /design-generation-input\.md/);
+    assert.match(text, /design_reference|illustration_reference/);
+  }
 });
 
 test('production intake requiring attachment but lacking one does not create run', async () => {

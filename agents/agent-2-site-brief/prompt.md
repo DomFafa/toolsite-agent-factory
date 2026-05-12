@@ -18,6 +18,7 @@ Turn the confirmed Pre-Agent2 Toolsite SPEC into a complete build brief and desi
 - Stop and write an issue note if required inputs are missing after the gate passes.
 - UI reference and UX reference fields are required in the Toolsite SPEC, but they do not require URLs. The user may explicitly choose open exploration or tool-site best practices.
 - Organize any reference websites, screenshots, illustrations, buttons, forms, cards, or interaction examples into a structured UI reference dossier for Agent 2.5.
+- If `input.md` lists `Input assets`, preserve each run-local `input-assets/...` path and its purpose (`design_reference` or `illustration_reference`) in `ui-reference-dossier.md` and `design-generation-input.md`. Do not ask the user to re-explain an image whose purpose is already stated in the intake.
 - Do not ask Agent 2.5 to rewrite SEO strategy or product requirements. Agent 2 owns product, SEO, content, and tool behavior.
 - Required gate: write a Toolsite Page Plan table in `page-plan.md` or `content-plan.md` with columns `page | type | status | reason | implementation owner`.
 - Page status must be exactly one of: `required`, `optional-recommended`, `optional-not-needed`, `rejected`.
