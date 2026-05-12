@@ -13,6 +13,7 @@ import {
   DEFAULT_HERMES_INBOX,
   DEFAULT_HERMES_REMOTE_STATE,
   INCOMPLETE_INTAKE,
+  MISSING_REQUIRED_ATTACHMENT,
   MISSING_PRODUCTION_START_INTENT,
   readHermesIntake,
   STALE_INTAKE_REJECTED,
@@ -27,6 +28,7 @@ export const DEPLOY_NOT_RUN = 'DEPLOY_NOT_RUN';
 export const WAITING_FOR_FRESH_INTAKE = 'WAITING_FOR_FRESH_INTAKE';
 export const RUN_ALREADY_EXISTS = 'RUN_ALREADY_EXISTS';
 export const PRODUCTION_RUN_CREATED = 'PRODUCTION_RUN_CREATED';
+export const ATTACHMENT_FILE_MISSING = 'ATTACHMENT_FILE_MISSING';
 
 async function exists(filePath) {
   try {
@@ -92,10 +94,75 @@ function intakeCodeToProductionStartCode(result) {
   if (result.code === 'stale-intake') return STALE_INTAKE_REJECTED;
   if (result.code === 'missing-production-start-intent') return MISSING_PRODUCTION_START_INTENT;
   if (result.code === 'incomplete-intake') return INCOMPLETE_INTAKE;
+  if (result.code === 'missing-required-attachment') return MISSING_REQUIRED_ATTACHMENT;
   return WAITING_FOR_FRESH_INTAKE;
 }
 
-function filledRunInput({ siteId, intake }) {
+function safeFileName(value, fallback = 'attachment') {
+  const safe = String(value || '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return safe || fallback;
+}
+
+async function prepareAttachmentCopyPlan({ runDir, intake }) {
+  const attachments = Array.isArray(intake.attachments) ? intake.attachments : [];
+  const copyPlan = [];
+  for (const [index, attachment] of attachments.entries()) {
+    if (attachment.kind !== 'image') continue;
+    const sourcePath = String(attachment.local_path || '').trim();
+    if (!sourcePath) {
+      return { ok: false, code: MISSING_REQUIRED_ATTACHMENT, message: MISSING_REQUIRED_ATTACHMENT };
+    }
+    if (!(await exists(sourcePath))) {
+      return {
+        ok: false,
+        code: ATTACHMENT_FILE_MISSING,
+        message: `${ATTACHMENT_FILE_MISSING}: ${sourcePath}`,
+      };
+    }
+    const parsed = path.parse(attachment.file_name || sourcePath);
+    const extension = parsed.ext || path.extname(sourcePath) || '.jpg';
+    const baseName = safeFileName(parsed.name || `image-${index + 1}`, `image-${index + 1}`);
+    const fileName = `${String(index + 1).padStart(2, '0')}-${baseName}${extension}`;
+    const runRelativePath = path.join('input-assets', fileName);
+    copyPlan.push({
+      sourcePath,
+      destinationPath: path.join(runDir, runRelativePath),
+      runRelativePath,
+      metadata: {
+        kind: attachment.kind,
+        telegram_file_id: attachment.telegram_file_id || '',
+        source_local_path: sourcePath,
+        run_path: runRelativePath,
+        mime_type: attachment.mime_type || '',
+        file_name: attachment.file_name || fileName,
+        width: attachment.width ?? null,
+        height: attachment.height ?? null,
+      },
+    });
+  }
+  return { ok: true, attachments: copyPlan };
+}
+
+function inputAssetsSection(attachmentPlan) {
+  if (!attachmentPlan.length) {
+    return ['## Input assets', '', '- No image attachments were provided with this intake.', ''];
+  }
+  return [
+    '## Input assets',
+    '',
+    '- The following assets came from the fresh Hermes Telegram intake and must be visible to later design agents.',
+    ...attachmentPlan.map(
+      ({ metadata }) =>
+        `- ${metadata.kind}: ${metadata.run_path} (source: ${metadata.source_local_path}, telegram_file_id: ${metadata.telegram_file_id || 'unknown'})`,
+    ),
+    '',
+  ];
+}
+
+function filledRunInput({ siteId, intake, attachmentPlan = [] }) {
   return [
     '# Run Input',
     '',
@@ -116,6 +183,7 @@ function filledRunInput({ siteId, intake }) {
     `- UX Reference / UX 参考: ${intake.ux_reference}`,
     `- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点: ${intake.extra_notes}`,
     '',
+    ...inputAssetsSection(attachmentPlan),
     'Before Agent 2 starts, complete and confirm `toolsite-spec.md`, then run:',
     '',
     '```bash',
@@ -151,7 +219,7 @@ function filledRunInput({ siteId, intake }) {
   ].join('\n');
 }
 
-async function writeProductionRunFiles({ rootDir, runDir, siteId, intake, createdAt }) {
+async function writeProductionRunFiles({ rootDir, runDir, siteId, intake, createdAt, attachmentPlan = [] }) {
   const directories = [
     'agent-1-output',
     'agent-2-output',
@@ -162,13 +230,19 @@ async function writeProductionRunFiles({ rootDir, runDir, siteId, intake, create
     'agent-6-output',
     'assets',
     'gate-results',
+    'input-assets',
     'site',
   ];
   for (const directory of directories) {
     await mkdir(path.join(runDir, directory), { recursive: true });
   }
 
-  await writeFile(path.join(runDir, 'input.md'), filledRunInput({ siteId, intake }));
+  for (const item of attachmentPlan) {
+    await mkdir(path.dirname(item.destinationPath), { recursive: true });
+    await copyFile(item.sourcePath, item.destinationPath);
+  }
+
+  await writeFile(path.join(runDir, 'input.md'), filledRunInput({ siteId, intake, attachmentPlan }));
   await copyFile(path.join(rootDir, 'shared/templates/approval.template.md'), path.join(runDir, 'approval.md'));
   await writeFile(path.join(runDir, 'issues.md'), '');
   await writeFile(
@@ -212,6 +286,7 @@ async function writeProductionRunFiles({ rootDir, runDir, siteId, intake, create
         created_for: 'production toolsite run',
         intake_message_key: intake.source?.key || '',
         intake_created_at: intake.source?.created_at || '',
+        intake_attachments: attachmentPlan.map((item) => item.metadata),
         run_created_at: createdAt,
         source: 'hermes-intake',
         status: 'active',
@@ -291,7 +366,26 @@ export async function createProductionRunFromHermesIntake({
     };
   }
 
-  await writeProductionRunFiles({ rootDir: path.resolve(rootDir), runDir, siteId, intake, createdAt });
+  const attachmentPlan = await prepareAttachmentCopyPlan({ runDir, intake });
+  if (!attachmentPlan.ok) {
+    return {
+      ok: false,
+      code: attachmentPlan.code,
+      message: attachmentPlan.message,
+      runDir,
+      siteId,
+      intake,
+    };
+  }
+
+  await writeProductionRunFiles({
+    rootDir: path.resolve(rootDir),
+    runDir,
+    siteId,
+    intake,
+    createdAt,
+    attachmentPlan: attachmentPlan.attachments,
+  });
   const runMeta = await readRunMeta(runDir);
   return {
     ok: true,

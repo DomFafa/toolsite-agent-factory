@@ -11,6 +11,7 @@ import {
   REMOTE_DISABLED_MESSAGE,
   INBOX_MISSING_MESSAGE,
   MISSING_PRODUCTION_START_INTENT,
+  MISSING_REQUIRED_ATTACHMENT,
   STALE_INTAKE_REJECTED,
 } from './read-hermes-intake.mjs';
 
@@ -129,6 +130,107 @@ test('recognizes UX参考 and UX 参考 spellings', async () => {
     assert.equal(result.found, true);
     assert.equal(result.ux_reference, 'wordcounter.net');
   }
+});
+
+test('recognizes 额外要求 as extra notes', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(
+      [
+        '关键词: 401K Calculator',
+        '目标域名: 401k-calculator.net',
+        'UI 参考: https://www.usa.gov',
+        'UX 参考: https://www.calculator.net/401k-calculator.html',
+        '额外要求: 对老人家友好；参考我发的插画。',
+      ].join('\n'),
+      {
+        attachments: [
+          {
+            kind: 'image',
+            telegram_file_id: 'photo-1',
+            local_path: '/tmp/reference.jpg',
+            mime_type: 'image/jpeg',
+            file_name: 'reference.jpg',
+            width: 1200,
+            height: 800,
+          },
+        ],
+      },
+    ),
+  ]);
+
+  const result = await readHermesIntake({ remoteStatePath, inboxPath });
+
+  assert.equal(result.found, true);
+  assert.equal(result.extra_notes, '对老人家友好；参考我发的插画。');
+  assert.equal(result.attachments.length, 1);
+  assert.equal(result.attachments[0].local_path, '/tmp/reference.jpg');
+});
+
+test('returns attachments from Hermes inbox message', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(completeIntake(), {
+      attachments: [
+        {
+          kind: 'image',
+          telegram_file_id: 'tg-file-id',
+          local_path: '/tmp/toolsite-attachments/123/1/image.jpg',
+          mime_type: 'image/jpeg',
+          file_name: 'image.jpg',
+          width: 1600,
+          height: 1200,
+        },
+      ],
+    }),
+  ]);
+
+  const result = await readHermesIntake({ remoteStatePath, inboxPath });
+
+  assert.equal(result.found, true);
+  assert.deepEqual(result.attachments, [
+    {
+      kind: 'image',
+      telegram_file_id: 'tg-file-id',
+      local_path: '/tmp/toolsite-attachments/123/1/image.jpg',
+      mime_type: 'image/jpeg',
+      file_name: 'image.jpg',
+      width: 1600,
+      height: 1200,
+    },
+  ]);
+});
+
+test('intake requiring attachment but lacking one returns MISSING_REQUIRED_ATTACHMENT', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(
+      [
+        '开始正式建站',
+        '关键词: 401K Calculator',
+        '目标域名: 401k-calculator.net',
+        'UI 参考: https://www.usa.gov',
+        'UX 参考: https://www.calculator.net/401k-calculator.html',
+        '额外想法/限制/模仿点: 用我发的图做点缀；不要登录。',
+      ].join('\n'),
+      { created_at: '2026-05-12T00:00:01.000Z' },
+    ),
+  ]);
+
+  const result = await readHermesIntake({
+    remoteStatePath,
+    inboxPath,
+    freshAfter: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: false,
+    requireProductionStartIntent: true,
+  });
+
+  assert.equal(result.found, false);
+  assert.equal(result.code, 'missing-required-attachment');
+  assert.equal(result.message, MISSING_REQUIRED_ATTACHMENT);
 });
 
 test('generates suggested_site_id from target domain', async () => {

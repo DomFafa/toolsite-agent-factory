@@ -13,6 +13,7 @@ export const NO_INTAKE_MESSAGE = '没有找到可用的新站 intake 消息。';
 export const STALE_INTAKE_REJECTED = 'STALE_INTAKE_REJECTED';
 export const MISSING_PRODUCTION_START_INTENT = 'MISSING_PRODUCTION_START_INTENT';
 export const INCOMPLETE_INTAKE = 'INCOMPLETE_INTAKE';
+export const MISSING_REQUIRED_ATTACHMENT = 'MISSING_REQUIRED_ATTACHMENT';
 
 export const PRODUCTION_START_INTENT_PHRASES = [
   '开始正式建站',
@@ -30,6 +31,7 @@ const FIELD_LABELS = {
   额外想法: 'extra_notes',
   限制: 'extra_notes',
   模仿点: 'extra_notes',
+  额外要求: 'extra_notes',
   '额外想法/限制/模仿点': 'extra_notes',
 };
 
@@ -212,6 +214,20 @@ export function hasProductionStartIntent(text) {
   return PRODUCTION_START_INTENT_PHRASES.some((phrase) => body.includes(phrase));
 }
 
+export function intakeRequiresAttachment(text) {
+  const body = String(text || '');
+  return [
+    '用我发的图',
+    '用我发的图片',
+    '参考我发的图',
+    '参考我发的图片',
+    '参考我发的插画',
+    '按附件',
+    '按照附件',
+    '见附件',
+  ].some((phrase) => body.includes(phrase));
+}
+
 function isFreshMessage(message, freshAfter) {
   if (!freshAfter) return true;
   const messageTime = Date.parse(messageCreatedAt(message));
@@ -229,9 +245,31 @@ function sourceForMessage(message) {
   };
 }
 
+function normalizeAttachment(attachment) {
+  if (!attachment || typeof attachment !== 'object') return null;
+  const kind = String(attachment.kind || '').trim();
+  const localPath = String(attachment.local_path || '').trim();
+  if (!kind || !localPath) return null;
+  return {
+    kind,
+    telegram_file_id: String(attachment.telegram_file_id || ''),
+    local_path: localPath,
+    mime_type: String(attachment.mime_type || ''),
+    file_name: String(attachment.file_name || ''),
+    width: attachment.width ?? null,
+    height: attachment.height ?? null,
+  };
+}
+
+function attachmentsForMessage(message) {
+  if (!Array.isArray(message?.attachments)) return [];
+  return message.attachments.map(normalizeAttachment).filter(Boolean);
+}
+
 function buildResultFromMessage(message, parsed) {
   const missing = missingFields(parsed);
   const found = missing.length === 0;
+  const attachments = attachmentsForMessage(message);
   return {
     found,
     keyword: parsed.keyword,
@@ -243,6 +281,8 @@ function buildResultFromMessage(message, parsed) {
     remote_mode: true,
     source: sourceForMessage(message),
     production_start_intent: hasProductionStartIntent(message.text),
+    attachment_required: intakeRequiresAttachment(message.text),
+    attachments,
     ...(found ? {} : { missing_fields: missing }),
   };
 }
@@ -304,6 +344,14 @@ export function selectIntakeMessage(
       message: INCOMPLETE_INTAKE,
     };
   }
+  if (result.attachment_required && result.attachments.length === 0) {
+    return {
+      ...result,
+      found: false,
+      code: 'missing-required-attachment',
+      message: MISSING_REQUIRED_ATTACHMENT,
+    };
+  }
   return result;
 }
 
@@ -356,6 +404,7 @@ function formatHuman(result) {
   if (result.code === 'no-intake') return NO_INTAKE_MESSAGE;
   if (result.code === 'stale-intake') return STALE_INTAKE_REJECTED;
   if (result.code === 'missing-production-start-intent') return MISSING_PRODUCTION_START_INTENT;
+  if (result.code === 'missing-required-attachment') return MISSING_REQUIRED_ATTACHMENT;
 
   if (!result.found) {
     return [
@@ -380,6 +429,13 @@ function formatHuman(result) {
     `UI 参考: ${result.ui_reference}`,
     `UX 参考: ${result.ux_reference}`,
     `额外想法 / 限制 / 模仿点: ${result.extra_notes}`,
+    ...(result.attachments?.length
+      ? [
+          '',
+          '附件:',
+          ...result.attachments.map((attachment) => `- ${attachment.kind}: ${attachment.local_path}`),
+        ]
+      : []),
     '',
     `建议 site-id: ${result.suggested_site_id}`,
   ].join('\n');
