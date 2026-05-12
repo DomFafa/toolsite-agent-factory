@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  ACTIVE_HUMAN_REVIEW_PROCESSED,
   INTAKE_ALREADY_PROCESSED,
   REMOTE_WORKER_STARTED_RUN,
   runRemoteToolsiteWorker,
@@ -82,6 +83,62 @@ async function writeImage(root, name = 'reference.jpg') {
   const filePath = path.join(root, name);
   await writeFile(filePath, 'fake-image-bytes');
   return filePath;
+}
+
+async function createActive401kRun(root, { reviewCreatedAt = '2026-05-12T01:00:00.000Z' } = {}) {
+  const runDir = path.join(root, 'runs/401k-worker-test');
+  await mkdir(runDir, { recursive: true });
+  await writeFile(
+    path.join(runDir, 'run-meta.json'),
+    `${JSON.stringify(
+      {
+        run_type: 'production',
+        deployable: true,
+        status: 'active',
+        source: 'hermes-intake',
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(runDir, 'input.md'),
+    [
+      '# Run Input',
+      '',
+      '## Pre-Agent2 required user inputs',
+      '',
+      '- Keyword / 关键词: 401K Calculator',
+      '- Target Domain / 目标域名: 401k-worker-test.local',
+      '- UI Reference / UI 参考: https://www.usa.gov',
+      '- UX Reference / UX 参考: https://www.calculator.net/401k-calculator.html',
+      '- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点: 对老人家友好；第一屏就是计算器；用我发的黑白人物插画做点缀；只做 educational estimate；不要登录；不要后端；不要数据库。',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
+    path.join(runDir, 'human-review-events.jsonl'),
+    `${JSON.stringify({
+      schema_version: 'human-review-event.v1',
+      type: 'human_review',
+      review_type: 'pre_agent2_spec_confirmation',
+      id: 'pre-agent2-spec-confirmation',
+      site_id: '401k-worker-test',
+      run_dir: 'runs/401k-worker-test',
+      phase: 'pre-agent2',
+      agent: 'pre-agent2-toolsite-spec',
+      status: 'open',
+      blocking: true,
+      blocks: 'agent-2',
+      title: 'Pre-Agent2 SPEC 确认',
+      message: '【Toolsite SPEC 审核卡】',
+      expected_reply: '回复：确认 SPEC，或回复：修改：...',
+      attachments: [],
+      created_at: reviewCreatedAt,
+      created_by: 'codex',
+    })}\n`,
+  );
+  return runDir;
 }
 
 async function runOnce(fixture, options = {}) {
@@ -255,6 +312,139 @@ test('duplicate intake is not processed twice', async () => {
   assert.equal(first.code, REMOTE_WORKER_STARTED_RUN);
   assert.equal(second.code, INTAKE_ALREADY_PROCESSED);
   assert.equal(calls, 1);
+});
+
+test('worker consumes reply for existing pre-agent2-spec-confirmation open review', async () => {
+  const fixture = await makeFixture();
+  const runDir = await createActive401kRun(fixture.root);
+  const statusMessages = [];
+  await writeInbox(fixture.inboxPath, [
+    message(
+      '修改：不要直接生成 SPEC。请先问我 1-3 个和 401K Calculator 相关的关键澄清问题，例如计算复杂度、默认假设、结果展示方式、老人友好输入方式。不要问固定模板问题。',
+      {
+        message_id: 'reply-1',
+        created_at: '2026-05-12T01:00:05.000Z',
+      },
+    ),
+  ]);
+
+  const result = await runOnce(fixture, { statusMessages });
+  const events = (await readFile(path.join(runDir, 'human-review-events.jsonl'), 'utf8'))
+    .trim()
+    .split(/\n/)
+    .map((line) => JSON.parse(line));
+
+  assert.equal(result.code, ACTIVE_HUMAN_REVIEW_PROCESSED);
+  assert.equal(result.runResult.code, 'REVIEW_CHANGE_REQUESTED');
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'resolved' && event.change_requested === true), true);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-dynamic-401k-calculator-complexity' && event.status === 'open'), true);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation-change-request' && event.status === 'superseded'), true);
+  assert.equal(await exists(path.join(runDir, 'agent-2-output/site-brief.md')), false);
+  assert.equal(statusMessages.some((text) => text.includes('已收到修改意见')), true);
+  assert.equal(statusMessages.some((text) => text.includes('401K Calculator 第一版计算复杂度选哪一档')), true);
+});
+
+test('duplicate active review reply is not consumed twice', async () => {
+  const fixture = await makeFixture();
+  const runDir = await createActive401kRun(fixture.root);
+  await writeInbox(fixture.inboxPath, [
+    message('修改：请先问 401K Calculator 计算复杂度。', {
+      message_id: 'reply-1',
+      created_at: '2026-05-12T01:00:05.000Z',
+    }),
+  ]);
+
+  const first = await runOnce(fixture);
+  const second = await runOnce(fixture);
+  const events = (await readFile(path.join(runDir, 'human-review-events.jsonl'), 'utf8'))
+    .trim()
+    .split(/\n/)
+    .map((line) => JSON.parse(line));
+
+  assert.equal(first.code, ACTIVE_HUMAN_REVIEW_PROCESSED);
+  assert.notEqual(second.runResult?.code, 'REVIEW_CHANGE_REQUESTED');
+  assert.equal(events.filter((event) => event.id === 'pre-agent2-dynamic-401k-calculator-complexity' && event.status === 'open').length, 1);
+});
+
+test('active production run is discovered from run-meta.json', async () => {
+  const fixture = await makeFixture();
+  await createActive401kRun(fixture.root);
+  await writeInbox(fixture.inboxPath, [
+    message('修改：请先问 401K Calculator 计算复杂度。', {
+      message_id: 'reply-1',
+      created_at: '2026-05-12T01:00:05.000Z',
+    }),
+  ]);
+
+  const result = await runOnce(fixture);
+
+  assert.equal(result.code, ACTIVE_HUMAN_REVIEW_PROCESSED);
+  assert.equal(result.siteId, '401k-worker-test');
+});
+
+test('existing SPEC change request open review triggers targeted question generation', async () => {
+  const fixture = await makeFixture();
+  const runDir = await createActive401kRun(fixture.root);
+  const initialEvents = (await readFile(path.join(runDir, 'human-review-events.jsonl'), 'utf8')).trim();
+  await writeFile(
+    path.join(runDir, 'human-review-events.jsonl'),
+    [
+      initialEvents,
+      JSON.stringify({
+        schema_version: 'human-review-event.v1',
+        type: 'human_review',
+        review_type: 'pre_agent2_spec_confirmation',
+        id: 'pre-agent2-spec-confirmation',
+        site_id: '401k-worker-test',
+        run_dir: 'runs/401k-worker-test',
+        phase: 'pre-agent2',
+        agent: 'pre-agent2-toolsite-spec',
+        status: 'resolved',
+        blocking: false,
+        blocks: 'agent-2',
+        title: 'Pre-Agent2 SPEC 确认',
+        message: '【Toolsite SPEC 审核卡】',
+        resolution_text: '修改：请先问 401K Calculator 计算复杂度。',
+        change_requested: true,
+        created_at: '2026-05-12T01:00:05.000Z',
+        created_by: 'codex',
+        resolved_at: '2026-05-12T01:00:05.000Z',
+        inbox_message_key: 'telegram:123:reply-1:2026-05-12T01:00:05.000Z',
+      }),
+      JSON.stringify({
+        schema_version: 'human-review-event.v1',
+        type: 'human_review',
+        review_type: 'pre_agent2_spec_confirmation_change_request',
+        id: 'pre-agent2-spec-confirmation-change-request',
+        site_id: '401k-worker-test',
+        run_dir: 'runs/401k-worker-test',
+        phase: 'pre-agent2',
+        agent: 'pre-agent2-toolsite-spec',
+        status: 'open',
+        blocking: true,
+        blocks: 'agent-2',
+        title: 'Pre-Agent2 SPEC 确认 修改请求待处理',
+        message: '用户通过 Telegram 提出了修改请求，Codex 必须处理后重新提交审核。\n\n修改：请先问 401K Calculator 计算复杂度。',
+        expected_reply: 'Codex 处理修改后重新生成审核内容；用户再次确认前不得继续。',
+        created_at: '2026-05-12T01:00:06.000Z',
+        created_by: 'codex',
+      }),
+    ].join('\n') + '\n',
+  );
+  await writeInbox(fixture.inboxPath, []);
+  const statusMessages = [];
+
+  const result = await runOnce(fixture, { statusMessages });
+  const events = (await readFile(path.join(runDir, 'human-review-events.jsonl'), 'utf8'))
+    .trim()
+    .split(/\n/)
+    .map((line) => JSON.parse(line));
+
+  assert.equal(result.code, ACTIVE_HUMAN_REVIEW_PROCESSED);
+  assert.equal(result.runResult.code, 'REVIEW_CHANGE_REQUESTED');
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation-change-request' && event.status === 'superseded'), true);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-dynamic-401k-calculator-complexity' && event.status === 'open'), true);
+  assert.equal(statusMessages.some((text) => text.includes('401K Calculator 第一版计算复杂度选哪一档')), true);
 });
 
 test('existing run dir blocks and is not auto-renamed', async () => {

@@ -1,7 +1,8 @@
-import { appendFile, mkdir, open, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { continueHumanReview, INVALID_REPLY, NO_REPLY_FOUND, REVIEW_CHANGE_REQUESTED, REVIEW_RESOLVED } from './continue-human-review.mjs';
 import {
   DEFAULT_HERMES_INBOX,
   DEFAULT_HERMES_REMOTE_STATE,
@@ -20,14 +21,19 @@ import {
 } from './run-toolsite-orchestrator.mjs';
 import {
   DEFAULT_TELEGRAM_ENV,
+  buildQuestionEvent,
+  parseRunInput,
   sendTelegramMessage,
 } from './pre-agent2-telegram-loop.mjs';
+import { summarizeReviewEvents } from './resolve-human-review-from-hermes-inbox.mjs';
 
 export const WORKER_LOCKED = 'WORKER_LOCKED';
 export const INTAKE_ALREADY_PROCESSED = 'INTAKE_ALREADY_PROCESSED';
 export const REMOTE_WORKER_STARTED_RUN = 'REMOTE_WORKER_STARTED_RUN';
 export const WORKER_STARTED = 'WORKER_STARTED';
 export const TELEGRAM_FEEDBACK_FAILED = 'TELEGRAM_FEEDBACK_FAILED';
+export const ACTIVE_HUMAN_REVIEW_PROCESSED = 'ACTIVE_HUMAN_REVIEW_PROCESSED';
+export const ACTIVE_HUMAN_REVIEW_WAITING = 'ACTIVE_HUMAN_REVIEW_WAITING';
 
 function nowIso() {
   return new Date().toISOString();
@@ -45,6 +51,14 @@ async function readJsonOptional(filePath) {
   }
 }
 
+async function readOptional(filePath) {
+  try {
+    return await readFile(filePath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 function defaultPidAlive(pid) {
   if (!Number.isFinite(pid) || pid <= 0) return false;
   try {
@@ -58,6 +72,24 @@ function defaultPidAlive(pid) {
 async function writeJson(filePath, value) {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function parseJsonl(text) {
+  return String(text || '')
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+async function readJsonlOptional(filePath) {
+  const text = await readOptional(filePath);
+  return text.trim() ? parseJsonl(text) : [];
+}
+
+async function appendJsonl(filePath, record) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await appendFile(filePath, `${JSON.stringify(record)}\n`);
 }
 
 function workerPaths(rootDir, workerDir = '.toolsite-worker') {
@@ -200,6 +232,15 @@ function workerFeedbackText(result) {
       '系统不会自动改名或覆盖已有 run。请确认是否要 resume 或先处理现有 run。',
     ].join('\n');
   }
+  if (code === INVALID_REPLY) {
+    return result?.message || '收到回复，但该回复不符合当前审核点要求，流程没有推进。';
+  }
+  if (code === ACTIVE_HUMAN_REVIEW_PROCESSED) {
+    const nestedCode = result?.runResult?.code || '';
+    if (nestedCode === REVIEW_RESOLVED) return '已收到 Telegram 审核回复，已处理并继续推进到下一阶段。';
+    if (nestedCode === REVIEW_CHANGE_REQUESTED) return '已收到修改意见，流程已停在修改处理后的审核点。';
+    return '已收到 Telegram 审核回复，已处理当前人工审核点。';
+  }
   return '';
 }
 
@@ -275,6 +316,339 @@ async function announceWorkerStarted({
   });
 }
 
+async function listRunDirectories(rootDir) {
+  const runsDir = path.join(path.resolve(rootDir), 'runs');
+  let entries = [];
+  try {
+    entries = await readdir(runsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => !entry.name.startsWith('_'))
+    .map((entry) => path.join(runsDir, entry.name));
+}
+
+async function discoverActiveProductionRuns({ rootDir, state }) {
+  const candidates = new Map();
+  for (const runDir of await listRunDirectories(rootDir)) {
+    candidates.set(path.resolve(runDir), path.resolve(runDir));
+  }
+  for (const activeRun of Object.values(state.active_runs || {})) {
+    const runDir = activeRun?.run_dir ? path.resolve(rootDir, activeRun.run_dir) : '';
+    if (runDir) candidates.set(runDir, runDir);
+  }
+
+  const active = [];
+  for (const runDir of candidates.values()) {
+    const meta = await readJsonOptional(path.join(runDir, 'run-meta.json'));
+    if (meta?.run_type === 'production' && meta?.status === 'active') {
+      active.push({ runDir, siteId: path.basename(runDir), runMeta: meta });
+    }
+  }
+  return active.sort((a, b) => a.runDir.localeCompare(b.runDir));
+}
+
+async function openHumanReviews(runDir) {
+  const events = await readJsonlOptional(path.join(runDir, 'human-review-events.jsonl'));
+  const summary = summarizeReviewEvents(events);
+  return summary.openReviews;
+}
+
+function isSpecChangeRequestResult(result) {
+  return result?.code === REVIEW_CHANGE_REQUESTED &&
+    String(result?.review?.review_type || '') === 'pre_agent2_spec_confirmation';
+}
+
+function questionForSpecChange({ intake, requestText, questionNumber }) {
+  const keyword = String(intake.keyword || 'this tool').trim() || 'this tool';
+  const lower = `${keyword}\n${requestText}`.toLowerCase();
+  if (lower.includes('401k') || lower.includes('401 k')) {
+    return {
+      number: questionNumber,
+      id: 'pre-agent2-dynamic-401k-calculator-complexity',
+      title: 'Pre-Agent2：401K Calculator 计算复杂度确认',
+      decision_area: 'Input / Output Model',
+      why_needed: '用户要求先确认 401K Calculator 的计算复杂度、默认假设、结果展示和老人友好输入方式。',
+      message: [
+        '401K Calculator 第一版计算复杂度选哪一档？',
+        '',
+        '1. 简化版：输入少，适合老人快速估算',
+        '2. 标准版：包含年龄、退休年龄、当前余额、工资、缴费比例、雇主匹配、预期收益率、工资增长',
+        '3. 详细版：增加 catch-up contribution、annual limit、通胀等高级项',
+        '4. 其他，请直接描述',
+        '5. 先按标准版生成 SPEC，但在审核卡里标注默认假设',
+      ].join('\n'),
+      option_decisions: {
+        1: '401K Calculator 第一版使用简化输入，优先适合老人快速估算。',
+        2: '401K Calculator 第一版使用标准输入，覆盖年龄、退休年龄、当前余额、工资、缴费比例、雇主匹配、预期收益率和工资增长。',
+        3: '401K Calculator 第一版使用详细输入，增加 catch-up contribution、annual limit 和通胀等高级项。',
+        4: '401K Calculator 第一版按用户自定义说明确定计算复杂度。',
+        5: '401K Calculator 第一版按标准版生成 SPEC，并明确默认假设。',
+      },
+    };
+  }
+
+  return {
+    number: questionNumber,
+    id: `pre-agent2-dynamic-${keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tool'}-clarification`,
+    title: `Pre-Agent2：${keyword} 关键澄清`,
+    decision_area: 'Tool Purpose',
+    why_needed: `用户要求在确认 SPEC 前补充 ${keyword} 的项目相关澄清。`,
+    message: [
+      `${keyword} 第一版最需要先确认哪一项？`,
+      '',
+      '1. 输入复杂度和默认假设',
+      '2. 结果展示优先级',
+      '3. 目标用户和可访问性要求',
+      '4. 法务/边界限制',
+      '5. 其他，请直接描述',
+    ].join('\n'),
+    option_decisions: {
+      1: `${keyword} 优先确认输入复杂度和默认假设。`,
+      2: `${keyword} 优先确认结果展示优先级。`,
+      3: `${keyword} 优先确认目标用户和可访问性要求。`,
+      4: `${keyword} 优先确认法务和边界限制。`,
+      5: `${keyword} 使用用户自定义澄清说明。`,
+    },
+  };
+}
+
+async function handleSpecChangeRequestWithQuestion({
+  runDir,
+  eventPath,
+  inboxMessage,
+  pendingReview,
+  createdAt,
+  statusSender,
+  inboxPath,
+  telegramEnvPath,
+  now = nowIso,
+}) {
+  const intake = parseRunInput(await readFile(path.join(runDir, 'input.md'), 'utf8'));
+  const events = await readJsonlOptional(eventPath);
+  const resolvedQuestions = events.filter(
+    (event) => event?.review_type === 'pre_agent2_interview_question' && event?.status === 'resolved',
+  );
+  const question = questionForSpecChange({
+    intake,
+    requestText: inboxMessage.text,
+    questionNumber: resolvedQuestions.length + 1,
+  });
+  const questionEvent = buildQuestionEvent({
+    question,
+    siteId: path.basename(runDir),
+    runDir: `runs/${path.basename(runDir)}`,
+    createdAt: now(),
+    createdBy: 'codex',
+  });
+  await appendJsonl(eventPath, {
+    ...pendingReview,
+    status: 'superseded',
+    blocking: false,
+    superseded_by: questionEvent.id,
+    superseded_at: now(),
+    created_at: now(),
+    created_by: 'codex',
+  });
+  await appendJsonl(eventPath, questionEvent);
+
+  const statePath = path.join(runDir, 'pre-agent2-telegram-loop-state.json');
+  const loopState = (await readJsonOptional(statePath)) || {
+    schema_version: 'pre-agent2-telegram-loop-state.v1',
+    site_id: path.basename(runDir),
+    run_dir: runDir,
+    sent_review_keys: [],
+    rejected_inbox_keys: [],
+    completed_questions: [],
+  };
+  const reviewKey = `${questionEvent.id}:${questionEvent.created_at}`;
+  loopState.status = 'waiting_for_reply';
+  loopState.current_question_id = questionEvent.id;
+  loopState.current_question_number = Number(questionEvent.question_number || 0);
+  loopState.sent_review_keys = Array.from(new Set([...(loopState.sent_review_keys || []), reviewKey]));
+  loopState.updated_at = now();
+  await writeJson(statePath, loopState);
+
+  await statusSender({
+    text: '已收到修改意见，正在生成澄清问题。',
+    result: { code: REVIEW_CHANGE_REQUESTED, runDir, inboxMessage },
+    inboxPath,
+    telegramEnvPath,
+  });
+  await statusSender({
+    text: ['已生成新的项目相关问题：', '', questionEvent.message].join('\n'),
+    result: { code: REVIEW_CHANGE_REQUESTED, runDir, questionEvent },
+    inboxPath,
+    telegramEnvPath,
+  });
+
+  return { questionEvent };
+}
+
+function isPendingSpecChangeReview(review) {
+  return String(review?.review_type || '') === 'pre_agent2_spec_confirmation_change_request' &&
+    String(review?.status || '') === 'open';
+}
+
+async function handleExistingSpecChangeRequest({
+  runDir,
+  openReview,
+  statusSender,
+  inboxPath,
+  telegramEnvPath,
+  now = nowIso,
+}) {
+  const inboxMessage = {
+    type: 'user_message',
+    source: 'human-review-events',
+    chat_id: 'run',
+    message_id: openReview.id,
+    text: String(openReview.message || '').replace(/^用户通过 Telegram 提出了修改请求，Codex 必须处理后重新提交审核。\s*/u, '').trim(),
+    created_at: openReview.created_at,
+    inbox_message_key: `human-review-events:${openReview.id}:${openReview.created_at}`,
+  };
+  return handleSpecChangeRequestWithQuestion({
+    runDir,
+    eventPath: path.join(runDir, 'human-review-events.jsonl'),
+    inboxMessage,
+    pendingReview: openReview,
+    createdAt: openReview.created_at || now(),
+    statusSender,
+    inboxPath,
+    telegramEnvPath,
+    now,
+  });
+}
+
+function activeRunFeedbackText(result) {
+  if (isSpecChangeRequestResult(result)) {
+    return '已收到修改意见，已生成项目相关澄清问题；Agent2 不会启动。';
+  }
+  if (result?.code === REVIEW_RESOLVED) {
+    return '已收到 Telegram 审核回复，当前审核点已通过，正在继续推进。';
+  }
+  if (result?.code === INVALID_REPLY) {
+    return result.message || '收到回复，但格式不符合当前审核点要求，流程未推进。';
+  }
+  return '';
+}
+
+function isActiveRunWaiting(runResult) {
+  return runResult?.code === NO_REPLY_FOUND || runResult?.action === 'waiting';
+}
+
+async function processActiveProductionReviews({
+  rootDir,
+  inboxPath,
+  remoteStatePath,
+  state,
+  statePath,
+  logPath,
+  runToolsite,
+  telegramEnvPath,
+  statusSender,
+  pollMs,
+  now = nowIso,
+}) {
+  const activeRuns = await discoverActiveProductionRuns({ rootDir, state });
+  for (const activeRun of activeRuns) {
+    const openReviews = await openHumanReviews(activeRun.runDir);
+    if (openReviews.length === 0) continue;
+    const latestOpen = openReviews.at(-1);
+    if (isPendingSpecChangeReview(latestOpen)) {
+      const changeResult = await handleExistingSpecChangeRequest({
+        runDir: activeRun.runDir,
+        openReview: latestOpen,
+        statusSender,
+        inboxPath,
+        telegramEnvPath,
+        now,
+      });
+      const result = {
+        ok: true,
+        code: ACTIVE_HUMAN_REVIEW_PROCESSED,
+        runDir: activeRun.runDir,
+        siteId: activeRun.siteId,
+        runResult: {
+          ok: true,
+          code: REVIEW_CHANGE_REQUESTED,
+          review: latestOpen,
+          changeResult,
+          nextStage: null,
+        },
+        at: now(),
+      };
+      await appendLog(logPath, ACTIVE_HUMAN_REVIEW_PROCESSED, `${activeRun.runDir} ${REVIEW_CHANGE_REQUESTED}`, now);
+      await sendWorkerFeedback({
+        result: { ...result, message: activeRunFeedbackText(result.runResult) },
+        text: activeRunFeedbackText(result.runResult),
+        state,
+        statePath,
+        logPath,
+        statusSender,
+        inboxPath,
+        telegramEnvPath,
+        now,
+      });
+      await saveStateWithResult({ statePath, state, result });
+      return result;
+    }
+    const runResult = await runToolsite({
+      runDir: activeRun.runDir,
+      inboxPath,
+      remoteStatePath,
+      remote: true,
+      pollMs: 0,
+      maxIdleIterations: 1,
+      continueReview: (args) => continueHumanReview({
+        ...args,
+        onSpecChangeRequest: (context) => handleSpecChangeRequestWithQuestion({
+          ...context,
+          statusSender,
+          inboxPath,
+          telegramEnvPath,
+          now,
+        }),
+        now,
+      }),
+    });
+
+    if (isActiveRunWaiting(runResult)) {
+      await appendLog(logPath, ACTIVE_HUMAN_REVIEW_WAITING, activeRun.runDir, now);
+      continue;
+    }
+
+    const result = {
+      ok: Boolean(runResult?.ok),
+      code: ACTIVE_HUMAN_REVIEW_PROCESSED,
+      runDir: activeRun.runDir,
+      siteId: activeRun.siteId,
+      runResult,
+      at: now(),
+    };
+    await appendLog(logPath, ACTIVE_HUMAN_REVIEW_PROCESSED, `${activeRun.runDir} ${runResult?.code || ''}`, now);
+    const feedback = activeRunFeedbackText(runResult);
+    if (feedback) {
+      await sendWorkerFeedback({
+        result: { ...result, message: feedback },
+        text: feedback,
+        state,
+        statePath,
+        logPath,
+        statusSender,
+        inboxPath,
+        telegramEnvPath,
+        now,
+      });
+    }
+    await saveStateWithResult({ statePath, state, result });
+    return result;
+  }
+  return null;
+}
+
 export async function runRemoteToolsiteWorkerIteration({
   rootDir = process.cwd(),
   inboxPath = DEFAULT_HERMES_INBOX,
@@ -288,6 +662,21 @@ export async function runRemoteToolsiteWorkerIteration({
   pollMs = 10_000,
   now = nowIso,
 } = {}) {
+  const activeReviewResult = await processActiveProductionReviews({
+    rootDir,
+    inboxPath,
+    remoteStatePath,
+    state,
+    statePath,
+    logPath,
+    runToolsite,
+    telegramEnvPath,
+    statusSender,
+    pollMs,
+    now,
+  });
+  if (activeReviewResult) return activeReviewResult;
+
   const intake = await readHermesIntake({
     inboxPath,
     remoteStatePath,
