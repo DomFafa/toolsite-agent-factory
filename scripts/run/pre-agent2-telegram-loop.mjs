@@ -303,7 +303,7 @@ function findLabeledValue(text, aliases) {
 }
 
 function cleanupMarkdownSection(value) {
-  return asText(value) || '- SPEC 中未单独列出，请按已确认问答和系统默认约束执行。';
+  return asText(value) || '- 本节没有额外补充，按已确认的网站需求执行。';
 }
 
 function findMarkdownSection(text, headings) {
@@ -349,14 +349,27 @@ function specSection(specText, headings, fallback = '') {
 export function parseRunInput(text) {
   const inputAssets = [];
   for (const line of String(text || '').split(/\r?\n/)) {
-    const match = line.match(/-\s+image:\s+(.+?)\s+\(source:\s+(.+?)(?:,\s*telegram_file_id:\s*(.+?))?\)\s*$/i);
+    const match = line.match(/-\s+image:\s+(.+?)\s+\((.+?)\)\s*$/i);
     if (match) {
+      const metadata = Object.fromEntries(
+        match[2]
+          .split(/,\s*/)
+          .map((part) => {
+            const separator = part.indexOf(':');
+            if (separator < 0) return ['', ''];
+            return [
+              part.slice(0, separator).trim().toLowerCase().replace(/\s+/g, '_'),
+              part.slice(separator + 1).trim(),
+            ];
+          })
+          .filter(([key]) => key),
+      );
       inputAssets.push({
         kind: 'image',
         run_path: asText(match[1]),
-        source_local_path: asText(match[2]),
-        telegram_file_id: asText(match[3]),
-        purpose: 'design_reference',
+        source_local_path: asText(metadata.source),
+        telegram_file_id: asText(metadata.telegram_file_id),
+        purpose: asText(metadata.purpose) || 'design_reference',
       });
     }
   }
@@ -818,12 +831,50 @@ function isFutureUploadApiLine(value) {
 
 function cleanSpecText(value) {
   return String(value || '')
-    .replace(/任何搜索内容/g, 'SEO 内容')
+    .replace(/任何搜索内容|搜索内容/g, 'SEO 内容')
     .replace(/,\s+and\s+speaking time/gi, ', speaking time')
     .replace(/、\s*and\s+speaking time/gi, '、speaking time')
+    .replace(/(https?:\/\/[^\s)`）]+?)(?:%EF%BC%9A|%EF%BC%9B|%E3%80%82|%EF%BC%8C)[^\s)`）]*/gi, '$1')
     .replace(/。。+/g, '。')
     .replace(/\.\.+/g, '.')
     .replace(/\s+$/g, '');
+}
+
+const INTERNAL_SPEC_SECTION_HEADINGS = new Set([
+  'Agent Workflow Boundary',
+  'User Confirmation',
+]);
+
+const INTERNAL_META_PATTERNS = [
+  /需按已确认\s*SPEC\s*执行/i,
+  /不能保留英文整句说明/i,
+  /已确认\s*SPEC/i,
+  /SPEC\s*审核卡/i,
+  /\bAgent[2-6]\b/i,
+  /\bgate\b/i,
+  /human_review/i,
+  /\bconfirmation\b/i,
+  /\breview\b/i,
+  /blocks\s*=\s*agent-2/i,
+  /generated before dynamic gap analysis/i,
+  /fixed generic Pre-Agent2/i,
+  /Pre-Agent2\s+SPEC\s+gate/i,
+  /提前输出\s*SPEC/i,
+];
+
+const DIRTY_SOURCE_SNIPPET_PATTERNS = [
+  /^\s*(?:source|来源|搜索结果|snippet|title)\s*[:：]/i,
+  /^\s*(?:calculator\.net|www\.calculator\.net)\s*[-–—:：]/i,
+  /%EF%BC%9A|%EF%BC%9B|%E3%80%82|%EF%BC%8C/i,
+  /(?:Search Results?|网页快照|source title|result snippet)/i,
+];
+
+function isInternalSpecMetaLine(line) {
+  return INTERNAL_META_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+function isDirtySourceSnippetLine(line) {
+  return DIRTY_SOURCE_SNIPPET_PATTERNS.some((pattern) => pattern.test(line));
 }
 
 function bulletKey(line) {
@@ -845,12 +896,12 @@ function sanitizeDecision(decision, context) {
 function summaryForArea(answeredEvents, area, { excludeIds = [], context = {} } = {}) {
   const excluded = new Set(excludeIds);
   const relevant = answeredEvents.filter((event) => event.decision_area === area && !excluded.has(event.id));
-  if (relevant.length === 0) return 'Use the baseline toolsite defaults for this area.';
+  if (relevant.length === 0) return '';
   return relevant
     .map((event) => sanitizeDecision(decisionFor(event), context))
     .filter(Boolean)
     .map((decision) => `- ${decision}`)
-    .join('\n') || 'Use the baseline toolsite defaults for this area.';
+    .join('\n');
 }
 
 function seoBoundarySummary(answeredEvents, context) {
@@ -866,6 +917,7 @@ function sanitizeSpecDocument(lines, context = {}) {
   const output = [];
   let currentSection = '';
   let sectionBulletKeys = new Set();
+  let skipSection = false;
 
   for (const rawLine of lines) {
     let line = cleanSpecText(rawLine);
@@ -873,14 +925,19 @@ function sanitizeSpecDocument(lines, context = {}) {
     if (heading) {
       currentSection = heading[1];
       sectionBulletKeys = new Set();
+      skipSection = INTERNAL_SPEC_SECTION_HEADINGS.has(currentSection);
+      if (skipSection) continue;
       output.push(line);
       continue;
     }
+    if (skipSection) continue;
+    if (isInternalSpecMetaLine(line) || isDirtySourceSnippetLine(line)) continue;
 
     if (/^[-*]\s+/.test(line)) {
       const content = line.replace(/^[-*]\s+/, '').trim();
       if (isFutureUploadApiLine(content) && !explicitlyAllowsFutureUploadApi(context)) continue;
       if (currentSection === 'Non-goals' && /工具下方提供\s*FAQ\s*和使用说明/i.test(content)) continue;
+      if (isInternalSpecMetaLine(content) || isDirtySourceSnippetLine(content)) continue;
       const key = bulletKey(line);
       if (key && sectionBulletKeys.has(key)) continue;
       if (key) sectionBulletKeys.add(key);
@@ -890,6 +947,10 @@ function sanitizeSpecDocument(lines, context = {}) {
   }
 
   return output.join('\n');
+}
+
+export function sanitizeSpecContent(specText, context = {}) {
+  return sanitizeSpecDocument(String(specText || '').split(/\r?\n/), context);
 }
 
 const KNOWN_RESULT_TERMS = [
@@ -939,9 +1000,12 @@ function assetLines(intake, { includeSource = false } = {}) {
   if (!Array.isArray(intake.input_assets) || intake.input_assets.length === 0) return [];
   return intake.input_assets.map((asset) => {
     const purpose = attachmentPurpose(intake) || asset.purpose || 'design_reference';
-    const base = `- ${asset.run_path} must be used as ${purpose}; it is a visual reference, not a question for the user.`;
+    const purposeLabel = purpose === 'illustration_reference'
+      ? 'illustration_reference / design_reference'
+      : `${purpose} / visual_reference`;
+    const base = `- 使用 ${asset.run_path} 作为 ${purposeLabel}：页面点缀和视觉风格参考，不作为需求问题，不抢占第一屏工具主体。`;
     if (!includeSource || !asset.source_local_path) return base;
-    return `${base} Source: ${asset.source_local_path}.`;
+    return `${base} 来源文件：${asset.source_local_path}。`;
   });
 }
 
@@ -952,7 +1016,7 @@ function is401kIntake(intake) {
 function render401kToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec = false }) {
   const early = answeredEvents.length < DEFAULT_SPEC_TARGET_ROUNDS && allowEarlySpec;
   const context = { intake, answeredEvents };
-  const assets = assetLines(intake, { includeSource: true });
+  const assets = assetLines(intake);
   return sanitizeSpecDocument([
     `# Toolsite SPEC: ${siteId}`,
     '',
@@ -969,7 +1033,7 @@ function render401kToolsiteSpec({ siteId, intake, answeredEvents, allowEarlySpec
     '',
     `- Question rounds: ${answeredEvents.length}`,
     '- Complex tool: no',
-    ...(early ? ['- 六个用户决策区已清楚，用户同意提前输出 SPEC。'] : []),
+    ...(early ? ['- 项目信息已足够生成工具需求草稿。'] : []),
     '',
     '## Tool Purpose',
     '',
@@ -1095,7 +1159,7 @@ function renderWordCounterToolsiteSpec({ siteId, intake, answeredEvents, allowEa
     '',
     `- Question rounds: ${answeredEvents.length}`,
     '- Complex tool: no',
-    ...(early ? ['- 六个用户决策区已清楚，用户同意提前输出 SPEC。'] : []),
+    ...(early ? ['- 项目信息已足够生成工具需求草稿。'] : []),
     '',
     '## Tool Purpose',
     '',
@@ -1220,7 +1284,7 @@ export function renderToolsiteSpec({ siteId, intake, answeredEvents, allowEarlyS
     '',
     `- Question rounds: ${answeredEvents.length}`,
     '- Complex tool: no',
-    ...(early ? ['- 六个用户决策区已清楚，用户同意提前输出 SPEC。'] : []),
+    ...(early ? ['- 项目信息已足够生成工具需求草稿。'] : []),
     '',
     '## Tool Purpose',
     '',
@@ -1344,7 +1408,7 @@ function translateEnglishReviewLine(line, label) {
     ],
     [
       /^On mobile, the text input comes first and the stat cards follow immediately below it\. The tool must be usable before any SEO content\.$/i,
-      '移动端输入框优先展示，统计卡片紧跟其下；任何搜索内容都不能挤占第一屏工具体验。',
+      '移动端输入框优先展示，统计卡片紧跟其下；任何 SEO 内容都不能挤占第一屏工具体验。',
     ],
     [
       /^Input is plain text only\. Users paste or type into one large text area\.$/i,
@@ -1401,7 +1465,7 @@ function translateEnglishReviewLine(line, label) {
     ],
     [
       /^The `?\/`? page is the word counter tool page\. First-screen tool experience has priority over SEO content\.$/i,
-      '/ 页面是 word counter 工具页，第一屏工具体验优先于搜索内容。',
+      '/ 页面是 word counter 工具页，第一屏工具体验优先于 SEO 内容。',
     ],
     [
       /^Forbidden by default: `?\/login`?, `?\/dashboard`?, `?\/account`?, `?\/pricing`?, `?\/leaderboard`?, `?\/api`?, `?\/history`?, and `?\/blog`?\.$/i,
@@ -1417,7 +1481,7 @@ function translateEnglishReviewLine(line, label) {
     ],
     [
       /^Mobile is usable, long text does not overflow, and the first viewport remains a working tool rather than SEO filler\.$/i,
-      '移动端可用，长文本不溢出，第一屏保持为可工作的工具，而不是搜索内容填充。',
+      '移动端可用，长文本不溢出，第一屏保持为可工作的工具，而不是 SEO 内容填充。',
     ],
     [
       /^Build one focused tool page for the target domain\. The first viewport must prioritize the usable tool experience\.$/i,
@@ -1425,7 +1489,7 @@ function translateEnglishReviewLine(line, label) {
     ],
     [
       /^Use the keyword and target domain from Required Inputs\. Keep SEO content below or around the tool without blocking first-viewport tool usage\.$/i,
-      '使用已确认关键词和目标域名；搜索内容应放在工具下方或周围，不能阻碍第一屏工具使用。',
+      '使用已确认关键词和目标域名；SEO 内容应放在工具下方或周围，不能阻碍第一屏工具使用。',
     ],
   ];
 
@@ -1522,69 +1586,71 @@ function translateEnglishReviewLine(line, label) {
 
   const terms = [...new Set(allowedEnglishTerms(raw))];
   const fallback = terms.length > 0
-    ? `${label}需保留这些已确认要点：${terms.join('、')}。`
-    : `${label}需按已确认 SPEC 执行，不能保留英文整句说明。`;
+    ? `${label}保留这些产品要点：${terms.join('、')}。`
+    : '';
   return withBullet(fallback);
 }
 
 function reviewCardContent(content, label) {
   return String(content || '')
     .split(/\r?\n/)
+    .filter((line) => !isInternalSpecMetaLine(line) && !isDirtySourceSnippetLine(line))
     .map((line) => translateEnglishReviewLine(line, label))
     .filter(Boolean)
-    .join('\n') || '- SPEC 中未单独列出，请按已确认问答和系统默认约束执行。';
+    .join('\n') || '- 本节没有额外补充，按已确认的网站需求执行。';
 }
 
 export function renderSpecReviewCard({ specText, specPath }) {
+  const cleanSpec = sanitizeSpecContent(specText);
   const sections = [
     {
       label: '工具目标',
-      content: specSection(specText, ['Tool Purpose', '工具目标']),
+      content: specSection(cleanSpec, ['Tool Purpose', '工具目标']),
     },
     {
       label: '目标用户和使用场景',
       content: specSection(
-        specText,
+        cleanSpec,
         ['Target Users and Use Cases', 'Target Users / Use Cases', '目标用户和使用场景'],
-        fallbackTargetUsersAndUseCases(specText),
+        fallbackTargetUsersAndUseCases(cleanSpec),
       ),
     },
     {
       label: '第一屏 UX',
-      content: specSection(specText, ['First Viewport UX', '第一屏 UX', '第一屏体验']),
+      content: specSection(cleanSpec, ['First Viewport UX', '第一屏 UX', '第一屏体验']),
     },
     {
       label: '输入 / 输出模型',
-      content: specSection(specText, ['Input / Output Model', '输入 / 输出模型', '输入输出模型']),
+      content: specSection(cleanSpec, ['Input / Output Model', '输入 / 输出模型', '输入输出模型']),
     },
     {
       label: '核心结果展示',
-      content: specSection(specText, ['Result Experience', '核心结果展示', '结果体验']),
+      content: specSection(cleanSpec, ['Result Experience', '核心结果展示', '结果体验']),
     },
     {
       label: 'UI / UX 方向',
-      content: specSection(specText, ['UI / UX Direction', 'UI / UX 方向']),
+      content: specSection(cleanSpec, ['UI / UX Direction', 'UI / UX 方向']),
     },
     {
       label: '明确不做的功能',
-      content: specSection(specText, ['Non-goals', 'Non goals', '明确不做的功能', '非目标']),
+      content: specSection(cleanSpec, ['Non-goals', 'Non goals', '明确不做的功能', '非目标']),
     },
     {
       label: '技术限制',
-      content: specSection(specText, ['Technical Constraints', '技术限制']),
+      content: specSection(cleanSpec, ['Technical Constraints', '技术限制']),
     },
     {
       label: '页面边界',
-      content: specSection(specText, ['Page Boundary', '页面边界']),
+      content: specSection(cleanSpec, ['Page Boundary', '页面边界']),
     },
     {
       label: '成功标准',
-      content: specSection(specText, ['Success Criteria Baseline', 'Success Criteria', '成功标准']),
+      content: specSection(cleanSpec, ['Success Criteria Baseline', 'Success Criteria', '成功标准']),
     },
   ];
 
   return [
-    '【Toolsite SPEC 审核卡】',
+    '【Toolsite 需求确认】',
     '',
     ...sections.flatMap((section, index) => [
       `${index + 1}. ${section.label}`,

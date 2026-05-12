@@ -15,9 +15,11 @@ import {
   buildResolvedQuestionEvent,
   normalizeMaxQuestions,
   parseBatchAnswers,
+  parseRunInput,
   renderToolsiteSpec,
   renderSpecReviewCard,
   runPreAgent2TelegramLoop,
+  sanitizeSpecContent,
   shouldGenerateSpec,
   splitTelegramMessages,
   validateReply,
@@ -117,7 +119,7 @@ function fakeSender(sent) {
 }
 
 function assertSpecConfirmationCard(text) {
-  assert.match(text, /【Toolsite SPEC 审核卡】/);
+  assert.match(text, /【Toolsite 需求确认】/);
   assert.match(text, /工具目标/);
   assert.match(text, /第一屏 UX/);
   assert.match(text, /输入 \/ 输出模型/);
@@ -184,10 +186,93 @@ function fourOhOneKInputMarkdown({ concise = false } = {}) {
     '',
     '## Input assets',
     '',
-    '- image: input-assets/01-reference.jpg (source: /tmp/reference.jpg, telegram_file_id: tg-photo)',
+    '- image: input-assets/01-reference.jpg (purpose: illustration_reference, source: /tmp/reference.jpg, telegram_file_id: tg-photo)',
     '',
   ].join('\n');
 }
+
+test('SPEC sanitizer removes internal meta instructions and dirty snippets', () => {
+  const dirtySpec = [
+    '# Toolsite SPEC: 401k-calculator',
+    '',
+    '## Tool Purpose',
+    '',
+    '- 工具目标需按已确认 SPEC 执行，不能保留英文整句说明。',
+    '- 401K Calculator should keep expected return and employer match visible.',
+    '- https://www.calculator.net/401k-calculator.html%EF%BC%9AThis is a copied source snippet.',
+    '- Source title: 401K Calculator - Calculator.net',
+    '- blocks = agent-2',
+    '',
+    '## Agent Workflow Boundary',
+    '',
+    '- Agent2 waits for confirmation.',
+    '',
+    '## User Confirmation',
+    '',
+    '- [ ] User confirmed this Toolsite SPEC before Agent2 starts.',
+  ].join('\n');
+
+  const clean = sanitizeSpecContent(dirtySpec);
+
+  assert.doesNotMatch(clean, /需按已确认 SPEC 执行/);
+  assert.doesNotMatch(clean, /不能保留英文整句说明/);
+  assert.doesNotMatch(clean, /Agent Workflow Boundary/);
+  assert.doesNotMatch(clean, /User Confirmation/);
+  assert.doesNotMatch(clean, /blocks = agent-2/);
+  assert.doesNotMatch(clean, /%EF%BC%9A/);
+  assert.doesNotMatch(clean, /Source title/);
+  assert.match(clean, /401K Calculator/);
+  assert.match(clean, /expected return/);
+  assert.match(clean, /employer match/);
+});
+
+test('401K SPEC renders image attachment as design reference', () => {
+  const intake = parseRunInput(fourOhOneKInputMarkdown());
+  const spec = renderToolsiteSpec({
+    siteId: '401k-calculator',
+    intake,
+    answeredEvents: [],
+    allowEarlySpec: true,
+  });
+  const card = renderSpecReviewCard({
+    specText: spec,
+    specPath: 'runs/401k-calculator/toolsite-spec.md',
+  });
+
+  assert.match(spec, /input-assets\/01-reference\.jpg/);
+  assert.match(spec, /illustration_reference \/ design_reference/);
+  assert.match(spec, /页面点缀和视觉风格参考/);
+  assert.doesNotMatch(spec, /这张图是什么意思|是否使用这张图片/);
+  assert.match(card, /input-assets\/01-reference\.jpg/);
+  assert.match(card, /页面点缀和视觉风格参考/);
+});
+
+test('401K SPEC content contract rejects internal meta and dirty link residue', () => {
+  const intake = parseRunInput(fourOhOneKInputMarkdown());
+  const spec = renderToolsiteSpec({
+    siteId: '401k-calculator',
+    intake,
+    answeredEvents: [],
+    allowEarlySpec: true,
+  });
+  const card = renderSpecReviewCard({
+    specText: spec,
+    specPath: 'runs/401k-calculator/toolsite-spec.md',
+  });
+  const combined = `${spec}\n${card}`;
+
+  assert.doesNotMatch(combined, /需按已确认 SPEC 执行/);
+  assert.doesNotMatch(combined, /不能保留英文整句说明/);
+  assert.doesNotMatch(combined, /Agent Workflow Boundary/);
+  assert.doesNotMatch(combined, /User Confirmation/);
+  assert.doesNotMatch(combined, /human_review|blocks = agent-2/);
+  assert.doesNotMatch(combined, /generated before dynamic gap analysis|fixed generic Pre-Agent2/);
+  assert.doesNotMatch(combined, /calculator\.net\/401k-calculator\.html%EF%BC%9A/);
+  assert.doesNotMatch(combined, /Search Results?|source title|result snippet/i);
+  assert.match(combined, /401K Calculator/);
+  assert.match(combined, /expected annual return|expected return/);
+  assert.match(combined, /employer match/);
+});
 
 function wordCounterIntake() {
   return {
@@ -574,7 +659,7 @@ test('resolved 401K complexity answer after SPEC change request asks defaults in
       blocking: false,
       blocks: 'agent-2',
       title: 'Pre-Agent2 SPEC 确认',
-      message: '【Toolsite SPEC 审核卡】',
+      message: '【Toolsite 需求确认】',
       expected_reply: '回复：确认 SPEC，或回复：修改：...',
       resolution_text: '修改：先问 401K Calculator 计算复杂度。',
       change_requested: true,
@@ -643,7 +728,7 @@ test('resolved 401K complexity answer after SPEC change request asks defaults in
   assert.match(defaultsQuestion.message, /expected return 6%/);
   assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'open'), false);
   assert.equal(sent.some((message) => message.includes('401K Calculator 的默认假设要怎么设置')), true);
-  assert.equal(sent.some((message) => message.includes('【Toolsite SPEC 审核卡】')), false);
+  assert.equal(sent.some((message) => message.includes('【Toolsite 需求确认】')), false);
   assert.equal(await exists(path.join(fixture.runDir, 'agent-2-output/site-brief.md')), false);
 });
 
