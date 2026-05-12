@@ -14,6 +14,7 @@ playwright-report/
 test-results/
 .cache/
 .tmp/
+/runs/
 
 # Local generated sites can be committed selectively.
 runs/*/site/node_modules/
