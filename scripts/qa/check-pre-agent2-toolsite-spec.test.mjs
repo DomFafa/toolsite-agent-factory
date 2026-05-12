@@ -59,7 +59,6 @@ function spec({
     ['Non-goals', `No login, leaderboard, account, dashboard, API, or blog for ${keyword}; keep ${extraIdeas}.`],
     ['Technical Constraints', `Static frontend only for ${keyword}. No backend, database, login, or API keys.`],
     ['Page Boundary', `Required pages for ${targetDomain} are /, /privacy, /terms, /sitemap.xml, and /robots.txt.`],
-    ['Agent Workflow Boundary', `Agent 2 starts only after this ${keyword} SPEC gate passes.`],
     ['SEO Baseline', `${keyword} must drive title, description, H1, and page intent for ${targetDomain}.`],
     ['Success Criteria Baseline', `The real ${keyword} tool is visible first and behavior matches this SPEC.`],
   ]
@@ -70,13 +69,6 @@ function spec({
   return [
     fiveElements,
     sections,
-    '## User Confirmation',
-    '',
-    `- [${confirmed ? 'x' : ' '}] User confirmed this Toolsite SPEC before Agent2 starts.`,
-    '- Confirmation text: Confirmed, proceed to Agent2.',
-    '- Confirmed by: dom',
-    '- Confirmed at: 2026-05-11T10:00:00+08:00',
-    '',
   ].join('\n');
 }
 
@@ -134,10 +126,6 @@ function genericWordCounterSpec({
     '',
     'Build one focused tool page.',
     '',
-    '## Agent Workflow Boundary',
-    '',
-    'Agent 2 starts only after this SPEC gate passes.',
-    '',
     '## SEO Baseline',
     '',
     'Primary keyword drives title, description, H1, and page intent.',
@@ -145,13 +133,6 @@ function genericWordCounterSpec({
     '## Success Criteria Baseline',
     '',
     '用户打开页面后完成任务。',
-    '',
-    '## User Confirmation',
-    '',
-    `- [${confirmed ? 'x' : ' '}] User confirmed this Toolsite SPEC before Agent2 starts.`,
-    '- Confirmation text: Confirmed, proceed to Agent2.',
-    '- Confirmed by: dom',
-    '- Confirmed at: 2026-05-11T10:00:00+08:00',
     '',
   ].join('\n');
 }
@@ -224,10 +205,6 @@ function wordCounterSpec({ omitTerm = '' } = {}) {
     '',
     'Required pages are /, /privacy, /terms, /sitemap.xml, and /robots.txt. The / page is the word counter tool page.',
     '',
-    '## Agent Workflow Boundary',
-    '',
-    'Agent 2 starts only after this word counter SPEC gate passes.',
-    '',
     '## SEO Baseline',
     '',
     'word counter drives title, description, H1, and page intent for wordcounter-test.local.',
@@ -236,18 +213,28 @@ function wordCounterSpec({ omitTerm = '' } = {}) {
     '',
     '用户打开页面后 3 秒内知道怎么用，粘贴文本后立即看到核心指标，移动端可用，长文本不溢出。',
     '',
-    '## User Confirmation',
-    '',
-    '- [x] User confirmed this Toolsite SPEC before Agent2 starts.',
-    '- Confirmation text: Confirmed, proceed to Agent2.',
-    '- Confirmed by: dom',
-    '- Confirmed at: 2026-05-11T10:00:00+08:00',
-    '',
   ].join('\n');
 }
 
-async function writeSpec(runDir, text = spec()) {
+async function writeResolvedSpecConfirmation(runDir) {
+  await writeFile(
+    path.join(runDir, 'human-review-events.jsonl'),
+    `${JSON.stringify({
+      schema_version: 'human-review-event.v1',
+      type: 'human_review',
+      id: 'pre-agent2-spec-confirmation',
+      review_type: 'pre_agent2_spec_confirmation',
+      status: 'resolved',
+      blocking: false,
+      resolution_text: '确认 SPEC',
+      resolved_at: '2026-05-11T10:00:00+08:00',
+    })}\n`,
+  );
+}
+
+async function writeSpec(runDir, text = spec(), { confirmed = true } = {}) {
   await writeFile(path.join(runDir, 'toolsite-spec.md'), text);
+  if (confirmed) await writeResolvedSpecConfirmation(runDir);
 }
 
 test('passes a confirmed SPEC with all required fields and 12 question rounds', async () => {
@@ -341,6 +328,33 @@ test('blocks a generic word counter SPEC', async () => {
   assert.match(result.failures.join('\n'), /specificity:/);
 });
 
+test('blocks SPEC content with internal workflow meta instructions', async () => {
+  const runDir = await makeRun();
+  await writeSpec(
+    runDir,
+    spec().replace(
+      'Let users measure typing speed and accuracy',
+      'Agent2 must wait for human_review confirmation. Let users measure typing speed and accuracy',
+    ),
+  );
+
+  const result = await runPreAgent2ToolsiteSpecGate({ runDir });
+  assert.equal(result.passed, false);
+  assert.match(result.failures.join('\n'), /content-contract: SPEC contains internal workflow term/);
+});
+
+test('blocks SPEC content with dirty source or encoded link snippets', async () => {
+  const runDir = await makeRun();
+  await writeSpec(
+    runDir,
+    `${spec()}\n\nsource: calculator.net%EF%BC%9A copied search result snippet\n`,
+  );
+
+  const result = await runPreAgent2ToolsiteSpecGate({ runDir });
+  assert.equal(result.passed, false);
+  assert.match(result.failures.join('\n'), /content-contract: SPEC contains .*source|encoded dirty source/);
+});
+
 test('blocks a word counter SPEC missing core metrics', async () => {
   const runDir = await makeRun();
   await writeSpec(runDir, wordCounterSpec({ omitTerm: 'speaking time' }));
@@ -390,11 +404,11 @@ test('fails when a user decision section is missing', async () => {
 
 test('fails when user confirmation is not checked', async () => {
   const runDir = await makeRun();
-  await writeSpec(runDir, spec({ confirmed: false }));
+  await writeSpec(runDir, spec(), { confirmed: false });
 
   const result = await runPreAgent2ToolsiteSpecGate({ runDir });
   assert.equal(result.passed, false);
-  assert.match(result.failures.join('\n'), /checkbox must be checked/);
+  assert.match(result.failures.join('\n'), /missing resolved pre-agent2-spec-confirmation/);
 });
 
 test('CLI writes gate result and emits fixed block message on failure', async () => {

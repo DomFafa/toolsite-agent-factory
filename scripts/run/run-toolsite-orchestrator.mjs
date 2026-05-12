@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { checkRunGates, SMOKE_RUN_BLOCK_MESSAGE } from './check-gates.mjs';
 import {
   continueHumanReview,
+  GATES_BLOCKED,
   INVALID_REPLY,
   NO_REPLY_FOUND,
   NO_OPEN_REVIEW,
@@ -33,6 +34,7 @@ export const WAITING_FOR_FRESH_INTAKE = 'WAITING_FOR_FRESH_INTAKE';
 export const RUN_ALREADY_EXISTS = 'RUN_ALREADY_EXISTS';
 export const PRODUCTION_RUN_CREATED = 'PRODUCTION_RUN_CREATED';
 export const ATTACHMENT_FILE_MISSING = 'ATTACHMENT_FILE_MISSING';
+export const NO_STAGE_RUNNER_CONFIGURED = 'NO_STAGE_RUNNER_CONFIGURED';
 
 async function exists(filePath) {
   try {
@@ -419,10 +421,10 @@ async function detectNextStage(runDir) {
 
 async function defaultStageRunner({ stage }) {
   return {
-    ok: true,
-    code: NEXT_STAGE_READY,
+    ok: false,
+    code: NO_STAGE_RUNNER_CONFIGURED,
     stage,
-    message: `${stage} is ready for the next runner. No deployment was started.`,
+    message: `${stage} cannot run because no real stage runner is configured.`,
   };
 }
 
@@ -472,6 +474,19 @@ async function guardAgent6(runDir) {
     code: DEPLOY_NOT_RUN,
     stage: 'agent-6',
     message: 'Agent6 is approved by gates, but deployment is not run by this orchestrator.',
+    gateResult,
+  };
+}
+
+async function guardStageEntry(runDir, stage) {
+  if (stage !== 'agent-3') return null;
+  const gateResult = await checkRunGates({ runDir, before: 'agent-3' });
+  if (gateResult.allowed) return null;
+  return {
+    ok: false,
+    code: GATES_BLOCKED,
+    stage,
+    message: 'Agent3 is blocked until Agent2.5 proof gates pass.',
     gateResult,
   };
 }
@@ -557,6 +572,8 @@ export async function runToolsiteOrchestrator({
 
     const stage = await detectNextStage(absoluteRunDir);
     if (stage === 'agent-6') return guardAgent6(absoluteRunDir);
+    const stageEntryBlock = await guardStageEntry(absoluteRunDir, stage);
+    if (stageEntryBlock) return stageEntryBlock;
 
     const stageResult = stage === 'pre-agent2'
       ? await preAgent2Runner({ runDir: absoluteRunDir, inboxPath })
@@ -587,10 +604,21 @@ export async function runToolsiteOrchestrator({
       };
     }
 
-    if (!stageResult?.ok || stageResult?.code === NEXT_STAGE_READY) {
+    if (stageResult?.code === NEXT_STAGE_READY) {
+      return {
+        ok: false,
+        code: NO_STAGE_RUNNER_CONFIGURED,
+        stage,
+        message: `${stage} returned NEXT_STAGE_READY without executing a real stage.`,
+        stageResult,
+        productionStart,
+      };
+    }
+
+    if (!stageResult?.ok) {
       return {
         ok: Boolean(stageResult?.ok),
-        code: stageResult?.code || NEXT_STAGE_READY,
+        code: stageResult?.code || NO_STAGE_RUNNER_CONFIGURED,
         stage,
         stageResult,
         productionStart,

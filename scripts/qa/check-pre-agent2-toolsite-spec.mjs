@@ -94,6 +94,28 @@ const WORD_COUNTER_REQUIRED_TERMS = [
   ['不做历史记录', [/历史记录/, /\bhistory\b/i]],
 ];
 
+const FORBIDDEN_SPEC_META_PATTERNS = [
+  [/需按已确认\s*SPEC\s*执行/i, 'internal meta instruction: 需按已确认 SPEC 执行'],
+  [/不能保留英文整句说明/i, 'internal meta instruction: 不能保留英文整句说明'],
+  [/已确认\s*SPEC/i, 'internal meta instruction: 已确认 SPEC'],
+  [/SPEC\s*审核卡/i, 'internal meta instruction: SPEC 审核卡'],
+  [/\bAgent\s*[2-6]\b/i, 'internal workflow term: Agent2/Agent3/etc.'],
+  [/\bgate\b/i, 'internal workflow term: gate'],
+  [/human_review/i, 'internal workflow term: human_review'],
+  [/\bconfirmation\b/i, 'internal workflow term: confirmation'],
+  [/\breview\b/i, 'internal workflow term: review'],
+  [/blocks\s*=\s*agent-2/i, 'internal workflow term: blocks = agent-2'],
+  [/generated before dynamic gap analysis/i, 'internal debug reason: generated before dynamic gap analysis'],
+  [/fixed generic Pre-Agent2/i, 'internal debug reason: fixed generic Pre-Agent2'],
+];
+
+const DIRTY_SOURCE_SNIPPET_PATTERNS = [
+  [/^\s*(?:source|来源|搜索结果|snippet|title)\s*[:：]/im, 'dirty source/snippet line'],
+  [/^\s*(?:calculator\.net|www\.calculator\.net)\s*[-–—:：]/im, 'dirty source title line'],
+  [/%EF%BC%9A|%EF%BC%9B|%E3%80%82|%EF%BC%8C/i, 'encoded dirty source/link residue'],
+  [/(?:Search Results?|网页快照|source title|result snippet)/i, 'search-result residue'],
+];
+
 function parseArgs(argv) {
   const args = { write: false };
   for (let index = 0; index < argv.length; index += 1) {
@@ -256,18 +278,18 @@ async function hasResolvedSpecConfirmation(runDir) {
 
 function validateUserConfirmation(text, failures, confirmedByHumanReview = false) {
   if (confirmedByHumanReview) return;
-  const section = sectionContent(text, 'User Confirmation');
-  if (!hasUsefulValue(section)) {
-    failures.push('missing resolved pre-agent2-spec-confirmation human_review');
-    return;
+  failures.push('missing resolved pre-agent2-spec-confirmation human_review');
+}
+
+function collectContentContractFailures(specText) {
+  const failures = [];
+  for (const [pattern, label] of FORBIDDEN_SPEC_META_PATTERNS) {
+    if (pattern.test(specText)) failures.push(`content-contract: SPEC contains ${label}`);
   }
-  if (!/-\s+\[x\]\s+User confirmed this Toolsite SPEC before Agent2 starts\./i.test(section)) {
-    failures.push('User Confirmation checkbox must be checked before Agent2 starts');
+  for (const [pattern, label] of DIRTY_SOURCE_SNIPPET_PATTERNS) {
+    if (pattern.test(specText)) failures.push(`content-contract: SPEC contains ${label}`);
   }
-  for (const field of ['Confirmation text', 'Confirmed by', 'Confirmed at']) {
-    const value = findLabeledValue(section, [field]);
-    if (!hasUsefulValue(value)) failures.push(`User Confirmation is missing ${field}`);
-  }
+  return failures;
 }
 
 function meaningfulTokens(value) {
@@ -407,6 +429,7 @@ export async function runPreAgent2ToolsiteSpecGate({ runDir }) {
     }
 
     validateUserConfirmation(specText, failures, await hasResolvedSpecConfirmation(absoluteRunDir));
+    failures.push(...collectContentContractFailures(specText));
     failures.push(...collectSpecificityFailures(specText, qaText));
 
     return resultFromFailures({

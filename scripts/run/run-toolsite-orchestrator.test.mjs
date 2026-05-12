@@ -17,6 +17,7 @@ import {
   createProductionRunFromHermesIntake,
   DEPLOY_BLOCKED,
   NEXT_STAGE_READY,
+  NO_STAGE_RUNNER_CONFIGURED,
   PRODUCTION_RUN_CREATED,
   RUN_ALREADY_EXISTS,
   runToolsiteOrchestrator,
@@ -213,7 +214,7 @@ test('Telegram reply after review is consumed without manual rerun', async () =>
   const events = await readEvents(eventPath);
   assert.equal(calls, 2);
   assert.equal(events.some((event) => event.status === 'resolved' && event.selected_option === 'A'), true);
-  assert.equal(result.code, NEXT_STAGE_READY);
+  assert.equal(result.code, NO_STAGE_RUNNER_CONFIGURED);
 });
 
 test('remote mode consumes SPEC confirmation reply and enters Agent2', async () => {
@@ -237,20 +238,30 @@ test('remote mode consumes SPEC confirmation reply and enters Agent2', async () 
     inboxPath,
     remote: true,
     pollMs: 0,
+    maxIdleIterations: 1,
     preAgent2Runner: async () => {
       preAgent2Calls += 1;
       throw new Error('SPEC confirmation must not be routed into runLoopIteration');
     },
     stageRunner: async ({ stage }) => {
       stages.push(stage);
-      return { ok: true, code: NEXT_STAGE_READY, stage };
+      await appendJsonl(
+        eventPath,
+        review({
+          id: 'agent2-brief-exception',
+          review_type: 'agent2_brief_exception',
+          phase: 'agent-2',
+          blocks: 'agent-2.5',
+        }),
+      );
+      return { ok: true, code: 'STAGE_COMPLETED', stage };
     },
   });
 
   const events = await readEvents(eventPath);
   const resolved = events.find((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'resolved');
   assert.equal(preAgent2Calls, 0);
-  assert.equal(result.code, NEXT_STAGE_READY);
+  assert.equal(result.code, STOPPED_AT_HUMAN_REVIEW);
   assert.deepEqual(stages, ['agent-2']);
   assert.equal(resolved.resolution_text, '确认 SPEC');
   assert.equal(resolved.blocking, false);
@@ -376,15 +387,55 @@ test('run:toolsite starts next stage and stops when that stage opens a review', 
   assert.equal(result.openReviews[0].id, 'agent2-brief-exception');
 });
 
-test('default stage runner reports next stage without creating site source', async () => {
+test('default stage runner blocks production stages instead of pretending ready', async () => {
   const { runDir } = await makeFixture();
   await writeFile(path.join(runDir, 'toolsite-spec.md'), '# SPEC\n');
 
   const result = await runToolsiteOrchestrator({ runDir, remote: true });
 
-  assert.equal(result.ok, true);
-  assert.equal(result.code, NEXT_STAGE_READY);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, NO_STAGE_RUNNER_CONFIGURED);
   assert.equal(result.stage, 'agent-2');
+});
+
+test('stage runner returning NEXT_STAGE_READY is treated as not configured', async () => {
+  const { runDir } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# SPEC\n');
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    stageRunner: async ({ stage }) => ({ ok: true, code: NEXT_STAGE_READY, stage }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, NO_STAGE_RUNNER_CONFIGURED);
+  assert.equal(result.stage, 'agent-2');
+});
+
+test('orchestrator requires Agent2.5 proof gates before Agent3', async () => {
+  const { runDir } = await makeFixture();
+  await writeFile(path.join(runDir, 'toolsite-spec.md'), '# SPEC\n');
+  await mkdir(path.join(runDir, 'agent-2-output'), { recursive: true });
+  await writeFile(path.join(runDir, 'agent-2-output/site-brief.md'), '# Site brief\n');
+  await mkdir(path.join(runDir, 'agent-2-5-output/chat-delivery'), { recursive: true });
+  await writeFile(path.join(runDir, 'agent-2-5-output/chat-delivery/options-board.png'), 'png');
+  let stageCalls = 0;
+
+  const result = await runToolsiteOrchestrator({
+    runDir,
+    remote: true,
+    stageRunner: async () => {
+      stageCalls += 1;
+      return { ok: true, code: 'STAGE_COMPLETED' };
+    },
+  });
+
+  assert.equal(stageCalls, 0);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, GATES_BLOCKED);
+  assert.equal(result.stage, 'agent-3');
+  assert.match(result.gateResult.missing.join('\n'), /agent-2-5|agent25|external-design/i);
 });
 
 test('smoke run cannot deploy', async () => {
