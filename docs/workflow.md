@@ -100,6 +100,16 @@ For a remote production run, keep the computer-side orchestrator running and use
 npm run run:toolsite -- --run-dir runs/<site-id> --remote
 ```
 
+To create a production run from Telegram intake, the user must first send a fresh Telegram message after the command starts. The message must include a production-start intent phrase such as `开始正式建站`, `新建 production run`, `创建生产站`, `开始生产运行`, or `正式开始这个站`, and it must include all five intake fields. Codex must not create a production run from historical Hermes inbox messages by default:
+
+```bash
+npm run run:toolsite -- --from-hermes-intake --remote
+```
+
+If there is no fresh intake, Codex exits with `WAITING_FOR_FRESH_INTAKE` and creates no run. If the latest intake is old, Codex exits with `STALE_INTAKE_REJECTED`. If the message lacks production-start intent, Codex exits with `MISSING_PRODUCTION_START_INTENT`. If the target run directory already exists, Codex exits with `RUN_ALREADY_EXISTS`; it must not auto-rename or overwrite the run. `--allow-existing-intake` is the explicit override for using an older intake, and `--resume-existing-run` is the explicit override for resuming a non-aborted existing run.
+
+Production runs created from Hermes intake must write `run-meta.json` with `run_type: "production"`, `deployable: true`, `status: "active"`, `source: "hermes-intake"`, `intake_message_key`, `intake_created_at`, and `run_created_at`.
+
 When the run is waiting at a human review point, Codex can consume the latest valid Hermes inbox reply and continue to the next workflow step:
 
 ```bash

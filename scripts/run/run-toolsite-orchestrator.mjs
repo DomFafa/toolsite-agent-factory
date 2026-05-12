@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +9,14 @@ import {
   REVIEW_RESOLVED,
   AGENT6_READY,
 } from './continue-human-review.mjs';
+import {
+  DEFAULT_HERMES_INBOX,
+  DEFAULT_HERMES_REMOTE_STATE,
+  INCOMPLETE_INTAKE,
+  MISSING_PRODUCTION_START_INTENT,
+  readHermesIntake,
+  STALE_INTAKE_REJECTED,
+} from './read-hermes-intake.mjs';
 import { summarizeReviewEvents } from './resolve-human-review-from-hermes-inbox.mjs';
 
 export const STOPPED_AT_HUMAN_REVIEW = 'STOPPED_AT_HUMAN_REVIEW';
@@ -16,6 +24,9 @@ export const NEXT_STAGE_READY = 'NEXT_STAGE_READY';
 export const FLOW_COMPLETE = 'FLOW_COMPLETE';
 export const DEPLOY_BLOCKED = 'DEPLOY_BLOCKED';
 export const DEPLOY_NOT_RUN = 'DEPLOY_NOT_RUN';
+export const WAITING_FOR_FRESH_INTAKE = 'WAITING_FOR_FRESH_INTAKE';
+export const RUN_ALREADY_EXISTS = 'RUN_ALREADY_EXISTS';
+export const PRODUCTION_RUN_CREATED = 'PRODUCTION_RUN_CREATED';
 
 async function exists(filePath) {
   try {
@@ -56,6 +67,240 @@ async function readRunMeta(runDir) {
   } catch {
     return null;
   }
+}
+
+function siteIdFromDomain(domain) {
+  let clean = String(domain || '').trim().toLowerCase();
+  clean = clean.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  clean = clean.split('/')[0] || clean;
+  clean = clean.split('?')[0] || clean;
+  clean = clean.split('#')[0] || clean;
+  clean = clean.split(':')[0] || clean;
+  clean = clean.replace(/^www\./, '');
+
+  const labels = clean.split('.').filter(Boolean);
+  if (labels.length > 1) labels.pop();
+  const base = labels.join('-') || clean;
+
+  return base
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function intakeCodeToProductionStartCode(result) {
+  if (result.code === 'stale-intake') return STALE_INTAKE_REJECTED;
+  if (result.code === 'missing-production-start-intent') return MISSING_PRODUCTION_START_INTENT;
+  if (result.code === 'incomplete-intake') return INCOMPLETE_INTAKE;
+  return WAITING_FOR_FRESH_INTAKE;
+}
+
+function filledRunInput({ siteId, intake }) {
+  return [
+    '# Run Input',
+    '',
+    '## Site',
+    '',
+    `- Site ID: ${siteId}`,
+    `- Target domain: ${intake.target_domain}`,
+    `- Primary keyword: ${intake.keyword}`,
+    `- Brief requirements: ${intake.extra_notes}`,
+    '',
+    '## Pre-Agent2 required user inputs',
+    '',
+    '- These five fields were read from a fresh Hermes production-start intake.',
+    '',
+    `- Keyword / 关键词: ${intake.keyword}`,
+    `- Target Domain / 目标域名: ${intake.target_domain}`,
+    `- UI Reference / UI 参考: ${intake.ui_reference}`,
+    `- UX Reference / UX 参考: ${intake.ux_reference}`,
+    `- Extra Ideas / Constraints / Mimic Points / 额外想法 / 限制 / 模仿点: ${intake.extra_notes}`,
+    '',
+    'Before Agent 2 starts, complete and confirm `toolsite-spec.md`, then run:',
+    '',
+    '```bash',
+    `npm run check:pre-agent2-spec -- --run-dir runs/${siteId} --write`,
+    '```',
+    '',
+    '## UI and UX references',
+    '',
+    '### Reference 1',
+    '',
+    '- Type: mood | component | layout | interaction',
+    '- Reference URL:',
+    '- Desktop screenshot path:',
+    '- Mobile screenshot path:',
+    '- Component/image path:',
+    `- What to borrow: ${intake.ui_reference}`,
+    `- What to avoid: Do not copy ${intake.ux_reference} layout or visuals verbatim.`,
+    '- Reference strength: mood | interaction',
+    '',
+    '## Constraints',
+    '',
+    '- Language: English',
+    '- Site type: static frontend tool',
+    '- Backend: none',
+    '- Database: none',
+    '- Login: none',
+    '- API keys: none',
+    '- Analytics: Cloudflare Web Analytics',
+    '- Ads: disabled, reserve monetization slots only',
+    '- Development indexing: noindex',
+    '- Production indexing: index only after approval',
+    '',
+  ].join('\n');
+}
+
+async function writeProductionRunFiles({ rootDir, runDir, siteId, intake, createdAt }) {
+  const directories = [
+    'agent-1-output',
+    'agent-2-output',
+    'agent-2-5-output/chat-delivery',
+    'agent-3-output',
+    'agent-4-output',
+    'agent-5-output/chat-delivery',
+    'agent-6-output',
+    'assets',
+    'gate-results',
+    'site',
+  ];
+  for (const directory of directories) {
+    await mkdir(path.join(runDir, directory), { recursive: true });
+  }
+
+  await writeFile(path.join(runDir, 'input.md'), filledRunInput({ siteId, intake }));
+  await copyFile(path.join(rootDir, 'shared/templates/approval.template.md'), path.join(runDir, 'approval.md'));
+  await writeFile(path.join(runDir, 'issues.md'), '');
+  await writeFile(
+    path.join(runDir, 'state.json'),
+    `${JSON.stringify(
+      {
+        site_id: siteId,
+        domain: intake.target_domain,
+        status: 'initialized',
+        current_agent: null,
+        approved_for_production: false,
+        agent_outputs: {
+          agent_1: null,
+          agent_2: null,
+          agent_2_5: null,
+          agent_3: null,
+          agent_4: null,
+          agent_5: null,
+          agent_6: null,
+        },
+        qa: {
+          passed: false,
+          report: null,
+        },
+        launch: {
+          cloudflare_project: `dom-tool-${siteId}`,
+          production_url: `https://${intake.target_domain}`,
+          sitemap_url: `https://${intake.target_domain}/sitemap.xml`,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(runDir, 'run-meta.json'),
+    `${JSON.stringify(
+      {
+        run_type: 'production',
+        deployable: true,
+        created_for: 'production toolsite run',
+        intake_message_key: intake.source?.key || '',
+        intake_created_at: intake.source?.created_at || '',
+        run_created_at: createdAt,
+        source: 'hermes-intake',
+        status: 'active',
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(runDir, 'README.md'),
+    [
+      `# Run: ${siteId}`,
+      '',
+      `- Domain: ${intake.target_domain}`,
+      `- Cloudflare Pages project: dom-tool-${siteId}`,
+      '- Source: fresh Hermes production-start intake',
+      '',
+      'Fill `input.md`, then execute agents in order.',
+      '',
+    ].join('\n'),
+  );
+}
+
+export async function createProductionRunFromHermesIntake({
+  rootDir = process.cwd(),
+  inboxPath = DEFAULT_HERMES_INBOX,
+  remoteStatePath = DEFAULT_HERMES_REMOTE_STATE,
+  startedAt,
+  allowExistingIntake = false,
+  resumeExistingRun = false,
+  now = () => new Date().toISOString(),
+} = {}) {
+  const createdAt = now();
+  const freshAfter = startedAt || createdAt;
+  const intake = await readHermesIntake({
+    inboxPath,
+    remoteStatePath,
+    freshAfter,
+    allowExistingIntake,
+    requireProductionStartIntent: true,
+  });
+
+  if (!intake.found) {
+    const code = intakeCodeToProductionStartCode(intake);
+    return {
+      ok: true,
+      code,
+      message: code,
+      missingFields: intake.missing_fields || [],
+      intake,
+    };
+  }
+
+  const siteId = siteIdFromDomain(intake.target_domain);
+  const runDir = path.join(path.resolve(rootDir), 'runs', siteId);
+  if (await exists(runDir)) {
+    if (resumeExistingRun) {
+      const meta = await readRunMeta(runDir);
+      if (meta && meta.status !== 'aborted') {
+        return {
+          ok: true,
+          code: 'EXISTING_RUN_RESUMED',
+          runDir,
+          siteId,
+          intake,
+          runMeta: meta,
+        };
+      }
+    }
+    return {
+      ok: false,
+      code: RUN_ALREADY_EXISTS,
+      message: RUN_ALREADY_EXISTS,
+      runDir,
+      siteId,
+      intake,
+    };
+  }
+
+  await writeProductionRunFiles({ rootDir: path.resolve(rootDir), runDir, siteId, intake, createdAt });
+  const runMeta = await readRunMeta(runDir);
+  return {
+    ok: true,
+    code: PRODUCTION_RUN_CREATED,
+    runDir,
+    siteId,
+    intake,
+    runMeta,
+  };
 }
 
 async function detectNextStage(runDir) {
@@ -110,12 +355,36 @@ export async function runToolsiteOrchestrator({
   runDir,
   remote = false,
   inboxPath,
+  remoteStatePath,
+  fromHermesIntake = false,
+  allowExistingIntake = false,
+  resumeExistingRun = false,
+  startedAt,
+  rootDir = process.cwd(),
   continueReview = continueHumanReview,
   stageRunner = defaultStageRunner,
   maxSteps = 20,
 } = {}) {
-  if (!runDir) throw new Error('Missing --run-dir');
-  const absoluteRunDir = path.resolve(runDir);
+  let absoluteRunDir = runDir ? path.resolve(runDir) : '';
+  let productionStart = null;
+
+  if (fromHermesIntake) {
+    productionStart = await createProductionRunFromHermesIntake({
+      rootDir,
+      inboxPath,
+      remoteStatePath,
+      startedAt,
+      allowExistingIntake,
+      resumeExistingRun,
+    });
+    if (!productionStart.ok) return productionStart;
+    if (productionStart.code !== PRODUCTION_RUN_CREATED && productionStart.code !== 'EXISTING_RUN_RESUMED') {
+      return productionStart;
+    }
+    absoluteRunDir = productionStart.runDir;
+  }
+
+  if (!absoluteRunDir) throw new Error('Missing --run-dir');
 
   for (let step = 0; step < maxSteps; step += 1) {
     const summary = await readHumanReviewSummary(absoluteRunDir);
@@ -140,6 +409,7 @@ export async function runToolsiteOrchestrator({
           code: STOPPED_AT_HUMAN_REVIEW,
           openReviews: afterReview.openReviews,
           previousResult: result,
+          productionStart,
         };
       }
 
@@ -161,6 +431,7 @@ export async function runToolsiteOrchestrator({
         stage,
         stageResult,
         openReviews: afterStage.openReviews,
+        productionStart,
       };
     }
 
@@ -170,6 +441,7 @@ export async function runToolsiteOrchestrator({
         code: stageResult?.code || NEXT_STAGE_READY,
         stage,
         stageResult,
+        productionStart,
       };
     }
   }
@@ -187,19 +459,31 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--remote') {
       args.remote = true;
+    } else if (arg === '--from-hermes-intake') {
+      args.fromHermesIntake = true;
+    } else if (arg === '--allow-existing-intake') {
+      args.allowExistingIntake = true;
+    } else if (arg === '--resume-existing-run') {
+      args.resumeExistingRun = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
       args[key] = argv[i + 1];
       i += 1;
     }
   }
-  if (!args['run-dir']) throw new Error('Missing --run-dir');
+  if (!args['run-dir'] && !args.fromHermesIntake) throw new Error('Missing --run-dir');
   return args;
 }
 
 function printResult(result) {
   console.log(result.code || (result.ok ? 'OK' : 'FAILED'));
   if (result.message) console.log(result.message);
+  if (result.siteId) console.log(`site_id: ${result.siteId}`);
+  if (result.runDir) console.log(`run_dir: ${result.runDir}`);
+  if (result.missingFields?.length) {
+    console.log('missing_fields:');
+    for (const field of result.missingFields) console.log(`- ${field}`);
+  }
   if (result.stage) console.log(`stage: ${result.stage}`);
   if (result.openReviews?.length) {
     console.log('open_reviews:');
@@ -208,10 +492,16 @@ function printResult(result) {
 }
 
 async function main() {
+  const commandStartedAt = new Date().toISOString();
   const args = parseArgs(process.argv.slice(2));
   const result = await runToolsiteOrchestrator({
     runDir: args['run-dir'],
     inboxPath: args['inbox-path'],
+    remoteStatePath: args['remote-state-path'],
+    fromHermesIntake: Boolean(args.fromHermesIntake),
+    allowExistingIntake: Boolean(args.allowExistingIntake),
+    resumeExistingRun: Boolean(args.resumeExistingRun),
+    startedAt: args['started-at'] || commandStartedAt,
     remote: Boolean(args.remote),
   });
   printResult(result);
@@ -229,4 +519,5 @@ if (isCli) {
 export const testInternals = {
   detectNextStage,
   readHumanReviewSummary,
+  siteIdFromDomain,
 };

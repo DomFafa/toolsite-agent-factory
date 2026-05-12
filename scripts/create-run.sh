@@ -10,6 +10,7 @@ if [[ -z "$SITE_ID" || -z "$DOMAIN" ]]; then
 fi
 
 RUN_DIR="runs/$SITE_ID"
+RUN_CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 if [[ -e "$RUN_DIR" ]]; then
   echo "Run folder already exists: $RUN_DIR"
@@ -52,7 +53,10 @@ cat > "$RUN_DIR/run-meta.json" <<JSON
 {
   "run_type": "production",
   "deployable": true,
-  "created_for": "production toolsite run"
+  "created_for": "production toolsite run",
+  "source": "manual",
+  "status": "active",
+  "run_created_at": "$RUN_CREATED_AT"
 }
 JSON
 

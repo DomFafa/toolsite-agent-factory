@@ -6,11 +6,20 @@ import test from 'node:test';
 
 import { GATES_BLOCKED, REVIEW_RESOLVED, SMOKE_NOT_DEPLOYABLE } from './continue-human-review.mjs';
 import {
+  createProductionRunFromHermesIntake,
   DEPLOY_BLOCKED,
   NEXT_STAGE_READY,
+  PRODUCTION_RUN_CREATED,
+  RUN_ALREADY_EXISTS,
   runToolsiteOrchestrator,
   STOPPED_AT_HUMAN_REVIEW,
+  WAITING_FOR_FRESH_INTAKE,
 } from './run-toolsite-orchestrator.mjs';
+import {
+  INCOMPLETE_INTAKE,
+  MISSING_PRODUCTION_START_INTENT,
+  STALE_INTAKE_REJECTED,
+} from './read-hermes-intake.mjs';
 
 async function makeFixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'run-toolsite-orchestrator-'));
@@ -18,6 +27,8 @@ async function makeFixture() {
   const inboxPath = path.join(root, 'hermes-home/state/toolsite-inbox.jsonl');
   await mkdir(runDir, { recursive: true });
   await mkdir(path.dirname(inboxPath), { recursive: true });
+  await mkdir(path.join(root, 'shared/templates'), { recursive: true });
+  await writeFile(path.join(root, 'shared/templates/approval.template.md'), '# Approval\n');
   return {
     root,
     runDir,
@@ -29,6 +40,14 @@ async function makeFixture() {
 async function writeJsonl(filePath, records) {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, records.length > 0 ? `${records.map((record) => JSON.stringify(record)).join('\n')}\n` : '');
+}
+
+async function writeRemote(remoteStatePath, remoteMode = true) {
+  await mkdir(path.dirname(remoteStatePath), { recursive: true });
+  await writeFile(
+    remoteStatePath,
+    JSON.stringify({ remote_mode: remoteMode, updated_at: '2026-05-12T00:00:00.000Z' }),
+  );
 }
 
 async function appendJsonl(filePath, record) {
@@ -79,6 +98,19 @@ function inbox(overrides = {}) {
     handled: false,
     ...overrides,
   };
+}
+
+function completeIntake({ domain = 'wordcounter-new.local', includeIntent = true } = {}) {
+  return [
+    includeIntent ? '开始正式建站' : '',
+    '关键词: word counter',
+    `目标域名: ${domain}`,
+    'UI 参考: Stripe',
+    'UX 参考: wordcounter.net',
+    '额外想法/限制/模仿点: 第一屏必须直接可用；浏览器本地处理；不要登录。',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 test('run:toolsite stops at existing human_review when not remote', async () => {
@@ -228,4 +260,202 @@ test('does not deploy unless pre_deploy_approval is explicitly confirmed on prod
   assert.equal(result.code, STOPPED_AT_HUMAN_REVIEW);
   assert.equal(stageRunnerCalled, false);
   assert.equal((await readEvents(eventPath)).filter((event) => event.status === 'resolved').length, 0);
+});
+
+test('old Hermes intake is rejected by default for production run creation', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'old',
+      text: completeIntake(),
+      created_at: '2026-05-11T00:00:00.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+    now: () => '2026-05-12T00:00:00.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.code, STALE_INTAKE_REJECTED);
+});
+
+test('fresh Hermes intake with production intent creates production run', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: completeIntake({ domain: 'wordcounter-fresh.local' }),
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+    now: () => '2026-05-12T00:00:02.000Z',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.code, PRODUCTION_RUN_CREATED);
+  assert.equal(result.siteId, 'wordcounter-fresh');
+  const runMeta = JSON.parse(await readFile(path.join(result.runDir, 'run-meta.json'), 'utf8'));
+  assert.equal(runMeta.run_type, 'production');
+  assert.equal(runMeta.deployable, true);
+  assert.equal(runMeta.status, 'active');
+  assert.equal(runMeta.source, 'hermes-intake');
+  assert.equal(runMeta.intake_message_key, 'telegram:123:fresh:2026-05-12T00:00:01.000Z');
+  assert.equal(runMeta.intake_created_at, '2026-05-12T00:00:01.000Z');
+  assert.equal(runMeta.run_created_at, '2026-05-12T00:00:02.000Z');
+});
+
+test('fresh Hermes intake without production intent is rejected', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: completeIntake({ includeIntent: false }),
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+  });
+
+  assert.equal(result.code, MISSING_PRODUCTION_START_INTENT);
+});
+
+test('incomplete fresh Hermes intake is rejected with missing fields', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: ['开始正式建站', '关键词: word counter', '目标域名: wordcounter-incomplete.local'].join('\n'),
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+  });
+
+  assert.equal(result.code, INCOMPLETE_INTAKE);
+  assert.deepEqual(result.missingFields, ['UI 参考', 'UX 参考', '额外想法 / 限制 / 模仿点']);
+});
+
+test('existing run dir is not auto-renamed or overwritten', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  const existingRun = path.join(root, 'runs/wordcounter-existing');
+  await writeRemote(remoteStatePath, true);
+  await mkdir(existingRun, { recursive: true });
+  await writeFile(path.join(existingRun, 'sentinel.txt'), 'do-not-overwrite');
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: completeIntake({ domain: 'wordcounter-existing.local' }),
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, RUN_ALREADY_EXISTS);
+  assert.equal(await readFile(path.join(existingRun, 'sentinel.txt'), 'utf8'), 'do-not-overwrite');
+});
+
+test('--allow-existing-intake can explicitly use older intake', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'old',
+      text: completeIntake({ domain: 'wordcounter-allowed-old.local' }),
+      created_at: '2026-05-11T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.code, PRODUCTION_RUN_CREATED);
+});
+
+test('aborted run does not get resumed accidentally', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  const abortedRun = path.join(root, 'runs/wordcounter-aborted');
+  await writeRemote(remoteStatePath, true);
+  await mkdir(abortedRun, { recursive: true });
+  await writeFile(path.join(abortedRun, 'run-meta.json'), JSON.stringify({ status: 'aborted' }));
+  await writeJsonl(inboxPath, [
+    inbox({
+      message_id: 'fresh',
+      text: completeIntake({ domain: 'wordcounter-aborted.local' }),
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await createProductionRunFromHermesIntake({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    startedAt: '2026-05-12T00:00:00.000Z',
+    resumeExistingRun: true,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, RUN_ALREADY_EXISTS);
+});
+
+test('fromHermesIntake waits without creating a run when no fresh intake exists', async () => {
+  const { root, inboxPath } = await makeFixture();
+  const remoteStatePath = path.join(root, 'hermes-home/state/toolsite-remote.json');
+  await writeRemote(remoteStatePath, true);
+  await writeJsonl(inboxPath, []);
+
+  const result = await runToolsiteOrchestrator({
+    rootDir: root,
+    inboxPath,
+    remoteStatePath,
+    fromHermesIntake: true,
+    remote: true,
+    startedAt: '2026-05-12T00:00:00.000Z',
+  });
+
+  assert.equal(result.code, WAITING_FOR_FRESH_INTAKE);
 });
