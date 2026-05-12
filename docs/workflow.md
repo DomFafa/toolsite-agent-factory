@@ -92,6 +92,30 @@ The command reads `runs/<site-id>/human-review-events.jsonl` and `/Users/dom/age
 
 If there is exactly one current open review in the run, Codex may use the newest unconsumed Hermes inbox message whose `created_at` is at or after that open event's `created_at`. If there are multiple current open reviews, the Hermes inbox message must include the target review id using `review:<review-id>`, for example `review:agent25-option-selection Choose Option B`. Consumed inbox messages are tracked by `inbox_message_key` in resolved events and must not be reused.
 
+## Mobile-controlled production run
+
+For a remote production run, keep the computer-side orchestrator running and use Telegram only for human decisions:
+
+```bash
+npm run run:toolsite -- --run-dir runs/<site-id> --remote
+```
+
+When the run is waiting at a human review point, Codex can consume the latest valid Hermes inbox reply and continue to the next workflow step:
+
+```bash
+npm run continue:human-review -- --run-dir runs/<site-id>
+```
+
+Supported mobile replies are intentionally short:
+
+- `确认 SPEC` confirms `pre-agent2-spec-confirmation` and allows Agent2 to start.
+- `修改：...` records a change request and keeps the run blocked before the next agent.
+- `A`, `B`, `C`, `Option A`, `Option B`, or `Option C` resolves Agent2.5 option selection and preserves the selected option for Agent3.
+- `重发`, `resend`, or `force` resends the Agent2.5 option image review without entering Agent3.
+- `确认部署` is only valid for deployable production runs after `check:gates --before agent-6` and gate evidence integrity pass.
+
+The orchestrator must stop at the next open `human_review`. It must not skip gates, must not auto-confirm reviews, must not deploy smoke runs, and must not modify Hermes inbox. Smoke runs remain useful for pipeline checks but are blocked from Agent6 deployment gates.
+
 ## Phase 1: Keyword research
 
 Use Agent 1 only when keyword validation is needed. Agent 1 stops after producing a keyword research report. It does not launch Agent 2.
