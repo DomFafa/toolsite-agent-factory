@@ -9,6 +9,7 @@ import {
   REMOTE_WORKER_STARTED_RUN,
   runRemoteToolsiteWorker,
   WORKER_LOCKED,
+  WORKER_STARTED,
 } from './remote-toolsite-worker.mjs';
 import {
   INCOMPLETE_INTAKE,
@@ -84,6 +85,8 @@ async function writeImage(root, name = 'reference.jpg') {
 }
 
 async function runOnce(fixture, options = {}) {
+  const statusMessages = options.statusMessages || [];
+  const printed = options.printed || [];
   return runRemoteToolsiteWorker({
     rootDir: fixture.root,
     inboxPath: fixture.inboxPath,
@@ -93,6 +96,13 @@ async function runOnce(fixture, options = {}) {
     once: true,
     pollMs: 0,
     now: () => '2026-05-12T01:01:00.000Z',
+    statusSender: async ({ text }) => {
+      statusMessages.push(text);
+      return { ok: true };
+    },
+    printer: (text) => {
+      printed.push(text);
+    },
     ...options,
   });
 }
@@ -101,8 +111,10 @@ test('fresh production intake triggers run creation and invokes run:toolsite', a
   const fixture = await makeFixture();
   await writeInbox(fixture.inboxPath, [message(completeText())]);
   const calls = [];
+  const statusMessages = [];
 
   const result = await runOnce(fixture, {
+    statusMessages,
     runToolsite: async (args) => {
       calls.push(args);
       return { ok: true, code: 'STOPPED_AT_HUMAN_REVIEW' };
@@ -114,6 +126,33 @@ test('fresh production intake triggers run creation and invokes run:toolsite', a
   assert.equal(calls.length, 1);
   assert.equal(calls[0].remote, true);
   assert.equal(await exists(path.join(fixture.root, 'runs/401k-worker-test/run-meta.json')), true);
+  assert.equal(statusMessages.some((text) => text.includes('已收到新的 production intake')), true);
+  assert.equal(statusMessages.some((text) => text.includes('已创建 production run')), true);
+});
+
+test('worker startup prints visible status', async () => {
+  const fixture = await makeFixture();
+  await writeInbox(fixture.inboxPath, []);
+  const statusMessages = [];
+  const printed = [];
+
+  await runOnce(fixture, { statusMessages, printed });
+
+  assert.equal(printed.some((text) => text.includes(WORKER_STARTED)), true);
+  assert.equal(statusMessages.some((text) => text.includes('watching Hermes inbox')), true);
+  assert.equal(statusMessages.some((text) => text.includes('remote mode status: on')), true);
+});
+
+test('worker accepts 额外要求 as extra notes', async () => {
+  const fixture = await makeFixture();
+  await writeInbox(fixture.inboxPath, [message(completeText())]);
+
+  const result = await runOnce(fixture, {
+    runToolsite: async () => ({ ok: true, code: 'STOPPED_AT_HUMAN_REVIEW' }),
+  });
+
+  assert.equal(result.code, REMOTE_WORKER_STARTED_RUN);
+  assert.match(result.intake.extra_notes, /对老人家友好/);
 });
 
 test('Telegram image attachment is copied into input-assets', async () => {
@@ -173,21 +212,26 @@ test('missing production start intent is ignored', async () => {
 test('incomplete intake is rejected', async () => {
   const fixture = await makeFixture();
   await writeInbox(fixture.inboxPath, [message('开始正式建站\n关键词: 401K Calculator\n目标域名: 401k-worker-test.local')]);
+  const statusMessages = [];
 
-  const result = await runOnce(fixture);
+  const result = await runOnce(fixture, { statusMessages });
 
   assert.equal(result.code, INCOMPLETE_INTAKE);
   assert.equal(await exists(path.join(fixture.root, 'runs/401k-worker-test')), false);
+  assert.equal(statusMessages.some((text) => text.includes('production intake 不完整')), true);
+  assert.equal(statusMessages.some((text) => text.includes('缺少')), true);
 });
 
 test('missing required attachment is rejected', async () => {
   const fixture = await makeFixture();
   await writeInbox(fixture.inboxPath, [message(completeText({ includeImageRequest: true }))]);
+  const statusMessages = [];
 
-  const result = await runOnce(fixture);
+  const result = await runOnce(fixture, { statusMessages });
 
   assert.equal(result.code, MISSING_REQUIRED_ATTACHMENT);
   assert.equal(await exists(path.join(fixture.root, 'runs/401k-worker-test')), false);
+  assert.equal(statusMessages.some((text) => text.includes('没有可用图片附件')), true);
 });
 
 test('duplicate intake is not processed twice', async () => {
@@ -217,11 +261,14 @@ test('existing run dir blocks and is not auto-renamed', async () => {
   const fixture = await makeFixture();
   await mkdir(path.join(fixture.root, 'runs/401k-worker-test'), { recursive: true });
   await writeInbox(fixture.inboxPath, [message(completeText())]);
+  const statusMessages = [];
 
-  const result = await runOnce(fixture);
+  const result = await runOnce(fixture, { statusMessages });
 
   assert.equal(result.code, RUN_ALREADY_EXISTS);
   assert.equal(await exists(path.join(fixture.root, 'runs/401k-worker-test-local')), false);
+  assert.equal(statusMessages.some((text) => text.includes('已存在')), true);
+  assert.equal(statusMessages.some((text) => text.includes('不会自动改名或覆盖')), true);
 });
 
 test('worker does not auto-confirm SPEC, UI, or deploy approval', async () => {
@@ -250,6 +297,7 @@ test('lock prevents duplicate worker', async () => {
   await writeInbox(fixture.inboxPath, [message(completeText())]);
 
   const result = await runOnce(fixture, {
+    pidAlive: () => true,
     runToolsite: async () => {
       throw new Error('locked worker must not run toolsite');
     },
@@ -257,4 +305,19 @@ test('lock prevents duplicate worker', async () => {
 
   assert.equal(result.code, WORKER_LOCKED);
   assert.equal(await exists(path.join(fixture.root, 'runs/401k-worker-test')), false);
+});
+
+test('stale lock auto-clears when PID is dead', async () => {
+  const fixture = await makeFixture();
+  await mkdir(fixture.workerDir, { recursive: true });
+  await writeFile(path.join(fixture.workerDir, 'worker.lock'), JSON.stringify({ pid: 123 }));
+  await writeInbox(fixture.inboxPath, [message(completeText())]);
+
+  const result = await runOnce(fixture, {
+    pidAlive: () => false,
+    runToolsite: async () => ({ ok: true, code: 'STOPPED_AT_HUMAN_REVIEW' }),
+  });
+
+  assert.equal(result.code, REMOTE_WORKER_STARTED_RUN);
+  assert.equal(await exists(path.join(fixture.root, 'runs/401k-worker-test/run-meta.json')), true);
 });

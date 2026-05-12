@@ -168,6 +168,72 @@ test('recognizes 额外要求 as extra notes', async () => {
   assert.equal(result.attachments[0].local_path, '/tmp/reference.jpg');
 });
 
+test('recognizes extra notes aliases as fifth element', async () => {
+  for (const label of ['额外要求', '补充要求', '其他要求', '限制', '模仿点', '额外想法 / 限制 / 模仿点']) {
+    const { remoteStatePath, inboxPath } = await makeFixture();
+    await writeRemote(remoteStatePath, true);
+    await writeInbox(inboxPath, [
+      message(
+        [
+          '关键词: 401K Calculator',
+          '目标域名: 401k-calculator.net',
+          'UI 参考: https://www.usa.gov',
+          'UX 参考: https://www.calculator.net/401k-calculator.html',
+          `${label}: 对老人家友好；第一屏就是计算器。`,
+        ].join('\n'),
+      ),
+    ]);
+
+    const result = await readHermesIntake({ remoteStatePath, inboxPath });
+
+    assert.equal(result.found, true);
+    assert.equal(result.extra_notes, '对老人家友好；第一屏就是计算器。');
+  }
+});
+
+test('parses production intake from Telegram photo caption', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message('', {
+      caption: [
+        '开始正式建站',
+        '关键词: 401K Calculator',
+        '目标域名: 401k-calculator.net',
+        'UI 参考: https://www.usa.gov',
+        'UX 参考: https://www.calculator.net/401k-calculator.html',
+        '额外要求: 参考我发的黑白人物插画；不要登录。',
+      ].join('\n'),
+      created_at: '2026-05-12T00:00:01.000Z',
+      attachments: [
+        {
+          kind: 'image',
+          telegram_file_id: 'photo-1',
+          local_path: '/tmp/reference.jpg',
+          mime_type: 'image/jpeg',
+          file_name: 'reference.jpg',
+          width: 1200,
+          height: 800,
+        },
+      ],
+    }),
+  ]);
+
+  const result = await readHermesIntake({
+    remoteStatePath,
+    inboxPath,
+    freshAfter: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: false,
+    requireProductionStartIntent: true,
+  });
+
+  assert.equal(result.found, true);
+  assert.equal(result.keyword, '401K Calculator');
+  assert.equal(result.production_start_intent, true);
+  assert.equal(result.attachment_required, true);
+  assert.equal(result.attachments.length, 1);
+});
+
 test('returns attachments from Hermes inbox message', async () => {
   const { remoteStatePath, inboxPath } = await makeFixture();
   await writeRemote(remoteStatePath, true);
