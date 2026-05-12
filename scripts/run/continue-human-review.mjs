@@ -145,7 +145,19 @@ async function appendResolvedEvent({ eventPath, openReview, inboxMessage, resolv
   return resolvedEvent;
 }
 
-async function defaultAdvance(stage) {
+async function defaultAdvance(stage, { runDir } = {}) {
+  if (stage === 'agent-3') {
+    const gateResult = await checkRunGates({ runDir, before: 'agent-3' });
+    if (!gateResult.allowed) {
+      return {
+        ok: false,
+        code: GATES_BLOCKED,
+        stage,
+        message: 'Agent3 is blocked until Agent2.5 proof gates pass.',
+        gateResult,
+      };
+    }
+  }
   return {
     ok: true,
     code: 'NEXT_STAGE_READY',
@@ -294,6 +306,20 @@ async function handleAgent25OptionSelection({
     },
   });
   const advanceResult = await advance('agent-3', { runDir, openReview, inboxMessage, resolvedEvent });
+  if (!advanceResult?.ok) {
+    return {
+      ok: false,
+      code: advanceResult?.code || GATES_BLOCKED,
+      review: openReview,
+      inboxMessage,
+      resolvedEvent,
+      selectedOption,
+      selectedDesign,
+      nextStage: 'agent-3',
+      advanceResult,
+      message: advanceResult?.message || 'Agent3 is blocked until required gates pass.',
+    };
+  }
   return {
     ok: true,
     code: REVIEW_RESOLVED,

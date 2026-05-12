@@ -185,6 +185,33 @@ test('consumes A and resolves agent25-option-selection with selected_option=A', 
   assert.equal(events.at(-1).selected_design, 'Option A');
 });
 
+test('default Agent2.5 option selection blocks Agent3 when proof gates are missing', async () => {
+  const { runDir, inboxPath, eventPath } = await makeFixture();
+  await writeJsonl(eventPath, [
+    review({
+      review_type: 'agent25_option_selection',
+      id: 'agent25-option-selection',
+      phase: 'agent-2.5',
+      blocks: 'agent-3',
+    }),
+  ]);
+  await writeJsonl(inboxPath, [inbox({ text: 'A' })]);
+
+  const result = await continueHumanReview({
+    runDir,
+    inboxPath,
+    now: () => '2026-05-11T10:10:00.000Z',
+  });
+
+  const events = await readEvents(eventPath);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, GATES_BLOCKED);
+  assert.equal(result.selectedOption, 'A');
+  assert.equal(events.at(-1).status, 'resolved');
+  assert.equal(events.at(-1).selected_option, 'A');
+  assert.match(result.advanceResult.gateResult.missing.join('\n'), /agent-2-5|agent25|external-design/i);
+});
+
 test('duplicate inbox message is not consumed twice', async () => {
   const { runDir, inboxPath, eventPath } = await makeFixture();
   await writeJsonl(eventPath, [review()]);
