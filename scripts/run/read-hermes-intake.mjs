@@ -32,6 +32,8 @@ const FIELD_LABELS = {
   限制: 'extra_notes',
   模仿点: 'extra_notes',
   额外要求: 'extra_notes',
+  补充要求: 'extra_notes',
+  其他要求: 'extra_notes',
   '额外想法/限制/模仿点': 'extra_notes',
 };
 
@@ -167,6 +169,13 @@ export function parseIntakeText(text) {
   return result;
 }
 
+export function intakeTextForMessage(message) {
+  const text = String(message?.text || '').trim();
+  const caption = String(message?.caption || '').trim();
+  if (text && caption && text !== caption) return `${text}\n${caption}`;
+  return text || caption;
+}
+
 export function suggestedSiteIdFromDomain(domain) {
   let clean = String(domain || '').trim().toLowerCase();
   clean = clean.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
@@ -273,6 +282,7 @@ function buildResultFromMessage(message, parsed) {
   const missing = missingFields(parsed);
   const found = missing.length === 0;
   const attachments = attachmentsForMessage(message);
+  const intakeText = intakeTextForMessage(message);
   return {
     found,
     keyword: parsed.keyword,
@@ -283,8 +293,8 @@ function buildResultFromMessage(message, parsed) {
     suggested_site_id: found ? suggestedSiteIdFromDomain(parsed.target_domain) : '',
     remote_mode: true,
     source: sourceForMessage(message),
-    production_start_intent: hasProductionStartIntent(message.text),
-    attachment_required: intakeRequiresAttachment(message.text),
+    production_start_intent: hasProductionStartIntent(intakeText),
+    attachment_required: intakeRequiresAttachment(intakeText),
     attachments,
     ...(found ? {} : { missing_fields: missing }),
   };
@@ -296,7 +306,7 @@ export function selectIntakeMessage(
 ) {
   const candidates = messages
     .filter((message) => message && message.type === 'user_message')
-    .map((message) => ({ message, parsed: parseIntakeText(message.text) }))
+    .map((message) => ({ message, parsed: parseIntakeText(intakeTextForMessage(message)) }))
     .filter(({ parsed }) => hasAnyIntakeField(parsed));
 
   if (candidates.length === 0) {
@@ -324,7 +334,7 @@ export function selectIntakeMessage(
   }
 
   const intentCandidates = requireProductionStartIntent
-    ? freshCandidates.filter(({ message }) => hasProductionStartIntent(message.text))
+    ? freshCandidates.filter(({ message }) => hasProductionStartIntent(intakeTextForMessage(message)))
     : freshCandidates;
 
   if (intentCandidates.length === 0) {
