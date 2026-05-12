@@ -36,6 +36,7 @@
     "ledger:generate": "node scripts/run/generate-ledger.mjs",
     "continue:human-review": "node scripts/run/continue-human-review.mjs",
     "run:toolsite": "node scripts/run/run-toolsite-orchestrator.mjs",
+    "remote:toolsite-worker": "node scripts/run/remote-toolsite-worker.mjs",
     "pre-agent2:telegram-loop": "node scripts/run/pre-agent2-telegram-loop.mjs",
     "resolve:human-review": "node scripts/run/resolve-human-review-from-hermes-inbox.mjs",
     "read:hermes-intake": "node scripts/run/read-hermes-intake.mjs",
