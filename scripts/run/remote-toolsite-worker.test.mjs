@@ -447,6 +447,85 @@ test('existing SPEC change request open review triggers targeted question genera
   assert.equal(statusMessages.some((text) => text.includes('401K Calculator 第一版计算复杂度选哪一档')), true);
 });
 
+test('worker consumes targeted Pre-Agent2 answer and sends fresh SPEC confirmation', async () => {
+  const fixture = await makeFixture();
+  const runDir = await createActive401kRun(fixture.root);
+  await writeFile(
+    path.join(runDir, 'human-review-events.jsonl'),
+    [
+      JSON.stringify({
+        schema_version: 'human-review-event.v1',
+        type: 'human_review',
+        review_type: 'pre_agent2_spec_confirmation',
+        id: 'pre-agent2-spec-confirmation',
+        site_id: '401k-worker-test',
+        run_dir: 'runs/401k-worker-test',
+        phase: 'pre-agent2',
+        agent: 'pre-agent2-toolsite-spec',
+        status: 'resolved',
+        blocking: false,
+        blocks: 'agent-2',
+        title: 'Pre-Agent2 SPEC 确认',
+        message: '【Toolsite SPEC 审核卡】',
+        resolution_text: '修改：请先问 401K Calculator 计算复杂度。',
+        change_requested: true,
+        created_at: '2026-05-12T01:00:00.000Z',
+        created_by: 'codex',
+        resolved_at: '2026-05-12T01:00:05.000Z',
+        inbox_message_key: 'telegram:123:reply-1:2026-05-12T01:00:05.000Z',
+      }),
+      JSON.stringify({
+        schema_version: 'human-review-event.v1',
+        type: 'human_review',
+        review_type: 'pre_agent2_interview_question',
+        id: 'pre-agent2-dynamic-401k-calculator-complexity',
+        site_id: '401k-worker-test',
+        run_dir: 'runs/401k-worker-test',
+        phase: 'pre-agent2',
+        agent: 'pre-agent2-toolsite-spec',
+        status: 'open',
+        blocking: true,
+        blocks: 'pre-agent2-spec',
+        title: 'Pre-Agent2：401K Calculator 计算复杂度确认',
+        message: [
+          '401K Calculator 第一版计算复杂度选哪一档？',
+          '',
+          '1. 简化版：输入少，适合老人快速估算',
+          '2. 标准版：包含年龄、退休年龄、当前余额、工资、缴费比例、雇主匹配、预期收益率、工资增长',
+          '3. 详细版：增加 catch-up contribution、annual limit、通胀等高级项',
+          '4. 其他，请直接描述',
+          '5. 先按标准版生成 SPEC，但在审核卡里标注默认假设',
+        ].join('\n'),
+        expected_reply: '回复 1 / 2 / 3 / 4 / 5，或直接自定义描述',
+        allowed_replies: ['1', '2', '3', '4', '5'],
+        allow_custom_text: true,
+        reply_mode: 'single_choice_with_custom_text',
+        created_at: '2026-05-12T01:01:00.000Z',
+        created_by: 'codex',
+      }),
+    ].join('\n') + '\n',
+  );
+  await writeInbox(fixture.inboxPath, [
+    message('2', {
+      message_id: 'reply-2',
+      created_at: '2026-05-12T01:02:00.000Z',
+    }),
+  ]);
+  const statusMessages = [];
+
+  const result = await runOnce(fixture, { statusMessages });
+  const events = (await readFile(path.join(runDir, 'human-review-events.jsonl'), 'utf8'))
+    .trim()
+    .split(/\n/)
+    .map((line) => JSON.parse(line));
+
+  assert.equal(result.code, ACTIVE_HUMAN_REVIEW_PROCESSED);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-dynamic-401k-calculator-complexity' && event.status === 'resolved' && event.selected_option === '2'), true);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'open'), true);
+  assert.equal(statusMessages.some((text) => text.includes('【Toolsite SPEC 审核卡】')), true);
+  assert.equal(await exists(path.join(runDir, 'agent-2-output/site-brief.md')), false);
+});
+
 test('existing run dir blocks and is not auto-renamed', async () => {
   const fixture = await makeFixture();
   await mkdir(path.join(fixture.root, 'runs/401k-worker-test'), { recursive: true });

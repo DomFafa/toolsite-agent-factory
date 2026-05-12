@@ -23,6 +23,7 @@ import {
   DEFAULT_TELEGRAM_ENV,
   buildQuestionEvent,
   parseRunInput,
+  runLoopIteration,
   sendTelegramMessage,
 } from './pre-agent2-telegram-loop.mjs';
 import { summarizeReviewEvents } from './resolve-human-review-from-hermes-inbox.mjs';
@@ -611,6 +612,12 @@ async function processActiveProductionReviews({
           telegramEnvPath,
           now,
         }),
+        now,
+      }),
+      preAgent2Runner: (args) => runLoopIteration({
+        ...args,
+        telegramEnvPath,
+        sender: (text) => statusSender({ text, inboxPath, telegramEnvPath }),
         now,
       }),
     });

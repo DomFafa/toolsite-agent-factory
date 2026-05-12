@@ -443,6 +443,10 @@ function isPreAgent2Review(review) {
   return String(review?.review_type || '') === 'pre_agent2_interview_question';
 }
 
+function isReviewResolvedResult(result) {
+  return result?.code === REVIEW_RESOLVED || result?.action === 'resolved';
+}
+
 async function guardAgent6(runDir) {
   const runMeta = await readRunMeta(runDir);
   if (runMeta?.run_type === 'smoke' || runMeta?.deployable === false) {
@@ -530,7 +534,7 @@ export async function runToolsiteOrchestrator({
         if (pollMs > 0) await sleep(pollMs);
         continue;
       }
-      if (result.code !== REVIEW_RESOLVED && result.code !== AGENT6_READY) {
+      if (!isReviewResolvedResult(result) && result.code !== AGENT6_READY) {
         return result;
       }
 
