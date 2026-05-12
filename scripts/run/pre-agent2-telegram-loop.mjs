@@ -376,6 +376,7 @@ function parseArgs(argv) {
     pollMs: DEFAULT_POLL_MS,
     maxQuestions: DEFAULT_MAX_QUESTIONS,
     allowEarlySpec: false,
+    answersFile: '',
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -397,6 +398,9 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === '--max-questions') {
       options.maxQuestions = Number(argv[index + 1] || DEFAULT_MAX_QUESTIONS);
+      index += 1;
+    } else if (arg === '--answers-file') {
+      options.answersFile = argv[index + 1] || '';
       index += 1;
     } else if (arg === '--allow-early-spec') {
       options.allowEarlySpec = true;
@@ -511,6 +515,58 @@ function questionByNumber(number) {
 
 function reviewKey(event) {
   return `${event.id}:${event.created_at}`;
+}
+
+export function parseBatchAnswers(text) {
+  const answers = new Map();
+  let currentNumber = null;
+  let currentLines = [];
+
+  const flush = () => {
+    if (currentNumber === null) return;
+    const value = currentLines.join('\n').trim();
+    if (value) answers.set(currentNumber, value);
+    currentNumber = null;
+    currentLines = [];
+  };
+
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (/^\s*Pre-Agent2\s+Answers\s*[：:]?\s*$/i.test(line)) continue;
+    const match = line.match(/^\s*Q\s*(\d{1,2})\s*[：:]\s*(.*)$/i);
+    if (match) {
+      flush();
+      currentNumber = Number(match[1]);
+      currentLines = [match[2] || ''];
+      continue;
+    }
+    if (currentNumber !== null) currentLines.push(line);
+  }
+  flush();
+
+  return answers;
+}
+
+async function readBatchAnswers(answersFile) {
+  if (!answersFile) return null;
+  return parseBatchAnswers(await readFile(answersFile, 'utf8'));
+}
+
+function batchAnswerMessage({ openReview, batchAnswers, answersFile, createdAt = nowIso() }) {
+  if (!batchAnswers || openReview.review_type !== 'pre_agent2_interview_question') return null;
+  const questionNumber = Number(openReview.question_number || 0);
+  const text = batchAnswers.get(questionNumber);
+  if (!asText(text)) return null;
+  const resolvedAnswersFile = answersFile ? path.resolve(answersFile) : 'inline-batch-answers';
+  return {
+    type: 'user_message',
+    source: 'answers_file',
+    chat_id: resolvedAnswersFile,
+    message_id: `Q${questionNumber}`,
+    text,
+    created_at: createdAt,
+    handled: false,
+    inbox_message_key: `answers_file:${resolvedAnswersFile}:Q${questionNumber}`,
+  };
 }
 
 export function buildQuestionEvent({
@@ -629,6 +685,7 @@ export function buildResolvedQuestionEvent({
   resolvedAt = nowIso(),
 }) {
   const inboxKey = inboxMessage.inbox_message_key || inboxMessageKey(inboxMessage);
+  const isBatchAnswer = asText(inboxMessage.source) === 'answers_file';
   return {
     ...openReview,
     status: 'resolved',
@@ -636,9 +693,11 @@ export function buildResolvedQuestionEvent({
     created_at: resolvedAt,
     created_by: 'codex',
     resolved_at: resolvedAt,
-    resolved_by: `hermes-inbox:${asText(inboxMessage.source)}:${asText(inboxMessage.chat_id)}`,
+    resolved_by: isBatchAnswer
+      ? `answers-file:${asText(inboxMessage.message_id)}`
+      : `hermes-inbox:${asText(inboxMessage.source)}:${asText(inboxMessage.chat_id)}`,
     resolution_text: validation.value,
-    resolution_source: 'hermes_inbox',
+    resolution_source: isBatchAnswer ? 'batch_answers' : 'hermes_inbox',
     answer_type: validation.answer_type,
     ...(validation.answer_type === 'option' ? { selected_option: validation.value } : {}),
     ...(validation.answer_type === 'custom_text' ? { custom_text: validation.value } : {}),
@@ -1557,6 +1616,8 @@ export async function runLoopIteration({
   runDir,
   inboxPath = DEFAULT_HERMES_INBOX,
   telegramEnvPath = DEFAULT_TELEGRAM_ENV,
+  answersFile = '',
+  batchAnswers = null,
   maxQuestions = DEFAULT_MAX_QUESTIONS,
   allowEarlySpec = false,
   renderSpec = renderToolsiteSpec,
@@ -1629,17 +1690,68 @@ export async function runLoopIteration({
     };
   }
 
-  await sendReviewIfNeeded({ review: openReview, state, statePath, sender: send, now });
-
   if (openReview.id === SPEC_CONFIRMATION_ID) {
+    await sendReviewIfNeeded({ review: openReview, state, statePath, sender: send, now });
     state.status = 'awaiting_spec_confirmation';
     await writeLoopState(statePath, state, now);
     return { action: 'stopped', reason: 'awaiting-spec-confirmation', review: openReview };
   }
 
   if (openReview.review_type !== 'pre_agent2_interview_question') {
+    await sendReviewIfNeeded({ review: openReview, state, statePath, sender: send, now });
     return { action: 'waiting', reason: 'non-question-open-review', review: openReview };
   }
+
+  const batchMessage = batchAnswerMessage({
+    openReview,
+    batchAnswers,
+    answersFile,
+    createdAt: now(),
+  });
+
+  if (batchMessage) {
+    const validation = validateReply(batchMessage.text, openReview);
+    if (!validation.ok) {
+      state.status = 'blocked_invalid_batch_answer';
+      state.current_question_id = openReview.id;
+      state.current_question_number = Number(openReview.question_number || 0);
+      await writeLoopState(statePath, state, now);
+      return {
+        action: 'stopped',
+        reason: 'invalid-batch-answer',
+        message: INVALID_REPLY_MESSAGE,
+        review: openReview,
+        batchMessage,
+        validation,
+      };
+    }
+
+    const resolvedEvent = buildResolvedQuestionEvent({
+      openReview,
+      inboxMessage: batchMessage,
+      validation,
+      resolvedAt: now(),
+    });
+    await appendJsonl(eventPath, resolvedEvent);
+    const updatedEvents = [...reviewEvents, resolvedEvent];
+    await writeQaRecord({ runDir: absoluteRunDir, intake, events: updatedEvents });
+
+    state.status = 'advanced';
+    state.current_question_id = '';
+    state.current_question_number = 0;
+    state.completed_questions = resolvedQuestionEvents(updatedEvents).map((event) => event.question_number);
+    await writeLoopState(statePath, state, now);
+
+    return {
+      action: 'resolved',
+      source: 'batch_answers',
+      review: openReview,
+      inboxMessage: batchMessage,
+      resolvedEvent,
+    };
+  }
+
+  await sendReviewIfNeeded({ review: openReview, state, statePath, sender: send, now });
 
   const inboxMessages = await readJsonl(inboxPath, { missingOk: true });
   const rejectedInboxKeys = new Set(state.rejected_inbox_keys);
@@ -1701,6 +1813,7 @@ export async function runPreAgent2TelegramLoop({
   inboxPath = DEFAULT_HERMES_INBOX,
   remoteStatePath = DEFAULT_HERMES_REMOTE_STATE,
   telegramEnvPath = DEFAULT_TELEGRAM_ENV,
+  answersFile = '',
   pollMs = DEFAULT_POLL_MS,
   maxQuestions = DEFAULT_MAX_QUESTIONS,
   allowEarlySpec = false,
@@ -1720,6 +1833,7 @@ export async function runPreAgent2TelegramLoop({
   }
 
   const normalizedMaxQuestions = normalizeMaxQuestions(maxQuestions);
+  const batchAnswers = await readBatchAnswers(answersFile);
   let lastResult = null;
   let iterations = 0;
 
@@ -1729,6 +1843,8 @@ export async function runPreAgent2TelegramLoop({
       runDir,
       inboxPath,
       telegramEnvPath,
+      answersFile,
+      batchAnswers,
       maxQuestions: normalizedMaxQuestions,
       allowEarlySpec,
       renderSpec,
@@ -1758,6 +1874,7 @@ function usage() {
     '  --inbox-path <path>',
     '  --remote-state-path <path>',
     '  --telegram-env-path <path>',
+    '  --answers-file <path>',
     '  --poll-ms 10000',
     '  --max-questions 30',
   ].join('\n');

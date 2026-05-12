@@ -165,6 +165,8 @@ The Pre-Agent2 Telegram loop must run this specificity check before it sends the
 
 The Telegram SPEC review card is a user-facing artifact and must be Chinese-first. It may keep necessary product terms such as `word counter`, `Stripe`, `wordcounter.net`, metric names, and URL paths, but it must not forward whole English sentences from `toolsite-spec.md` as the review content.
 
+For faster dry-runs, Codex may run `scripts/run/pre-agent2-telegram-loop.mjs` with `--answers-file runs/<site-id>/pre-agent2-answers.md`. The batch file may answer Q1-Q12, but it must use the same reply validation as Telegram, must not bypass the specificity or SPEC quality checks, and must only produce an open SPEC confirmation review. It must not auto-confirm the SPEC or start Agent2.
+
 ## Phase 2: Build brief
 
 Agent 2 receives:
