@@ -1,3 +1,6 @@
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// The orchestrator must preserve human_review boundaries, avoid auto-confirming SPEC/UI/deploy, enforce fresh intake and attachment blockers, and advance only through real stage runners and gates.
 import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

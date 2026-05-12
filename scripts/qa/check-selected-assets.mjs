@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// Selected-assets checks must ground Agent2.5 design assets in real selected-design evidence before downstream implementation.
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';

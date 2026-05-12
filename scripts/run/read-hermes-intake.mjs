@@ -1,3 +1,6 @@
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// Hermes intake must enforce fresh production intent, complete five elements, and required image attachments without pretending missing attachments were read.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

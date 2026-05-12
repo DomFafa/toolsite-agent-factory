@@ -1,5 +1,8 @@
 # Output Schema
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 2.5 final A/B/C options must come from an approved high-fidelity visual generation path; wireframes, markdown boards, or Codex mockups are internal drafts only, and unavailable generation must return `NO_APPROVED_UI_GENERATION_AVAILABLE`.
+
 Required outputs:
 
 - `design-generation-prompt.md`

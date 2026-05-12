@@ -1,5 +1,8 @@
 # Output Schema
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 2 must treat the confirmed Toolsite SPEC as the fact source and preserve image `design_reference` / `illustration_reference`.
+
 Required outputs:
 
 - `site-brief.md`

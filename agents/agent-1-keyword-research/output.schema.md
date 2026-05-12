@@ -1,5 +1,7 @@
 # Output Schema
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+
 Required outputs:
 
 - `keyword-research-report.md`

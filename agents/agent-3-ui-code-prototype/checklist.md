@@ -1,5 +1,8 @@
 # Checklist
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 3 must use only the user-selected Option A/B/C and must not change the selected design direction.
+
 - [ ] Agent 2.5 selected design exists
 - [ ] Agent 2.5 selected target images, specs, tokens, asset plan, and restoration rules exist
 - [ ] Agent 2.5 usability contract, dynamic data fit notes, and UX self-audit exist

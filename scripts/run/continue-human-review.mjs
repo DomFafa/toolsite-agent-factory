@@ -1,3 +1,6 @@
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// Human review continuation must consume only valid replies, avoid duplicate inbox consumption, and never auto-confirm SPEC, UI option, or deployment approval.
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

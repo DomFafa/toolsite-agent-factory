@@ -1,5 +1,8 @@
 # Checklist
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 2.5 final A/B/C options must come from an approved high-fidelity visual generation path; wireframes, markdown boards, or Codex mockups are internal drafts only, and unavailable generation must return `NO_APPROVED_UI_GENERATION_AVAILABLE`.
+
 - [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
 - [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
 - [ ] Agent 2 brief, SEO plan, tool spec, content plan, and UI reference dossier read

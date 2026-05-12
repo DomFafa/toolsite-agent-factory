@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// Agent2.5 lineage must preserve selected Option A/B/C provenance before Agent3 can proceed.
 import { access, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';

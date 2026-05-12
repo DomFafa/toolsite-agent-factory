@@ -1,5 +1,7 @@
 # Agent 1 — Keyword Research
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+
 ## Purpose
 
 Research and validate tool-site keywords. This agent is independent and must not trigger the build pipeline automatically.

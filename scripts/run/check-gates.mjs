@@ -1,3 +1,6 @@
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// Gate checks must block smoke deployment, require Agent6 preconditions, and fail rather than trust incomplete or stale evidence.
 import { access, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

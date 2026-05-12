@@ -1,5 +1,8 @@
 # Checklist
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 6 may deploy only a production run after Agent5/integrity pass, confirmed `pre_deploy_approval`, and the user's explicit `确认部署` reply.
+
 - [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
 - [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
 - [ ] Current chat contains explicit user launch approval: `批准上线`

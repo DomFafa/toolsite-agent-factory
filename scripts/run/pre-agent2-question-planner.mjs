@@ -1,3 +1,6 @@
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// Pre-Agent2 must use dynamic gap analysis, keep fixed generic Q1-Q12 out of user flows, treat image attachments as design_reference / illustration_reference by default, and generate SPEC only when information is sufficient under the hard cap.
 const MAX_DYNAMIC_QUESTIONS = 30;
 
 function asText(value) {

@@ -1,5 +1,8 @@
 # Checklist
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 5 must repair real artifacts when gates fail and must not fabricate `gate-results` or markdown evidence.
+
 - [ ] Standard flow reference read: `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`
 - [ ] Run-start acknowledgement output before work: flow files read, current run phase, next agent, and current-phase forbidden actions
 

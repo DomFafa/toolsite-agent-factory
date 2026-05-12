@@ -1,5 +1,7 @@
 # Workflow
 
+Production run behavior is governed by `docs/production-run-master-contract.md`. If this workflow conflicts with the contract, the contract wins.
+
 Standard flow reference: before starting any new toolsite run, Codex must read `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
 
 ## Phase 0: Prepare run folder
@@ -144,11 +146,7 @@ Use Agent 1 only when keyword validation is needed. Agent 1 stops after producin
 
 Agent 2 is blocked until the Pre-Agent2 Toolsite SPEC Gate passes.
 
-Codex must complete dynamic gap analysis and write `runs/<site-id>/toolsite-spec.md` before Agent 2 starts. Production, remote, smoke, and fallback user flows must not show the old fixed generic Q1-Q12 questionnaire. If the five intake fields and any supplied attachments already make the six decision areas clear, Codex should generate the SPEC directly. If gaps remain, Codex may ask up to four project-specific questions that reference the current keyword, domain, UI reference, UX reference, constraints, or attachments; it must not ask for information already present in the five required fields. If the six user decision areas are already clear before 12 rounds, Codex may output the SPEC early only when `toolsite-spec.md` explicitly records:
-
-```txt
-六个用户决策区已清楚，用户同意提前输出 SPEC。
-```
+Codex must complete dynamic gap analysis and write `runs/<site-id>/toolsite-spec.md` before Agent 2 starts. Production, remote, smoke, and fallback user flows must follow the Master Contract dynamic interview rules, must not show the old fixed generic Q1-Q12 questionnaire, and must not ask for information already present in the five required fields or supplied attachments. If the intake and dynamic gap analysis show that information is sufficient, Codex should generate the SPEC directly; otherwise it should ask the next highest-value project-specific question under the Master Contract hard cap.
 
 The user must provide five required fields before the gate can pass:
 
@@ -209,7 +207,7 @@ The Pre-Agent2 Telegram loop must run this specificity check before it sends the
 
 The Telegram SPEC review card is a user-facing artifact and must be Chinese-first. It may keep necessary product terms such as `word counter`, `Stripe`, `wordcounter.net`, metric names, and URL paths, but it must not forward whole English sentences from `toolsite-spec.md` as the review content.
 
-For faster dry-runs, Codex may run `scripts/run/pre-agent2-telegram-loop.mjs` with `--answers-file runs/<site-id>/pre-agent2-answers.md`. The batch file may answer Q1-Q12, but it must use the same reply validation as Telegram, must not bypass the specificity or SPEC quality checks, and must only produce an open SPEC confirmation review. It must not auto-confirm the SPEC or start Agent2.
+For faster dry-runs, Codex may run `scripts/run/pre-agent2-telegram-loop.mjs` with `--answers-file runs/<site-id>/pre-agent2-answers.md`. The batch file may provide project-specific Pre-Agent2 answers, but it must use the same reply validation as Telegram, must not bypass the specificity or SPEC quality checks, and must only produce an open SPEC confirmation review. It must not auto-confirm the SPEC or start Agent2.
 
 ## Phase 2: Build brief
 
