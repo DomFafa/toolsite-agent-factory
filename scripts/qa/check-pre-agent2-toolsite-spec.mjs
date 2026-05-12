@@ -52,7 +52,6 @@ const USER_DECISION_SECTIONS = [
 const SYSTEM_DEFAULT_SECTIONS = [
   'Technical Constraints',
   'Page Boundary',
-  'Agent Workflow Boundary',
   'SEO Baseline',
   'Success Criteria Baseline',
 ];
@@ -226,22 +225,40 @@ function validateQuestionRounds(text, failures) {
     return { rounds: null, complex, earlyConsent };
   }
 
-  if (rounds < 12 && !earlyConsent) {
-    failures.push('fewer than 12 question rounds requires the early SPEC consent sentence');
-  }
-  if (rounds > 20 && !complex) {
-    failures.push('more than 20 question rounds is allowed only when Complex tool is yes');
-  }
   if (rounds > 30) {
     failures.push('question rounds must not exceed 30');
   }
   return { rounds, complex, earlyConsent };
 }
 
-function validateUserConfirmation(text, failures) {
+function latestById(events, id) {
+  return events.filter((event) => event?.id === id).at(-1) || null;
+}
+
+async function hasResolvedSpecConfirmation(runDir) {
+  const eventsText = await readOptional(path.join(runDir, 'human-review-events.jsonl'));
+  if (!eventsText.trim()) return false;
+  const events = eventsText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const latest = latestById(events, 'pre-agent2-spec-confirmation');
+  return latest?.status === 'resolved' && hasUsefulValue(latest?.resolution_text || '');
+}
+
+function validateUserConfirmation(text, failures, confirmedByHumanReview = false) {
+  if (confirmedByHumanReview) return;
   const section = sectionContent(text, 'User Confirmation');
   if (!hasUsefulValue(section)) {
-    failures.push('missing User Confirmation section');
+    failures.push('missing resolved pre-agent2-spec-confirmation human_review');
     return;
   }
   if (!/-\s+\[x\]\s+User confirmed this Toolsite SPEC before Agent2 starts\./i.test(section)) {
@@ -389,7 +406,7 @@ export async function runPreAgent2ToolsiteSpecGate({ runDir }) {
       if (!hasCompleteSection(specText, heading)) failures.push(`missing system default section: ${heading}`);
     }
 
-    validateUserConfirmation(specText, failures);
+    validateUserConfirmation(specText, failures, await hasResolvedSpecConfirmation(absoluteRunDir));
     failures.push(...collectSpecificityFailures(specText, qaText));
 
     return resultFromFailures({

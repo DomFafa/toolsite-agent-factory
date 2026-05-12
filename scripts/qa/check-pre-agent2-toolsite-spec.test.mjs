@@ -273,7 +273,16 @@ test('accepts UI and UX references that explicitly choose open exploration inste
   assert.equal(result.passed, true);
 });
 
-test('passes fewer than 12 question rounds only with early SPEC consent sentence', async () => {
+test('passes fewer than 12 question rounds when dynamic interview has enough information', async () => {
+  const runDir = await makeRun();
+  await writeSpec(runDir, spec({ rounds: 8, early: false }));
+
+  const result = await runPreAgent2ToolsiteSpecGate({ runDir });
+  assert.equal(result.passed, true);
+  assert.equal(result.details.questionRounds, 8);
+});
+
+test('still records early SPEC consent detail when present', async () => {
   const runDir = await makeRun();
   await writeSpec(runDir, spec({ rounds: 8, early: true }));
 
@@ -282,26 +291,17 @@ test('passes fewer than 12 question rounds only with early SPEC consent sentence
   assert.equal(result.details.earlySpecConsent, true);
 });
 
-test('fails fewer than 12 question rounds without early SPEC consent sentence', async () => {
-  const runDir = await makeRun();
-  await writeSpec(runDir, spec({ rounds: 8, early: false }));
-
-  const result = await runPreAgent2ToolsiteSpecGate({ runDir });
-  assert.equal(result.passed, false);
-  assert.match(result.failures.join('\n'), /fewer than 12 question rounds/);
-});
-
-test('allows 21-30 rounds only for complex tools', async () => {
+test('allows 21-30 rounds for dynamic interviews and blocks more than 30', async () => {
   const simpleRun = await makeRun();
   await writeSpec(simpleRun, spec({ rounds: 24, complex: false }));
   const simpleResult = await runPreAgent2ToolsiteSpecGate({ runDir: simpleRun });
-  assert.equal(simpleResult.passed, false);
-  assert.match(simpleResult.failures.join('\n'), /more than 20 question rounds/);
+  assert.equal(simpleResult.passed, true);
 
-  const complexRun = await makeRun();
-  await writeSpec(complexRun, spec({ rounds: 24, complex: true }));
-  const complexResult = await runPreAgent2ToolsiteSpecGate({ runDir: complexRun });
-  assert.equal(complexResult.passed, true);
+  const tooManyRun = await makeRun();
+  await writeSpec(tooManyRun, spec({ rounds: 31, complex: true }));
+  const tooManyResult = await runPreAgent2ToolsiteSpecGate({ runDir: tooManyRun });
+  assert.equal(tooManyResult.passed, false);
+  assert.match(tooManyResult.failures.join('\n'), /question rounds must not exceed 30/);
 });
 
 test('fails when a five-element field is missing', async () => {
