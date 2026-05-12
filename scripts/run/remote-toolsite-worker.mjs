@@ -1,3 +1,6 @@
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// The worker must watch fresh production intake and active-run human_review replies, send success/failure feedback, avoid silent failure, and never auto-confirm SPEC, UI, or deployment.
 import { appendFile, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

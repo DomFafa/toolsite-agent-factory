@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// The SPEC gate must allow only website requirements and reject internal Agent/gate/human_review/review/confirmation wording plus dirty source snippets.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';

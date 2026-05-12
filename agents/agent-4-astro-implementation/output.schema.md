@@ -1,5 +1,8 @@
 # Output Schema
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 4 must implement the SPEC and must not introduce backend, database, login, or account behavior unless the SPEC explicitly allows it.
+
 Required outputs:
 
 - `site/`

@@ -1,5 +1,8 @@
 # Output Schema
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 5 must repair real artifacts when gates fail and must not fabricate `gate-results` or markdown evidence.
+
 Required outputs:
 
 - `design-package-gate-report.md` when run in Design Package Gate mode

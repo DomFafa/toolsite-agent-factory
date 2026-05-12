@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// Agent2.5 external proof must document the approved high-fidelity visual generation path or block with NO_APPROVED_UI_GENERATION_AVAILABLE rather than accept mockups.
 import { access, readFile, stat } from 'node:fs/promises';
 import crypto from 'node:crypto';
 import path from 'node:path';

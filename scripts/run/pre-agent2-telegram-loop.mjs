@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Production run behavior is governed by docs/production-run-master-contract.md.
+// If this entrypoint conflicts with the contract, the contract wins.
+// The Telegram loop must follow dynamic Pre-Agent2 interview rules, keep fixed generic Q1-Q12 out of user flows, sanitize SPEC content, and avoid auto-confirming SPEC.
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';

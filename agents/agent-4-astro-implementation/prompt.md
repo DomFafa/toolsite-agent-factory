@@ -1,5 +1,8 @@
 # Agent 4 — Astro Implementation
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 4 must implement the SPEC and must not introduce backend, database, login, or account behavior unless the SPEC explicitly allows it.
+
 ## Purpose
 
 Implement the site in Astro from Agent 3 output without redesigning the approved UI.

@@ -1,5 +1,8 @@
 # Agent 2 — Site Brief
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 2 must treat the confirmed Toolsite SPEC as the fact source and preserve image `design_reference` / `illustration_reference`.
+
 ## Purpose
 
 Turn the confirmed Pre-Agent2 Toolsite SPEC into a complete build brief and design input package.

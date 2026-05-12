@@ -1,5 +1,8 @@
 # Output Schema
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 3 must use only the user-selected Option A/B/C and must not change the selected design direction.
+
 Required outputs:
 
 - `ui-direction.md`

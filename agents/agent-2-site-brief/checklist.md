@@ -1,5 +1,8 @@
 # Checklist
 
+Production runs are governed by `docs/production-run-master-contract.md`. If this file conflicts with the contract, the contract wins.
+Agent 2 must treat the confirmed Toolsite SPEC as the fact source and preserve image `design_reference` / `illustration_reference`.
+
 - [ ] `toolsite-spec.md` exists before Agent 2 starts
 - [ ] `gate-results/pre-agent2-toolsite-spec.json` passed before Agent 2 starts
 - [ ] User confirmed the Toolsite SPEC before Agent 2 starts
