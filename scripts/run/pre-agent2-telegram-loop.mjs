@@ -671,6 +671,7 @@ export function shouldGenerateSpec({
   if (intake) {
     const plan = planPreAgent2Questions({ intake, attachments, answeredEvents });
     if (plan.information_sufficient) return true;
+    return answeredEvents.length >= normalizeMaxQuestions(maxQuestions);
   }
   const answeredCount = answeredEvents.length;
   const normalizedMax = normalizeMaxQuestions(maxQuestions);
@@ -686,7 +687,7 @@ function nextQuestionFor({ intake, attachments, answeredEvents, maxQuestions }) 
   if (plan.information_sufficient) return null;
   const nextNumber = answeredEvents.length + 1;
   if (nextNumber > normalizeMaxQuestions(maxQuestions)) return null;
-  return plan.questions[0] || null;
+  return plan.next_question || plan.questions[0] || null;
 }
 
 function selectInboxReply({ messages, openReview, reviewEvents, rejectedInboxKeys }) {
@@ -1664,6 +1665,23 @@ function buildSpecConfirmationEvent({ siteId, runDir, specText, createdAt = nowI
   };
 }
 
+function eventTime(event) {
+  const raw = event?.resolved_at || event?.created_at || '';
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function shouldAppendSpecConfirmation({ existingConfirmation, events }) {
+  if (!existingConfirmation) return true;
+  if (existingConfirmation.status === 'open') return false;
+  if (existingConfirmation.status === 'resolved' && existingConfirmation.change_requested !== true) return false;
+
+  const confirmationTime = eventTime(existingConfirmation);
+  return resolvedQuestionEvents(events).some((event) => eventTime(event) > confirmationTime) ||
+    existingConfirmation.change_requested === true ||
+    ['superseded', 'aborted'].includes(existingConfirmation.status);
+}
+
 async function ensureSpecAndConfirmation({
   runDir,
   siteId,
@@ -1694,7 +1712,8 @@ async function ensureSpecAndConfirmation({
   }
 
   const latest = latestReviewStates(events);
-  if (!latest.some((event) => event.id === SPEC_CONFIRMATION_ID)) {
+  const existingConfirmation = latest.find((event) => event.id === SPEC_CONFIRMATION_ID) || null;
+  if (shouldAppendSpecConfirmation({ existingConfirmation, events })) {
     const confirmation = buildSpecConfirmationEvent({
       siteId,
       runDir,
@@ -1705,7 +1724,7 @@ async function ensureSpecAndConfirmation({
     return confirmation;
   }
 
-  return latest.find((event) => event.id === SPEC_CONFIRMATION_ID) || null;
+  return existingConfirmation;
 }
 
 async function readLoopState(statePath, { siteId, runDir }) {

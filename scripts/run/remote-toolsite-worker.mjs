@@ -23,6 +23,7 @@ import {
   DEFAULT_TELEGRAM_ENV,
   buildQuestionEvent,
   parseRunInput,
+  runLoopIteration,
   sendTelegramMessage,
 } from './pre-agent2-telegram-loop.mjs';
 import { summarizeReviewEvents } from './resolve-human-review-from-hermes-inbox.mjs';
@@ -613,6 +614,12 @@ async function processActiveProductionReviews({
         }),
         now,
       }),
+      preAgent2Runner: (args) => runLoopIteration({
+        ...args,
+        telegramEnvPath,
+        sender: (text) => statusSender({ text, inboxPath, telegramEnvPath }),
+        now,
+      }),
     });
 
     if (isActiveRunWaiting(runResult)) {
@@ -763,7 +770,8 @@ export async function runRemoteToolsiteWorkerIteration({
     inboxPath,
     remoteStatePath,
     remote: true,
-    pollMs,
+    pollMs: 0,
+    maxIdleIterations: 1,
   });
   const result = {
     ok: true,

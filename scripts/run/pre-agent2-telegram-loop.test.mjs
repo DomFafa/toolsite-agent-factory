@@ -22,6 +22,11 @@ import {
   splitTelegramMessages,
   validateReply,
 } from './pre-agent2-telegram-loop.mjs';
+import {
+  attachmentPurpose,
+  inputRequiresAttachment,
+  planPreAgent2Questions,
+} from './pre-agent2-question-planner.mjs';
 
 async function exists(filePath) {
   try {
@@ -460,7 +465,7 @@ test('dynamic targeted question is written as an open review and pushed to Teleg
   const sent = [];
 
   const result = await startLoopOnce(fixture, sent);
-  const events = await readJsonl(fixture.eventPath);
+  const events = await exists(fixture.eventPath) ? await readJsonl(fixture.eventPath) : [];
 
   assert.equal(result.ok, true);
   assert.equal(events.length, 1);
@@ -476,7 +481,7 @@ test('dynamic targeted question is written as an open review and pushed to Teleg
   assert.doesNotMatch(sent[0], /^Q1\./);
 });
 
-test('production complete intake never sends generic Q1 and opens SPEC confirmation', async () => {
+test('production complete 401K intake never sends generic Q1 and opens a targeted question', async () => {
   const fixture = await makeFixture();
   const sent = [];
   await setRemoteMode(fixture.remoteStatePath, true);
@@ -493,17 +498,17 @@ test('production complete intake never sends generic Q1 and opens SPEC confirmat
     now: () => '2026-05-11T10:00:00.000Z',
   });
 
-  const events = await readJsonl(fixture.eventPath);
-  const confirmation = events.find((event) => event.id === 'pre-agent2-spec-confirmation');
+  const events = await exists(fixture.eventPath) ? await readJsonl(fixture.eventPath) : [];
   const combined = `${sent.join('\n')}\n${events.map((event) => event.message).join('\n')}`;
+  const question = events.find((event) => event.review_type === 'pre_agent2_interview_question');
 
-  assert.equal(confirmation.status, 'open');
-  assert.equal(events.some((event) => event.review_type === 'pre_agent2_interview_question'), false);
+  assert.equal(question.status, 'open');
+  assert.match(question.message, /401K Calculator/);
+  assert.match(question.message, /计算复杂度/);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation'), false);
   assert.doesNotMatch(combined, /这个工具站最核心要帮用户完成什么任务/);
   assert.doesNotMatch(combined, /Pre-Agent2 Q1/);
   assert.doesNotMatch(combined, /这张图是什么意思|重新解释.*图片|附件.*什么意思/);
-  assert.match(confirmation.message, /401K Calculator/);
-  assert.match(confirmation.message, /retirement|退休/i);
 });
 
 test('production 401K incomplete detail intake creates targeted project-specific question', async () => {
@@ -528,6 +533,118 @@ test('production 401K incomplete detail intake creates targeted project-specific
   assert.match(events[0].message, /401K Calculator/);
   assert.match(events[0].message, /401k|retirement|calculator/i);
   assert.doesNotMatch(events[0].message, /这个工具站最核心要帮用户完成什么任务/);
+});
+
+test('image attachments are treated as design references, not requirement questions', () => {
+  const intake = {
+    keyword: '401K Calculator',
+    target_domain: '401k-calculator.net',
+    ui_reference: 'https://www.usa.gov',
+    ux_reference: 'https://www.calculator.net/401k-calculator.html',
+    extra_notes: '第一屏就是计算器；参考我发的黑白人物插画做页面点缀；不要登录；不要后端。',
+  };
+  const plan = planPreAgent2Questions({
+    intake,
+    attachments: [{ kind: 'image', local_path: 'input-assets/01-reference.jpg' }],
+    answeredEvents: [],
+  });
+  const visibleQuestions = plan.questions.map((question) => question.message).join('\n');
+
+  assert.equal(inputRequiresAttachment(intake), true);
+  assert.equal(attachmentPurpose(intake), 'illustration_reference');
+  assert.doesNotMatch(visibleQuestions, /这张图是什么意思|你想怎么用这张图|是否要使用这张图片|图片放不放页面|附件用途确认/);
+});
+
+test('resolved 401K complexity answer after SPEC change request asks defaults instead of generating SPEC', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), fourOhOneKInputMarkdown());
+  await writeJsonl(fixture.eventPath, [
+    {
+      schema_version: 'human-review-event.v1',
+      type: 'human_review',
+      review_type: 'pre_agent2_spec_confirmation',
+      id: 'pre-agent2-spec-confirmation',
+      site_id: '401k-calculator',
+      run_dir: 'runs/401k-calculator',
+      phase: 'pre-agent2',
+      agent: 'pre-agent2-toolsite-spec',
+      status: 'resolved',
+      blocking: false,
+      blocks: 'agent-2',
+      title: 'Pre-Agent2 SPEC 确认',
+      message: '【Toolsite SPEC 审核卡】',
+      expected_reply: '回复：确认 SPEC，或回复：修改：...',
+      resolution_text: '修改：先问 401K Calculator 计算复杂度。',
+      change_requested: true,
+      created_at: '2026-05-11T10:00:00.000Z',
+      resolved_at: '2026-05-11T10:00:10.000Z',
+      created_by: 'codex',
+    },
+    {
+      schema_version: 'human-review-event.v1',
+      type: 'human_review',
+      review_type: 'pre_agent2_interview_question',
+      id: 'pre-agent2-dynamic-401k-calculator-complexity',
+      site_id: '401k-calculator',
+      run_dir: 'runs/401k-calculator',
+      phase: 'pre-agent2',
+      agent: 'pre-agent2-toolsite-spec',
+      status: 'open',
+      blocking: true,
+      blocks: 'pre-agent2-spec',
+      title: 'Pre-Agent2：401K Calculator 计算复杂度确认',
+      message: [
+        '401K Calculator 第一版计算复杂度选哪一档？',
+        '',
+        '1. 简化版：输入少，适合老人快速估算',
+        '2. 标准版：包含年龄、退休年龄、当前余额、工资、缴费比例、雇主匹配、预期收益率、工资增长',
+        '3. 详细版：增加 catch-up contribution、annual limit、通胀等高级项',
+        '4. 其他，请直接描述',
+        '5. 先按标准版生成 SPEC，但在审核卡里标注默认假设',
+      ].join('\n'),
+      expected_reply: '回复 1 / 2 / 3 / 4 / 5，或直接自定义描述',
+      allowed_replies: ['1', '2', '3', '4', '5'],
+      allow_custom_text: true,
+      reply_mode: 'single_choice_with_custom_text',
+      created_at: '2026-05-11T10:01:00.000Z',
+      created_by: 'codex',
+    },
+  ]);
+  await writeJsonl(fixture.inboxPath, [
+    inboxMessage('2', {
+      message_id: 'answer-2',
+      created_at: '2026-05-11T10:02:00.000Z',
+    }),
+  ]);
+
+  await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    pollMs: 0,
+    maxIterations: 3,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:03:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const resolvedQuestion = events.find(
+    (event) => event.id === 'pre-agent2-dynamic-401k-calculator-complexity' && event.status === 'resolved',
+  );
+  const defaultsQuestion = events.find(
+    (event) => event.id === 'pre-agent2-dynamic-401k-calculator-default-assumptions' && event.status === 'open',
+  );
+
+  assert.equal(resolvedQuestion.selected_option, '2');
+  assert.match(defaultsQuestion.message, /默认假设/);
+  assert.match(defaultsQuestion.message, /expected return 6%/);
+  assert.equal(events.some((event) => event.id === 'pre-agent2-spec-confirmation' && event.status === 'open'), false);
+  assert.equal(sent.some((message) => message.includes('401K Calculator 的默认假设要怎么设置')), true);
+  assert.equal(sent.some((message) => message.includes('【Toolsite SPEC 审核卡】')), false);
+  assert.equal(await exists(path.join(fixture.runDir, 'agent-2-output/site-brief.md')), false);
 });
 
 test('legal option 4 resolves, records QA as option, and enters next targeted question', async () => {
@@ -646,30 +763,16 @@ test('max questions is clamped to 30', () => {
   assert.equal(normalizeMaxQuestions(30), 30);
 });
 
-test('six decision areas can trigger early SPEC generation when enabled', async () => {
+test('information-sufficient intake can generate SPEC without fixed question minimum', async () => {
   const fixture = await makeFixture();
   const sent = [];
   await setRemoteMode(fixture.remoteStatePath, true);
-
-  const answered = QUESTION_BANK.slice(0, 6).map((question, index) => {
-    const open = buildQuestionEvent({
-      question,
-      siteId: 'sample-site',
-      runDir: fixture.runDir,
-      createdAt: `2026-05-11T10:0${index}:00.000Z`,
-    });
-    return buildResolvedQuestionEvent({
-      openReview: open,
-      inboxMessage: inboxMessage('1', {
-        message_id: `answered-${index}`,
-        created_at: `2026-05-11T10:0${index}:30.000Z`,
-      }),
-      validation: validateReply('1', open),
-      resolvedAt: `2026-05-11T10:0${index}:40.000Z`,
-    });
-  });
-  assert.equal(shouldGenerateSpec({ answeredEvents: answered, allowEarlySpec: true }), true);
-  await writeJsonl(fixture.eventPath, answered);
+  await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
+  assert.equal(shouldGenerateSpec({
+    answeredEvents: [],
+    intake: wordCounterIntake(),
+    allowEarlySpec: false,
+  }), true);
 
   await runPreAgent2TelegramLoop({
     runDir: fixture.runDir,
@@ -689,7 +792,7 @@ test('six decision areas can trigger early SPEC generation when enabled', async 
 
   assert.equal(confirmation.status, 'open');
   assert.equal(confirmation.blocks, 'agent-2');
-  assert.match(spec, /六个用户决策区已清楚，用户同意提前输出 SPEC。/);
+  assert.match(spec, /word counter/);
   assertSpecConfirmationCard(confirmation.message);
   assertSpecConfirmationCard(sent.at(-1));
   assert.doesNotMatch(sent.at(-1), /^Pre-Agent2 Toolsite SPEC 草稿已生成：.*toolsite-spec\.md\s*$/s);
@@ -942,7 +1045,7 @@ test('invalid numeric batch answer blocks and does not generate SPEC', async () 
     now: () => '2026-05-11T10:20:00.000Z',
   });
 
-  const events = await readJsonl(fixture.eventPath);
+  const events = await exists(fixture.eventPath) ? await readJsonl(fixture.eventPath) : [];
   const state = JSON.parse(await readFile(fixture.statePath, 'utf8'));
 
   assert.equal(result.lastResult.reason, 'invalid-batch-answer');
@@ -1013,25 +1116,7 @@ test('generic SPEC is not sent for user confirmation', async () => {
   const fixture = await makeFixture();
   const sent = [];
   await setRemoteMode(fixture.remoteStatePath, true);
-
-  const answered = QUESTION_BANK.map((question, index) => {
-    const open = buildQuestionEvent({
-      question,
-      siteId: 'sample-site',
-      runDir: fixture.runDir,
-      createdAt: `2026-05-11T10:${String(index).padStart(2, '0')}:00.000Z`,
-    });
-    return buildResolvedQuestionEvent({
-      openReview: open,
-      inboxMessage: inboxMessage('1', {
-        message_id: `answered-${index}`,
-        created_at: `2026-05-11T10:${String(index).padStart(2, '0')}:30.000Z`,
-      }),
-      validation: validateReply('1', open),
-      resolvedAt: `2026-05-11T10:${String(index).padStart(2, '0')}:40.000Z`,
-    });
-  });
-  await writeJsonl(fixture.eventPath, answered);
+  await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
 
   const result = await runPreAgent2TelegramLoop({
     runDir: fixture.runDir,
@@ -1045,7 +1130,7 @@ test('generic SPEC is not sent for user confirmation', async () => {
     now: () => '2026-05-11T10:20:00.000Z',
   });
 
-  const events = await readJsonl(fixture.eventPath);
+  const events = await exists(fixture.eventPath) ? await readJsonl(fixture.eventPath) : [];
   const state = JSON.parse(await readFile(fixture.statePath, 'utf8'));
 
   assert.equal(result.lastResult.reason, 'spec-too-generic');
@@ -1055,12 +1140,13 @@ test('generic SPEC is not sent for user confirmation', async () => {
   assert.equal(state.status, 'blocked_spec_too_generic');
 });
 
-test('Q12 completion writes SPEC confirmation and does not start Agent2', async () => {
+test('hard cap completion writes SPEC confirmation and does not start Agent2', async () => {
   const fixture = await makeFixture();
   const sent = [];
   await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
 
-  const answered = QUESTION_BANK.map((question, index) => {
+  const answered = Array.from({ length: 30 }, (_, index) => QUESTION_BANK[index % QUESTION_BANK.length]).map((question, index) => {
     const open = buildQuestionEvent({
       question,
       siteId: 'sample-site',
@@ -1086,6 +1172,7 @@ test('Q12 completion writes SPEC confirmation and does not start Agent2', async 
     telegramEnvPath: fixture.telegramEnvPath,
     pollMs: 0,
     maxIterations: 1,
+    maxQuestions: 30,
     sender: fakeSender(sent),
     now: () => '2026-05-11T10:20:00.000Z',
   });
