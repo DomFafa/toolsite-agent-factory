@@ -14,6 +14,7 @@ import {
   buildQuestionEvent,
   buildResolvedQuestionEvent,
   normalizeMaxQuestions,
+  parseBatchAnswers,
   renderToolsiteSpec,
   renderSpecReviewCard,
   runPreAgent2TelegramLoop,
@@ -208,6 +209,14 @@ function wordCounterQualityAnswers() {
     11: '3',
     12: '1',
   };
+}
+
+function batchAnswersMarkdown(answers = wordCounterQualityAnswers()) {
+  return [
+    'Pre-Agent2 Answers:',
+    ...QUESTION_BANK.map((question) => `Q${question.number}: ${answers[question.number] || '1'}`),
+    '',
+  ].join('\n');
 }
 
 function markdownSection(text, heading) {
@@ -792,6 +801,130 @@ test('full word counter SPEC quality contract passes without manual Telegram dry
   assert.deepEqual(duplicateBulletLines(message), []);
   assert.equal(await exists(path.join(fixture.runDir, 'agent-2-output', 'site-brief.md')), false);
   assert.equal(await exists(path.join(fixture.runDir, 'site', 'package.json')), false);
+});
+
+test('batch answers file resolves Q1-Q12 without Telegram inbox polling', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  const answersFile = path.join(fixture.runDir, 'pre-agent2-answers.md');
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
+  await writeFile(fixture.inboxPath, 'not valid jsonl');
+  await writeFile(answersFile, batchAnswersMarkdown());
+
+  const result = await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    answersFile,
+    pollMs: 0,
+    maxIterations: 20,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:20:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const resolvedQuestions = events.filter((event) => event.review_type === 'pre_agent2_interview_question' && event.status === 'resolved');
+  const confirmation = events.find((event) => event.id === 'pre-agent2-spec-confirmation');
+  const qa = await readFile(fixture.qaPath, 'utf8');
+
+  assert.equal(result.lastResult.reason, 'awaiting-spec-confirmation');
+  assert.equal(resolvedQuestions.length, 12);
+  assert.ok(resolvedQuestions.every((event) => event.resolution_source === 'batch_answers'));
+  assert.equal(confirmation.status, 'open');
+  assert.equal(confirmation.blocks, 'agent-2');
+  assert.equal(await exists(fixture.specPath), true);
+  assert.match(qa, /Question rounds: 12/);
+  assert.equal(sent.some((message) => /^Q\d+\./.test(message)), false);
+  assertSpecConfirmationCard(sent.at(-1));
+});
+
+test('invalid numeric batch answer blocks and does not generate SPEC', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  const answersFile = path.join(fixture.runDir, 'pre-agent2-answers.md');
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(answersFile, batchAnswersMarkdown({ 1: '8' }));
+  await writeFile(fixture.inboxPath, 'not valid jsonl');
+
+  const result = await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    answersFile,
+    pollMs: 0,
+    maxIterations: 3,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:20:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const state = JSON.parse(await readFile(fixture.statePath, 'utf8'));
+
+  assert.equal(result.lastResult.reason, 'invalid-batch-answer');
+  assert.equal(result.lastResult.validation.value, '8');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].id, 'pre-agent2-q1-tool-purpose');
+  assert.equal(events[0].status, 'open');
+  assert.equal(await exists(fixture.qaPath), false);
+  assert.equal(await exists(fixture.specPath), false);
+  assert.equal(sent.length, 0);
+  assert.equal(state.status, 'blocked_invalid_batch_answer');
+});
+
+test('batch answers still passes full word counter SPEC quality contract', async () => {
+  const fixture = await makeFixture();
+  const sent = [];
+  const answersFile = path.join(fixture.runDir, 'pre-agent2-answers.md');
+  await setRemoteMode(fixture.remoteStatePath, true);
+  await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
+  await writeFile(answersFile, batchAnswersMarkdown(wordCounterQualityAnswers()));
+
+  await runPreAgent2TelegramLoop({
+    runDir: fixture.runDir,
+    inboxPath: fixture.inboxPath,
+    remoteStatePath: fixture.remoteStatePath,
+    telegramEnvPath: fixture.telegramEnvPath,
+    answersFile,
+    pollMs: 0,
+    maxIterations: 20,
+    sender: fakeSender(sent),
+    now: () => '2026-05-11T10:20:00.000Z',
+  });
+
+  const events = await readJsonl(fixture.eventPath);
+  const confirmation = events.find((event) => event.id === 'pre-agent2-spec-confirmation');
+  const spec = await readFile(fixture.specPath, 'utf8');
+  const resultExperience = markdownSection(spec, 'Result Experience');
+  const cardResultExperience = reviewCardSection(confirmation.message, '核心结果展示');
+
+  assert.equal(confirmation.status, 'open');
+  assert.equal(confirmation.blocks, 'agent-2');
+  assertChineseFirstSpecCard(confirmation.message);
+  for (const term of ['word counter', 'words', 'characters', 'sentences', 'paragraphs', 'reading time', 'speaking time']) {
+    assert.match(resultExperience, new RegExp(term));
+    assert.match(cardResultExperience, new RegExp(term));
+  }
+  assert.doesNotMatch(spec, /后续高级功能可以需要上传或 API/);
+  assert.equal(await exists(path.join(fixture.runDir, 'agent-2-output', 'site-brief.md')), false);
+  assert.equal(await exists(path.join(fixture.runDir, 'site', 'package.json')), false);
+});
+
+test('batch answers parser accepts multiline custom answers', () => {
+  const answers = parseBatchAnswers([
+    'Pre-Agent2 Answers:',
+    'Q1: 1',
+    'Q2: 第一行',
+    '第二行',
+    'Q3：3',
+    '',
+  ].join('\n'));
+
+  assert.equal(answers.get(1), '1');
+  assert.equal(answers.get(2), '第一行\n第二行');
+  assert.equal(answers.get(3), '3');
 });
 
 test('generic SPEC is not sent for user confirmation', async () => {
