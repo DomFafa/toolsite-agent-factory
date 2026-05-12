@@ -6,9 +6,12 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  INCOMPLETE_INTAKE,
   readHermesIntake,
   REMOTE_DISABLED_MESSAGE,
   INBOX_MISSING_MESSAGE,
+  MISSING_PRODUCTION_START_INTENT,
+  STALE_INTAKE_REJECTED,
 } from './read-hermes-intake.mjs';
 
 async function makeFixture() {
@@ -52,6 +55,10 @@ function completeIntake({ uiLabel = 'UI 参考', uxLabel = 'UX 参考', domain =
     `${uxLabel}: wordcounter.net`,
     '额外想法/限制/模仿点: 第一屏必须是工具，不要登录，不要复杂功能',
   ].join('\n');
+}
+
+function productionStartIntake(options = {}) {
+  return `开始正式建站\n${completeIntake(options)}`;
 }
 
 test('remote_mode=false refuses before reading inbox', async () => {
@@ -173,6 +180,98 @@ test('missing inbox returns friendly message when remote is enabled', async () =
   assert.equal(result.found, false);
   assert.equal(result.code, 'inbox-missing');
   assert.equal(result.message, INBOX_MISSING_MESSAGE);
+});
+
+test('old Hermes intake is rejected by default when fresh intake is required', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(productionStartIntake(), {
+      message_id: 'old',
+      created_at: '2026-05-11T00:00:00.000Z',
+    }),
+  ]);
+
+  const result = await readHermesIntake({
+    remoteStatePath,
+    inboxPath,
+    freshAfter: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: false,
+    requireProductionStartIntent: true,
+  });
+
+  assert.equal(result.found, false);
+  assert.equal(result.code, 'stale-intake');
+  assert.equal(result.message, STALE_INTAKE_REJECTED);
+});
+
+test('fresh Hermes intake without production start intent is rejected', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(completeIntake(), {
+      message_id: 'fresh',
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await readHermesIntake({
+    remoteStatePath,
+    inboxPath,
+    freshAfter: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: false,
+    requireProductionStartIntent: true,
+  });
+
+  assert.equal(result.found, false);
+  assert.equal(result.code, 'missing-production-start-intent');
+  assert.equal(result.message, MISSING_PRODUCTION_START_INTENT);
+});
+
+test('incomplete fresh production intake is rejected with missing fields', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(['开始正式建站', '关键词: word counter', '目标域名: wordcounter-test.local'].join('\n'), {
+      message_id: 'fresh',
+      created_at: '2026-05-12T00:00:01.000Z',
+    }),
+  ]);
+
+  const result = await readHermesIntake({
+    remoteStatePath,
+    inboxPath,
+    freshAfter: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: false,
+    requireProductionStartIntent: true,
+  });
+
+  assert.equal(result.found, false);
+  assert.equal(result.code, 'incomplete-intake');
+  assert.equal(result.message, INCOMPLETE_INTAKE);
+  assert.deepEqual(result.missing_fields, ['UI 参考', 'UX 参考', '额外想法 / 限制 / 模仿点']);
+});
+
+test('--allow-existing-intake can explicitly use older production intake', async () => {
+  const { remoteStatePath, inboxPath } = await makeFixture();
+  await writeRemote(remoteStatePath, true);
+  await writeInbox(inboxPath, [
+    message(productionStartIntake(), {
+      message_id: 'old',
+      created_at: '2026-05-11T00:00:00.000Z',
+    }),
+  ]);
+
+  const result = await readHermesIntake({
+    remoteStatePath,
+    inboxPath,
+    freshAfter: '2026-05-12T00:00:00.000Z',
+    allowExistingIntake: true,
+    requireProductionStartIntent: true,
+  });
+
+  assert.equal(result.found, true);
+  assert.equal(result.source.key, 'telegram:123:old:2026-05-11T00:00:00.000Z');
 });
 
 test('--json output is parseable JSON', async () => {

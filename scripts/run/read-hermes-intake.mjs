@@ -10,6 +10,17 @@ export const DEFAULT_HERMES_REMOTE_STATE =
 export const REMOTE_DISABLED_MESSAGE = '远程模式未开启，拒绝读取 Hermes intake。';
 export const INBOX_MISSING_MESSAGE = '没有找到 Hermes inbox。';
 export const NO_INTAKE_MESSAGE = '没有找到可用的新站 intake 消息。';
+export const STALE_INTAKE_REJECTED = 'STALE_INTAKE_REJECTED';
+export const MISSING_PRODUCTION_START_INTENT = 'MISSING_PRODUCTION_START_INTENT';
+export const INCOMPLETE_INTAKE = 'INCOMPLETE_INTAKE';
+
+export const PRODUCTION_START_INTENT_PHRASES = [
+  '开始正式建站',
+  '新建 production run',
+  '创建生产站',
+  '开始生产运行',
+  '正式开始这个站',
+];
 
 const FIELD_LABELS = {
   关键词: 'keyword',
@@ -35,6 +46,9 @@ function parseArgs(argv) {
     inboxPath: DEFAULT_HERMES_INBOX,
     remoteStatePath: DEFAULT_HERMES_REMOTE_STATE,
     json: false,
+    freshAfter: '',
+    allowExistingIntake: false,
+    requireProductionStartIntent: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -47,6 +61,13 @@ function parseArgs(argv) {
     } else if (arg === '--remote-state' || arg === '--remote-state-path') {
       options.remoteStatePath = argv[index + 1] || '';
       index += 1;
+    } else if (arg === '--fresh-after') {
+      options.freshAfter = argv[index + 1] || '';
+      index += 1;
+    } else if (arg === '--allow-existing-intake') {
+      options.allowExistingIntake = true;
+    } else if (arg === '--require-production-start-intent') {
+      options.requireProductionStartIntent = true;
     } else if (arg === '--help' || arg === '-h') {
       options.help = true;
     } else {
@@ -173,11 +194,38 @@ function hasAnyIntakeField(parsed) {
   return REQUIRED_FIELDS.some(([key]) => String(parsed[key] || '').trim());
 }
 
+function messageCreatedAt(message) {
+  return String(message?.created_at || '').trim();
+}
+
+export function intakeMessageKey(message) {
+  return [
+    String(message?.source || ''),
+    String(message?.chat_id || ''),
+    String(message?.message_id || ''),
+    messageCreatedAt(message),
+  ].join(':');
+}
+
+export function hasProductionStartIntent(text) {
+  const body = String(text || '');
+  return PRODUCTION_START_INTENT_PHRASES.some((phrase) => body.includes(phrase));
+}
+
+function isFreshMessage(message, freshAfter) {
+  if (!freshAfter) return true;
+  const messageTime = Date.parse(messageCreatedAt(message));
+  const startTime = Date.parse(freshAfter);
+  if (Number.isNaN(messageTime) || Number.isNaN(startTime)) return false;
+  return messageTime >= startTime;
+}
+
 function sourceForMessage(message) {
   return {
     message_id: String(message.message_id || ''),
     chat_id: String(message.chat_id || ''),
     created_at: String(message.created_at || ''),
+    key: intakeMessageKey(message),
   };
 }
 
@@ -194,26 +242,77 @@ function buildResultFromMessage(message, parsed) {
     suggested_site_id: found ? suggestedSiteIdFromDomain(parsed.target_domain) : '',
     remote_mode: true,
     source: sourceForMessage(message),
+    production_start_intent: hasProductionStartIntent(message.text),
     ...(found ? {} : { missing_fields: missing }),
   };
 }
 
-export function selectIntakeMessage(messages) {
+export function selectIntakeMessage(
+  messages,
+  { freshAfter = '', allowExistingIntake = true, requireProductionStartIntent = false } = {},
+) {
   const candidates = messages
     .filter((message) => message && message.type === 'user_message')
     .map((message) => ({ message, parsed: parseIntakeText(message.text) }))
     .filter(({ parsed }) => hasAnyIntakeField(parsed));
 
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    return {
+      found: false,
+      code: 'no-intake',
+      message: NO_INTAKE_MESSAGE,
+      remote_mode: true,
+    };
+  }
 
-  const completeCandidates = candidates.filter(({ parsed }) => missingFields(parsed).length === 0);
-  const selected = completeCandidates.at(-1) || candidates.at(-1);
-  return buildResultFromMessage(selected.message, selected.parsed);
+  const newestCandidate = candidates.at(-1);
+  const freshCandidates = allowExistingIntake
+    ? candidates
+    : candidates.filter(({ message }) => isFreshMessage(message, freshAfter));
+
+  if (freshCandidates.length === 0) {
+    return {
+      found: false,
+      code: 'stale-intake',
+      message: STALE_INTAKE_REJECTED,
+      remote_mode: true,
+      source: sourceForMessage(newestCandidate.message),
+    };
+  }
+
+  const intentCandidates = requireProductionStartIntent
+    ? freshCandidates.filter(({ message }) => hasProductionStartIntent(message.text))
+    : freshCandidates;
+
+  if (intentCandidates.length === 0) {
+    return {
+      found: false,
+      code: 'missing-production-start-intent',
+      message: MISSING_PRODUCTION_START_INTENT,
+      remote_mode: true,
+      source: sourceForMessage(freshCandidates.at(-1).message),
+    };
+  }
+
+  const completeCandidates = intentCandidates.filter(({ parsed }) => missingFields(parsed).length === 0);
+  const selected = completeCandidates.at(-1) || intentCandidates.at(-1);
+  const result = buildResultFromMessage(selected.message, selected.parsed);
+  if (!result.found) {
+    return {
+      ...result,
+      code: 'incomplete-intake',
+      message: INCOMPLETE_INTAKE,
+    };
+  }
+  return result;
 }
 
 export async function readHermesIntake({
   inboxPath = DEFAULT_HERMES_INBOX,
   remoteStatePath = DEFAULT_HERMES_REMOTE_STATE,
+  freshAfter = '',
+  allowExistingIntake = true,
+  requireProductionStartIntent = false,
 } = {}) {
   const remoteMode = await readRemoteMode(remoteStatePath);
   if (!remoteMode) {
@@ -235,8 +334,12 @@ export async function readHermesIntake({
     };
   }
 
-  const result = selectIntakeMessage(messages);
-  if (!result) {
+  const result = selectIntakeMessage(messages, {
+    freshAfter,
+    allowExistingIntake,
+    requireProductionStartIntent,
+  });
+  if (result.code === 'no-intake') {
     return {
       found: false,
       remote_mode: true,
@@ -251,6 +354,8 @@ function formatHuman(result) {
   if (result.code === 'remote-disabled') return REMOTE_DISABLED_MESSAGE;
   if (result.code === 'inbox-missing') return INBOX_MISSING_MESSAGE;
   if (result.code === 'no-intake') return NO_INTAKE_MESSAGE;
+  if (result.code === 'stale-intake') return STALE_INTAKE_REJECTED;
+  if (result.code === 'missing-production-start-intent') return MISSING_PRODUCTION_START_INTENT;
 
   if (!result.found) {
     return [
@@ -286,6 +391,7 @@ function usage() {
     '  node scripts/run/read-hermes-intake.mjs',
     '  node scripts/run/read-hermes-intake.mjs --json',
     '  node scripts/run/read-hermes-intake.mjs --inbox <path> --remote-state <path>',
+    '  node scripts/run/read-hermes-intake.mjs --fresh-after <ISO> --require-production-start-intent',
   ].join('\n');
 }
 
