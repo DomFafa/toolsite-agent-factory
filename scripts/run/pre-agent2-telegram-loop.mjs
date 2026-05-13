@@ -599,6 +599,23 @@ function cleanSpecText(value) {
     .replace(/\s+$/g, '');
 }
 
+function telegramReferenceLabel(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.replace(/^www\./i, '');
+    const pathname = url.pathname.toLowerCase();
+    if (host === 'calculator.net' && pathname.includes('401k-calculator')) return 'calculator.net 401K Calculator';
+    return host;
+  } catch {
+    return rawUrl;
+  }
+}
+
+function cleanTelegramReviewText(value) {
+  return cleanSpecText(value)
+    .replace(/https?:\/\/[^\s)`）:：，。,；;]+/gi, (rawUrl) => telegramReferenceLabel(rawUrl));
+}
+
 const INTERNAL_SPEC_SECTION_HEADINGS = new Set([
   'Agent Workflow Boundary',
   'User Confirmation',
@@ -1355,6 +1372,7 @@ function reviewCardContent(content, label) {
     .split(/\r?\n/)
     .filter((line) => !isInternalSpecMetaLine(line) && !isDirtySourceSnippetLine(line))
     .map((line) => translateEnglishReviewLine(line, label))
+    .map((line) => cleanTelegramReviewText(line))
     .filter(Boolean)
     .join('\n') || '- 本节没有额外补充，按已确认的网站需求执行。';
 }
@@ -1608,7 +1626,12 @@ export async function sendTelegramMessage({ text, inboxPath, telegramEnvPath }) 
 
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
-    body: new URLSearchParams({ chat_id: chatId, text }),
+    body: new URLSearchParams({
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: 'true',
+      link_preview_options: JSON.stringify({ is_disabled: true }),
+    }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok !== true) {
