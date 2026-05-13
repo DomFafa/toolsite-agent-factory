@@ -45,9 +45,24 @@ function answeredQuestionIds(answeredEvents) {
   return new Set(answeredEvents.map((event) => asText(event.id)).filter(Boolean));
 }
 
+function answeredText(answeredEvents) {
+  return answeredEvents
+    .map((event) => {
+      const selectedDecision = event.option_decisions?.[event.resolution_text] || '';
+      return `${event.id || ''}\n${event.decision_area || ''}\n${event.resolution_text || ''}\n${event.custom_text || ''}\n${selectedDecision}`;
+    })
+    .join('\n');
+}
+
 function is401kIntake(intake) {
   const value = compact(`${intake?.keyword || ''} ${intake?.target_domain || ''}`);
   return value.includes('401k') || value.includes('401-k') || value.includes('401 k');
+}
+
+function hasImagePurpose(intake, attachments) {
+  if (attachments.length === 0) return !inputRequiresAttachment(intake);
+  const purpose = attachmentPurpose(intake);
+  return Boolean(purpose) || !inputRequiresAttachment(intake);
 }
 
 function makeQuestion({ intake, index, id, title, message, options, whyNeeded, decisionArea }) {
@@ -153,6 +168,34 @@ function fourOhOneKQuestions(intake) {
     ],
   });
 
+  add({
+    id: 'pre-agent2-dynamic-401k-calculator-disclaimer',
+    title: 'Pre-Agent2：401K Calculator disclaimer 强度确认',
+    decisionArea: 'Legal / Safety Boundaries',
+    whyNeeded: '401K Calculator 属于 retirement / finance calculator，必须明确 result interpretation 和 disclaimer boundary，避免被理解为投资、税务或财务建议。',
+    message: '401K Calculator 的 educational disclaimer 第一版应该多明显？',
+    options: [
+      { label: '轻量提示：结果区附近说明 educational estimate only', decision: 'educational disclaimer 使用轻量提示，放在结果区附近，说明 educational estimate only。' },
+      { label: '标准提示：标题附近和结果区都说明不提供 investment / tax / financial advice', decision: 'educational disclaimer 使用标准提示，在标题附近和结果区说明不提供 investment、tax 或 financial advice。' },
+      { label: '强提示：计算前后都提醒只是估算，并建议咨询专业人士', decision: 'educational disclaimer 使用强提示，计算前后都提醒只是估算，并建议咨询专业人士。' },
+      { label: '只在页脚说明，第一屏尽量少打断', decision: 'educational disclaimer 只在页脚说明，第一屏尽量少打断。' },
+    ],
+  });
+
+  add({
+    id: 'pre-agent2-dynamic-401k-calculator-advanced-boundary',
+    title: 'Pre-Agent2：401K Calculator 高级项边界确认',
+    decisionArea: 'Page Boundary',
+    whyNeeded: 'catch-up contribution、annual contribution limit 和通胀等高级项会显著增加复杂度，第一版必须明确纳入或排除。',
+    message: '401K Calculator 第一版如何处理 catch-up contribution、annual limit 和通胀等高级项？',
+    options: [
+      { label: '第一版不纳入，只保留标准输入', decision: '高级项边界：第一版不纳入 catch-up contribution、annual limit 和通胀，只保留标准输入。' },
+      { label: '作为高级折叠项，但默认不展开', decision: '高级项边界：catch-up contribution、annual limit 和通胀作为高级折叠项，默认不展开。' },
+      { label: '只纳入 annual contribution limit，其他暂不做', decision: '高级项边界：第一版只纳入 annual contribution limit，暂不纳入 catch-up contribution 和通胀。' },
+      { label: '全部纳入，但必须保持老人友好', decision: '高级项边界：第一版纳入 catch-up contribution、annual limit 和通胀，但必须保持老人友好。' },
+    ],
+  });
+
   return questions.map((question) => makeQuestion({
     intake,
     index: question.index,
@@ -163,6 +206,121 @@ function fourOhOneKQuestions(intake) {
     message: question.message,
     options: question.options,
   }));
+}
+
+const GENERAL_CHECKLIST = [
+  {
+    area: 'tool purpose',
+    isSatisfied: (intake) => asText(intake.keyword).length > 0 && asText(intake.extra_notes).length > 0,
+  },
+  {
+    area: 'target user / scenario',
+    isSatisfied: (intake, _attachments, answeredEvents) => /用户|老人|writer|student|professional|visitor|audience|场景|use case|target/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+  {
+    area: 'first-screen UX',
+    isSatisfied: (intake, _attachments, answeredEvents) => /第一屏|first|viewport|hero|工具主体|calculator|输入优先/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+  {
+    area: 'input fields',
+    isSatisfied: (intake, _attachments, answeredEvents) => /input|输入|field|text area|current age|retirement age|salary|balance|contribution/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+  {
+    area: 'output/result model',
+    isSatisfied: (intake, _attachments, answeredEvents) => /result|output|输出|结果|balance|contribution|growth|estimate|words|characters|reading time/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+  {
+    area: 'visual direction',
+    isSatisfied: (intake) => asText(intake.ui_reference).length > 0 && asText(intake.ux_reference).length > 0,
+  },
+  {
+    area: 'reference image usage',
+    isSatisfied: hasImagePurpose,
+  },
+  {
+    area: 'non-goals',
+    isSatisfied: (intake, _attachments, answeredEvents) => /不要|不做|no |without |非目标|not build|local|本地/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+  {
+    area: 'page boundary',
+    isSatisfied: (intake, _attachments, answeredEvents) => /\/privacy|\/terms|页面|SEO|FAQ|page|sitemap|robots|第一版|scope/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+  {
+    area: 'success criteria',
+    isSatisfied: (intake, _attachments, answeredEvents) => /3 秒|成功|success|immediate|立即|实时|usable|可用|第一屏.*计算器|老人.*友好/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+];
+
+const SENSITIVE_CALCULATOR_CHECKLIST = [
+  {
+    area: 'default assumptions',
+    isSatisfied: (_intake, _attachments, answeredEvents) => /default|assumption|expected return|salary increase|retirement age|默认假设|预期收益|工资增长/i.test(answeredText(answeredEvents)),
+  },
+  {
+    area: 'result interpretation',
+    isSatisfied: (_intake, _attachments, answeredEvents) => /breakdown|chart|estimated balance|total contributions|investment growth|结果区|拆分|图表/i.test(answeredText(answeredEvents)),
+  },
+  {
+    area: 'disclaimer boundaries',
+    isSatisfied: (intake, _attachments, answeredEvents) => /educational estimate|investment|tax|financial advice|disclaimer|不提供投资|税务|财务建议|仅用于/i.test(`${intake.extra_notes}\n${answeredText(answeredEvents)}`),
+  },
+  {
+    area: 'key calculation rules',
+    isSatisfied: (_intake, _attachments, answeredEvents) => /employer match|match cap|match percentage|100% match|50% match|current age|catch-up|annual limit|计算复杂度|标准输入|高级项/i.test(answeredText(answeredEvents)),
+  },
+];
+
+const FOUR_OH_ONE_K_REQUIRED_AREAS = new Map([
+  ['calculation/model rules', 'pre-agent2-dynamic-401k-calculator-complexity'],
+  ['default assumptions', 'pre-agent2-dynamic-401k-calculator-default-assumptions'],
+  ['employer match rules', 'pre-agent2-dynamic-401k-calculator-employer-match'],
+  ['result display model', 'pre-agent2-dynamic-401k-calculator-result-display'],
+  ['elderly-friendly input pattern', 'pre-agent2-dynamic-401k-calculator-senior-input'],
+  ['disclaimer boundaries', 'pre-agent2-dynamic-401k-calculator-disclaimer'],
+  ['advanced items boundary', 'pre-agent2-dynamic-401k-calculator-advanced-boundary'],
+]);
+
+function questionMap(questions) {
+  return new Map(questions.map((question) => [question.id, question]));
+}
+
+function missingGeneralAreas(intake, attachments, answeredEvents) {
+  return GENERAL_CHECKLIST
+    .filter((item) => !item.isSatisfied(intake, attachments, answeredEvents))
+    .map((item) => item.area);
+}
+
+function missingSensitiveCalculatorAreas(intake, attachments, answeredEvents) {
+  const source = `${intake.keyword}\n${intake.extra_notes}\n${answeredText(answeredEvents)}`;
+  if (!/calculator|finance|retirement|tax|health|legal|nutrition|401\s*k|401k/i.test(source)) return [];
+  return SENSITIVE_CALCULATOR_CHECKLIST
+    .filter((item) => !item.isSatisfied(intake, attachments, answeredEvents))
+    .map((item) => item.area);
+}
+
+function fourOhOneKChecklistPlan(intake, attachments, answeredEvents) {
+  const questions = fourOhOneKQuestions(intake);
+  const byId = questionMap(questions);
+  const existing = answeredQuestionIds(answeredEvents);
+  const missing = [
+    ...missingGeneralAreas(intake, attachments, answeredEvents),
+    ...missingSensitiveCalculatorAreas(intake, attachments, answeredEvents),
+  ];
+  const missing401kAreas = [];
+  const remainingQuestions = [];
+
+  for (const [area, questionId] of FOUR_OH_ONE_K_REQUIRED_AREAS.entries()) {
+    if (existing.has(questionId)) continue;
+    missing401kAreas.push(area);
+    const question = byId.get(questionId);
+    if (question) remainingQuestions.push(question);
+  }
+
+  const uniqueMissing = [...new Set([...missing401kAreas, ...missing])];
+  return {
+    missing_decision_areas: uniqueMissing,
+    questions: remainingQuestions,
+  };
 }
 
 function targetedQuestions(intake, attachments) {
@@ -269,14 +427,19 @@ export function planPreAgent2Questions({ intake, attachments = [], answeredEvent
     };
   }
 
+  const plan = is401kIntake(intake)
+    ? fourOhOneKChecklistPlan(intake, attachments, answeredEvents)
+    : null;
   const existing = answeredQuestionIds(answeredEvents);
-  const questions = targetedQuestions(intake, attachments).filter((question) => !existing.has(question.id));
+  const questions = plan
+    ? plan.questions
+    : targetedQuestions(intake, attachments).filter((question) => !existing.has(question.id));
 
   if (answeredEvents.length >= MAX_DYNAMIC_QUESTIONS) {
     return {
       information_sufficient: true,
       missing_fields: [],
-      missing_decision_areas: questions.map((question) => question.decision_area),
+      missing_decision_areas: plan?.missing_decision_areas || questions.map((question) => question.decision_area),
       questions: [],
       next_question: null,
       why_this_question_matters: '',
@@ -290,7 +453,7 @@ export function planPreAgent2Questions({ intake, attachments = [], answeredEvent
   return {
     information_sufficient: questions.length === 0,
     missing_fields: [],
-    missing_decision_areas: questions.map((question) => question.decision_area),
+    missing_decision_areas: plan?.missing_decision_areas || questions.map((question) => question.decision_area),
     questions,
     next_question: nextQuestion,
     why_this_question_matters: nextQuestion?.why_needed || '',

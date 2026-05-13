@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
+import { execFile as execFileCallback } from 'node:child_process';
 import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 
 import {
   SPEC_GENERIC_BLOCK_MESSAGE,
 } from '../qa/check-pre-agent2-toolsite-spec.mjs';
 
 import {
-  QUESTION_BANK,
   REMOTE_DISABLED_MESSAGE,
   buildQuestionEvent,
   buildResolvedQuestionEvent,
@@ -29,6 +30,132 @@ import {
   inputRequiresAttachment,
   planPreAgent2Questions,
 } from './pre-agent2-question-planner.mjs';
+
+const execFile = promisify(execFileCallback);
+
+const LEGACY_TEST_ONLY_QUESTION_BANK = [
+  {
+    number: 1,
+    id: 'legacy-test-only-tool-purpose',
+    title: 'Legacy test-only tool purpose fixture',
+    decision_area: 'Tool Purpose',
+    message: 'LEGACY_TEST_ONLY: choose the tool purpose fixture.',
+    option_decisions: {
+      1: 'word counter 专注于为粘贴的纯文本提供实时统计。',
+    },
+  },
+  {
+    number: 2,
+    id: 'legacy-test-only-first-viewport',
+    title: 'Legacy test-only first viewport fixture',
+    decision_area: 'First Viewport UX',
+    message: 'LEGACY_TEST_ONLY: choose the first viewport fixture.',
+    option_decisions: {
+      1: 'word counter 第一屏优先展示大文本输入框和实时结果卡片。',
+    },
+  },
+  {
+    number: 3,
+    id: 'legacy-test-only-input-output-model',
+    title: 'Legacy test-only input output fixture',
+    decision_area: 'Input / Output Model',
+    message: 'LEGACY_TEST_ONLY: choose the input output fixture.',
+    option_decisions: {
+      1: 'word counter 使用纯文本输入，并实时输出 words、characters、sentences、paragraphs、reading time、speaking time。',
+    },
+  },
+  {
+    number: 4,
+    id: 'legacy-test-only-result-experience',
+    title: 'Legacy test-only result fixture',
+    decision_area: 'Result Experience',
+    message: 'LEGACY_TEST_ONLY: choose the result fixture.',
+    option_decisions: {
+      1: 'word counter 结果区突出 words、characters、sentences、paragraphs、reading time、speaking time。',
+    },
+  },
+  {
+    number: 5,
+    id: 'legacy-test-only-ui-ux',
+    title: 'Legacy test-only UI fixture',
+    decision_area: 'UI / UX Direction',
+    message: 'LEGACY_TEST_ONLY: choose the UI fixture.',
+    option_decisions: {
+      1: 'word counter 使用 Stripe 视觉方向，并参考 wordcounter.net 的 UX，但不照搬。',
+    },
+  },
+  {
+    number: 6,
+    id: 'legacy-test-only-non-goals',
+    title: 'Legacy test-only non-goals fixture',
+    decision_area: 'Non-goals',
+    message: 'LEGACY_TEST_ONLY: choose the non-goals fixture.',
+    option_decisions: {
+      1: 'word counter 不做 login、accounts、database、backend、AI rewrite、spelling check、grammar check 和 history。',
+    },
+  },
+  {
+    number: 7,
+    id: 'legacy-test-only-result-depth',
+    title: 'Legacy test-only result depth fixture',
+    decision_area: 'Result Experience',
+    message: 'LEGACY_TEST_ONLY: choose the result depth fixture.',
+    option_decisions: {
+      1: 'word counter 结果详情保持可扫读且具体。',
+    },
+  },
+  {
+    number: 8,
+    id: 'legacy-test-only-mobile',
+    title: 'Legacy test-only mobile fixture',
+    decision_area: 'First Viewport UX',
+    message: 'LEGACY_TEST_ONLY: choose the mobile fixture.',
+    option_decisions: {
+      1: 'word counter 移动端先放输入框，统计结果紧跟下方。',
+    },
+  },
+  {
+    number: 9,
+    id: 'legacy-test-only-success',
+    title: 'Legacy test-only success fixture',
+    decision_area: 'Tool Purpose',
+    message: 'LEGACY_TEST_ONLY: choose the success fixture.',
+    option_decisions: {
+      1: 'word counter 的成功标准是文本输入后立即更新可信统计。',
+    },
+  },
+  {
+    number: 10,
+    id: 'legacy-test-only-privacy',
+    title: 'Legacy test-only privacy fixture',
+    decision_area: 'Input / Output Model',
+    message: 'LEGACY_TEST_ONLY: choose the privacy fixture.',
+    option_decisions: {
+      1: 'word counter 在浏览器本地处理文本，不上传用户输入。',
+    },
+  },
+  {
+    number: 11,
+    id: 'pre-agent2-q11-seo-boundary',
+    title: 'Legacy test-only SEO fixture',
+    decision_area: 'Non-goals',
+    message: 'LEGACY_TEST_ONLY: choose the SEO fixture.',
+    option_decisions: {
+      1: 'SEO content 放在 word counter 工具下方，可以包含 FAQ 和使用说明。',
+      3: '工具下方提供 FAQ 和使用说明。',
+    },
+  },
+  {
+    number: 12,
+    id: 'legacy-test-only-final-priority',
+    title: 'Legacy test-only final priority fixture',
+    decision_area: 'UI / UX Direction',
+    message: 'LEGACY_TEST_ONLY: choose the final priority fixture.',
+    option_decisions: {
+      1: 'word counter 优先保证快速输入输出交互和第一屏工具可用性。',
+    },
+  },
+];
 
 async function exists(filePath) {
   try {
@@ -109,6 +236,24 @@ function inboxMessage(text, overrides = {}) {
     created_at: overrides.created_at || '2026-05-11T10:01:00.000Z',
     handled: false,
   };
+}
+
+function resolvedPlannerQuestion(question, answer = '2') {
+  const open = buildQuestionEvent({
+    question,
+    siteId: '401k-calculator',
+    runDir: 'runs/401k-calculator',
+    createdAt: '2026-05-11T10:00:00.000Z',
+  });
+  return buildResolvedQuestionEvent({
+    openReview: open,
+    inboxMessage: inboxMessage(answer, {
+      message_id: `${question.id}-${answer}`,
+      created_at: '2026-05-11T10:00:30.000Z',
+    }),
+    validation: validateReply(answer, open),
+    resolvedAt: '2026-05-11T10:00:40.000Z',
+  });
 }
 
 function fakeSender(sent) {
@@ -290,7 +435,7 @@ function answeredQuestionEvents({
   runDir = 'runs/wordcounter-cn-card-test',
   answers = {},
 } = {}) {
-  return QUESTION_BANK.map((question, index) => {
+  return LEGACY_TEST_ONLY_QUESTION_BANK.map((question, index) => {
     const answer = answers[question.number] || '1';
     const open = buildQuestionEvent({
       question,
@@ -330,7 +475,7 @@ function wordCounterQualityAnswers() {
 function batchAnswersMarkdown(answers = wordCounterQualityAnswers()) {
   return [
     'Pre-Agent2 Answers:',
-    ...QUESTION_BANK.map((question) => `Q${question.number}: ${answers[question.number] || '1'}`),
+    ...LEGACY_TEST_ONLY_QUESTION_BANK.map((question) => `Q${question.number}: ${answers[question.number] || '1'}`),
     '',
   ].join('\n');
 }
@@ -640,6 +785,63 @@ test('image attachments are treated as design references, not requirement questi
   assert.doesNotMatch(visibleQuestions, /这张图是什么意思|你想怎么用这张图|是否要使用这张图片|图片放不放页面|附件用途确认/);
 });
 
+test('legacy generic Q1-Q12 is not reachable in user-facing runtime source', async () => {
+  const source = await readFile(path.resolve('scripts/run/pre-agent2-telegram-loop.mjs'), 'utf8');
+
+  assert.doesNotMatch(source, /export const QUESTION_BANK/);
+  assert.doesNotMatch(source, /这个工具站最核心要帮用户完成什么任务/);
+  assert.doesNotMatch(source, /第一屏应该优先呈现什么体验/);
+  assert.doesNotMatch(source, /输入和输出模型应该怎么设计/);
+});
+
+test('401K with only complexity standard is not sufficient and asks next highest-value gap', () => {
+  const intake = parseRunInput(fourOhOneKInputMarkdown());
+  const firstPlan = planPreAgent2Questions({
+    intake,
+    attachments: intake.input_assets,
+    answeredEvents: [],
+  });
+  const answeredEvents = [resolvedPlannerQuestion(firstPlan.next_question, '2')];
+  const nextPlan = planPreAgent2Questions({
+    intake,
+    attachments: intake.input_assets,
+    answeredEvents,
+  });
+
+  assert.equal(firstPlan.next_question.id, 'pre-agent2-dynamic-401k-calculator-complexity');
+  assert.equal(nextPlan.information_sufficient, false);
+  assert.equal(nextPlan.next_question.id, 'pre-agent2-dynamic-401k-calculator-default-assumptions');
+  assert.match(nextPlan.why_this_question_matters, /默认假设/);
+  assert.ok(nextPlan.missing_decision_areas.includes('default assumptions'));
+  assert.ok(nextPlan.missing_decision_areas.includes('employer match rules'));
+  assert.ok(nextPlan.estimated_remaining_questions > 1);
+});
+
+test('401K becomes sufficient only after required finance retirement decision areas are answered', () => {
+  const intake = parseRunInput(fourOhOneKInputMarkdown());
+  const answeredEvents = [];
+  let plan = planPreAgent2Questions({
+    intake,
+    attachments: intake.input_assets,
+    answeredEvents,
+  });
+
+  while (!plan.information_sufficient && answeredEvents.length < 30) {
+    answeredEvents.push(resolvedPlannerQuestion(plan.next_question, '2'));
+    plan = planPreAgent2Questions({
+      intake,
+      attachments: intake.input_assets,
+      answeredEvents,
+    });
+  }
+
+  assert.equal(plan.information_sufficient, true);
+  assert.equal(plan.next_question, null);
+  assert.equal(plan.missing_decision_areas.length, 0);
+  assert.ok(answeredEvents.length > 1);
+  assert.ok(answeredEvents.length < 30);
+});
+
 test('resolved 401K complexity answer after SPEC change request asks defaults instead of generating SPEC', async () => {
   const fixture = await makeFixture();
   const sent = [];
@@ -881,6 +1083,30 @@ test('information-sufficient intake can generate SPEC without fixed question min
   assertSpecConfirmationCard(confirmation.message);
   assertSpecConfirmationCard(sent.at(-1));
   assert.doesNotMatch(sent.at(-1), /^Pre-Agent2 Toolsite SPEC 草稿已生成：.*toolsite-spec\.md\s*$/s);
+});
+
+test('smoke preset also does not send fixed generic Q1-Q12', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pre-agent2-smoke-'));
+  const runDir = path.join(root, 'runs', 'smoke-word-counter');
+  const { stdout } = await execFile(
+    process.execPath,
+    [
+      path.resolve('scripts/run/smoke-pre-agent2-batch.mjs'),
+      '--preset',
+      'word-counter',
+      '--run-dir',
+      runDir,
+    ],
+    { cwd: process.cwd() },
+  );
+  const events = await readJsonl(path.join(runDir, 'human-review-events.jsonl'));
+  const combined = `${stdout}\n${events.map((event) => event.message || '').join('\n')}`;
+
+  assert.match(stdout, /PASS smoke Pre-Agent2 batch/);
+  assert.equal(events.some((event) => event.review_type === 'pre_agent2_interview_question'), false);
+  assert.doesNotMatch(combined, /这个工具站最核心要帮用户完成什么任务/);
+  assert.doesNotMatch(combined, /第一屏应该优先呈现什么体验/);
+  assert.doesNotMatch(combined, /输入和输出模型应该怎么设计/);
 });
 
 test('long SPEC confirmation review card is split into Telegram-safe messages', () => {
@@ -1231,7 +1457,7 @@ test('hard cap completion writes SPEC confirmation and does not start Agent2', a
   await setRemoteMode(fixture.remoteStatePath, true);
   await writeFile(path.join(fixture.runDir, 'input.md'), wordCounterInputMarkdown());
 
-  const answered = Array.from({ length: 30 }, (_, index) => QUESTION_BANK[index % QUESTION_BANK.length]).map((question, index) => {
+  const answered = Array.from({ length: 30 }, (_, index) => LEGACY_TEST_ONLY_QUESTION_BANK[index % LEGACY_TEST_ONLY_QUESTION_BANK.length]).map((question, index) => {
     const open = buildQuestionEvent({
       question,
       siteId: 'sample-site',

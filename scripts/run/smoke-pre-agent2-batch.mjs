@@ -78,7 +78,12 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (sentMessages.some((message) => /这个工具站最核心要帮用户完成什么任务|Pre-Agent2 Q\d+/.test(message))) {
+  const legacyQuestionLeaks = [
+    '这个工具站最核心要帮用户' + '完成什么任务',
+    '第一屏应该优先呈现' + '什么体验',
+    '输入和输出模型应该' + '怎么设计',
+  ];
+  if (sentMessages.some((message) => /Pre-Agent2 Q\d+/.test(message) || legacyQuestionLeaks.some((leak) => message.includes(leak)))) {
     console.log('Smoke Pre-Agent2 batch failed: generic fixed questionnaire leaked into user-visible output');
     process.exitCode = 1;
     return;
