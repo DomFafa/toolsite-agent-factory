@@ -9,7 +9,7 @@ Captures the failures this Golden Example prevents in future tool-site runs.
 1. GPT option images are not optional.
    - Block: Agent 2.5 cannot proceed without showing 3 options in the current chat.
 
-2. External design actions need a runner receipt.
+2. External design actions need an evidence runner receipt.
    - Block: Agent 3 cannot start when GPT evidence is only Codex-written markdown or when artifacts changed after `action-receipt.json`.
 
 3. User choice is a gate.

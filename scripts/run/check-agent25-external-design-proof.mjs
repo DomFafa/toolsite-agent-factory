@@ -225,7 +225,7 @@ async function validateReceiptHeader({ runDir, receipt, receiptStat, failures })
     failures.push(`${ACTION_RECEIPT_PATH} action must be design-options`);
   }
   if (!RECEIPT_PASS_PATTERN.test(String(receipt.status || ''))) {
-    failures.push(`${ACTION_RECEIPT_PATH} external action runner status must be pass`);
+    failures.push(`${ACTION_RECEIPT_PATH} external action evidence runner status must be pass`);
   }
   if (receipt.error) {
     failures.push(`${ACTION_RECEIPT_PATH} must not contain error when used as passing evidence`);
@@ -296,7 +296,7 @@ async function requireReceiptArtifact({
     expectedShaSource: ACTION_RECEIPT_PATH,
   });
   if (checked && receiptStat && checked.mtimeMs > receiptStat.mtimeMs + 10) {
-    failures.push(`${relPath} is newer than ${ACTION_RECEIPT_PATH}; rerun the external action runner`);
+    failures.push(`${relPath} is newer than ${ACTION_RECEIPT_PATH}; rerun the external action evidence runner`);
   }
   return checked;
 }

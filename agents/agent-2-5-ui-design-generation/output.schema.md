@@ -69,7 +69,7 @@ generated-designs/
 
 `external-design-evidence/` must contain raw provenance for the GPT/design-model step:
 
-- `action-receipt.json` written by `scripts/run/run-agent25-external-action.mjs`, with status `pass`, the prompt hash, tool metadata, raw-response hash, screenshot hashes, option image hashes, option board hash, and selected target hashes
+- `action-receipt.json` written by the external action evidence runner / receipt-gated proof runner at `scripts/run/run-agent25-external-action.mjs`, with status `pass`, the prompt hash, tool metadata, raw-response hash, screenshot hashes, option image hashes, option board hash, and selected target hashes. This receipt runner records and hashes already captured evidence; it does not by itself automate GPT end to end.
 - `external-response.md` with the verbatim or exported external model response used to create the design directions
 - `conversation-screenshot.png` or an equivalent screenshot of the external design surface showing the generated response
 - `source-provenance.md` mapping each generated option and the selected target screenshots/code to the external response, with any Codex normalization/local edits explicitly identified
@@ -127,7 +127,7 @@ npm run run:agent25-external-action -- \
 node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write
 ```
 
-The runner writes `external-design-evidence/action-receipt.json`; the gate writes `gate-results/agent25-external-design-proof.json`. Agent 3 is blocked unless both the receipt and gate pass. If the runner prints `EXTERNAL_ACTION_FAILED`, stop and request explicit user waiver before any local fallback.
+The external action evidence runner writes `external-design-evidence/action-receipt.json`; the gate writes `gate-results/agent25-external-design-proof.json`. Agent 3 is blocked unless both the receipt and gate pass. If the evidence runner prints `EXTERNAL_ACTION_FAILED`, stop and request explicit user waiver before any local fallback.
 
 `asset-acquisition-report.md` must record:
 

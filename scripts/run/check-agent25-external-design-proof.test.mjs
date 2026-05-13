@@ -106,7 +106,7 @@ async function writeActionReceipt(
         artifact_hashes,
         status,
         error,
-        runner_version: 'agent25-external-action/1',
+        runner_version: 'agent25-external-action-evidence/1',
       },
       null,
       2,
@@ -292,7 +292,7 @@ test('external design proof gate passes real GPT option evidence and explicit us
   assert.equal(result.passed, true);
 });
 
-test('external design proof gate fails when the external action runner receipt is missing', async () => {
+test('external design proof gate fails when the external action evidence runner receipt is missing', async () => {
   const runDir = await makeRun();
   await writePassingFixture(runDir, { writeReceipt: false });
 
@@ -325,7 +325,7 @@ test('external design proof gate fails when critical artifacts are newer than th
   assert.match(result.failures.join('\n'), /newer than.*action-receipt\.json/i);
 });
 
-test('external design proof gate fails when the external action runner failed without a waiver', async () => {
+test('external design proof gate fails when the external action evidence runner failed without a waiver', async () => {
   const runDir = await makeRun();
   await writePassingFixture(runDir, {
     receiptStatus: 'failed',
@@ -334,7 +334,7 @@ test('external design proof gate fails when the external action runner failed wi
 
   const result = await runAgent25ExternalDesignProofGate({ runDir });
   assert.equal(result.passed, false);
-  assert.match(result.failures.join('\n'), /external action runner.*failed|status.*pass/i);
+  assert.match(result.failures.join('\n'), /external action evidence runner.*failed|status.*pass/i);
 });
 
 test('external design proof gate fails Codex-local fake option board and target evidence', async () => {

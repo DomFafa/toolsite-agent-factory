@@ -209,7 +209,7 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false, optionIma
           artifact_hashes: {},
           status: 'pass',
           error: null,
-          runner_version: 'agent25-external-action/1',
+          runner_version: 'agent25-external-action-evidence/1',
         },
         null,
         2,

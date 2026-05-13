@@ -9,7 +9,7 @@ Maps each gate to the failure it blocks.
 | Gate | Required Before | Blocks |
 | --- | --- | --- |
 | `web-access-preflight.json` | Agent 2.5 | Using stale or missing web-access flow |
-| `external-design-evidence/action-receipt.json` | Agent 3 | Codex self-signed external GPT evidence, stale screenshots, or hash-mismatched artifacts |
+| `external-design-evidence/action-receipt.json` | Agent 3 | Codex self-signed external GPT evidence, missing receipt-gated evidence, stale screenshots, or hash-mismatched artifacts |
 | `agent25-external-design-proof.json` | Agent 3 | Codex-local GPT option boards, local target screenshots, fake selected design packages, formal-project 3-minute defaults |
 | `agent25-lineage.json` | Agent 3 | Local fake GPT targets |
 | `selected-assets.json` | Agent 3 | Cropped, missing, or undocumented selected assets |

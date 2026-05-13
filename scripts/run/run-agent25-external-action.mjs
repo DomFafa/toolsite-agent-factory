@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-// Thin external-action runner for Agent2.5. It centralizes evidence hashing so
+// Agent2.5 external action evidence runner / receipt-gated proof runner.
+// This script does not operate ChatGPT end-to-end. It records machine-checkable
+// receipts for raw external responses, screenshots, downloads, and artifacts
+// captured from web-access or another approved external design surface so
 // downstream gates do not have to trust Codex-authored markdown alone.
 import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
@@ -10,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 export const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
 export const EXTERNAL_ACTION_FAILED = 'EXTERNAL_ACTION_FAILED';
-export const RUNNER_VERSION = 'agent25-external-action/1';
+export const RUNNER_VERSION = 'agent25-external-action-evidence/1';
 
 const VALID_ACTIONS = new Set(['design-options', 'selected-assets']);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -201,6 +204,9 @@ function usage() {
     '  node scripts/run/run-agent25-external-action.mjs --run-dir runs/<site-id> --action design-options|selected-assets --prompt <path> \\',
     '    --raw-response <path> --screenshot <path> --artifact <path> [--artifact <path>...] [--download <path>...]',
     '',
+    'This is an external action evidence runner / receipt-gated proof runner.',
+    'It verifies captured evidence and writes a receipt; it does not automate ChatGPT end-to-end.',
+    '',
     `Writes ${ACTION_RECEIPT_PATH} by default.`,
   ].join('\n');
 }
@@ -252,7 +258,7 @@ async function main() {
 
   const receipt = await buildReceipt({ runDir, args, status: 'pass', startedAt });
   const outputPath = await writeReceipt(runDir, args.receiptPath, receipt);
-  console.log(`PASS Agent2.5 external action receipt: ${path.relative(process.cwd(), outputPath)}`);
+  console.log(`PASS Agent2.5 external action evidence receipt: ${path.relative(process.cwd(), outputPath)}`);
 }
 
 const isCli = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
