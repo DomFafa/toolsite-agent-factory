@@ -69,6 +69,8 @@ generated-designs/
 
 `external-design-evidence/` must contain raw provenance for the GPT/design-model step:
 
+- `executor-log.json` written by `scripts/run/execute-agent25-design-options.mjs` when the design-options executor is used, recording the CDP target, prompt submission, generated image detection, saved files, receipt runner result, and proof gate result
+- `submitted-prompt.md` when the executor wraps the input prompt with the Agent2.5 design-options evidence contract before sending it to the approved external design surface
 - `action-receipt.json` written by the external action evidence runner / receipt-gated proof runner at `scripts/run/run-agent25-external-action.mjs`, with status `pass`, the prompt hash, tool metadata, raw-response hash, screenshot hashes, option image hashes, option board hash, and selected target hashes. This receipt runner records and hashes already captured evidence; it does not by itself automate GPT end to end.
 - `external-response.md` with the verbatim or exported external model response used to create the design directions
 - `conversation-screenshot.png` or an equivalent screenshot of the external design surface showing the generated response
@@ -111,10 +113,14 @@ Agent 2.5 must stop after sending the three options to the current chat. Formal 
 Run before Agent 3:
 
 ```bash
+npm run execute:agent25-design-options -- \
+  --run-dir runs/<site-id> \
+  --prompt agent-2-5-output/design-generation-prompt.md
+
 npm run run:agent25-external-action -- \
   --run-dir runs/<site-id> \
   --action design-options \
-  --prompt agent-2-5-output/design-generation-prompt.md \
+  --prompt agent-2-5-output/external-design-evidence/submitted-prompt.md \
   --raw-response agent-2-5-output/external-design-evidence/external-response.md \
   --screenshot agent-2-5-output/external-design-evidence/conversation-screenshot.png \
   --artifact agent-2-5-output/generated-designs/option-a/target/desktop.png \

@@ -30,6 +30,7 @@ Agent 2.5 final A/B/C options must come from an approved high-fidelity visual ge
 - [ ] External prompt avoids hard-to-reproduce effects unless exported as local assets
 - [ ] Missing UI references handled as open exploration, not a skip
 - [ ] At least three design directions generated or hard blocker recorded
+- [ ] If `scripts/run/execute-agent25-design-options.mjs` was used, `external-design-evidence/executor-log.json` records prompt submission, generated image detection, saved raw response, conversation screenshot, generated image, receipt runner result, and proof gate result
 - [ ] `npm run run:agent25-external-action -- --action design-options ...` ran after external capture and wrote `external-design-evidence/action-receipt.json`
 - [ ] The command was treated as an external action evidence runner / receipt-gated proof runner only: it records and hashes captured evidence, and no doc or report claims it fully automated GPT unless separate preflight evidence proves GPT open, prompt submission, generation wait, and image download
 - [ ] `external-design-evidence/action-receipt.json` has `status: pass`, `tool.name: web-access`, prompt hash, raw response hash, conversation screenshot hash, option image hashes, option board hash, and selected target hashes
