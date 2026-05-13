@@ -191,6 +191,31 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false, optionIma
     await writeFile(path.join(evidence, 'source-provenance.md'), '# Source provenance\n\nDecision: PASS\n');
     await writeFile(path.join(evidence, 'selected-design-lineage.md'), '# Selected design lineage\n\nDecision: PASS\n');
     await writeFile(
+      path.join(evidence, 'action-receipt.json'),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          action: 'design-options',
+          run_dir: path.relative(process.cwd(), runDir).replace(/\\/g, '/'),
+          started_at: '2026-05-08T00:00:00.000Z',
+          completed_at: '2026-05-08T00:00:05.000Z',
+          tool: { name: 'web-access', command: 'web-access/scripts/check-deps.sh' },
+          prompt_path: 'agent-2-5-output/design-generation-prompt.md',
+          prompt_sha256: '0'.repeat(64),
+          uploaded_assets: [],
+          screenshots: [],
+          raw_response: null,
+          downloads: [],
+          artifact_hashes: {},
+          status: 'pass',
+          error: null,
+          runner_version: 'agent25-external-action/1',
+        },
+        null,
+        2,
+      ),
+    );
+    await writeFile(
       path.join(evidence, 'external-design-proof.json'),
       JSON.stringify(
         {

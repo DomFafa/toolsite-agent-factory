@@ -41,6 +41,7 @@ const AGENT_2_5_FILES = [
 ];
 
 const AGENT_2_5_EXTERNAL_PROVENANCE_FILES = [
+  'agent-2-5-output/external-design-evidence/action-receipt.json',
   'agent-2-5-output/external-design-evidence/external-design-proof.json',
   'agent-2-5-output/external-design-evidence/external-response.md',
   'agent-2-5-output/external-design-evidence/conversation-screenshot.png',

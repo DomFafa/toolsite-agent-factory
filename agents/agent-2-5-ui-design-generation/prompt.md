@@ -22,6 +22,7 @@ This agent is mandatory for every site, whether or not the user supplied UI refe
 - Do not send secrets, `.env.local`, Cloudflare tokens, email routing values, or private credentials to external LLMs.
 - Do not ask the design model to rewrite SEO strategy or final content. It may reserve layout space for SEO sections, but Agent 2 remains the product/SEO source of truth.
 - Use `web-access` to operate the ChatGPT web UI or another approved authenticated design generation surface.
+- After the external design surface returns results, run `npm run run:agent25-external-action -- --action design-options ...` to write `agent-2-5-output/external-design-evidence/action-receipt.json`. Do not hand-write or summarize this receipt.
 - External GPT source proof is mandatory. Agent 2.5 must prove the three UI options, option board, selected targets, and selected design package came from GPT or an approved external design surface, not Codex local HTML/CSS, manual mockups, reconstructed screenshots, or locally generated targets.
 - User UI references are optional. Their absence must trigger open design exploration, not a skipped design step.
 - Design for codability. Avoid asking the external model for hard-to-reproduce visual effects unless it also exports them as local PNG/SVG assets.
@@ -158,11 +159,12 @@ node scripts/design/import-generated-ui.mjs \
 15. Write an open `agent25-option-selection` human review event whose attachments include `agent-2-5-output/chat-delivery/options-board.png` with `kind: "image"`.
 16. Run `node scripts/run/check-agent25-option-images.mjs --run-dir runs/<site-id> --write`. If `gate-results/agent25-option-images.json` does not pass, stop with `Agent2.5 UI Option Selection is blocked because no reviewable UI images were generated.`
 17. Stop for explicit user selection in the current chat. Formal projects do not allow the 3-minute default path; timeout default is allowed only for test/dry-run and must be recorded as such.
-18. Run `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`. Agent 3 is blocked until `gate-results/agent25-external-design-proof.json` passes.
-19. After the selected option is confirmed, run the mandatory post-selection high-resolution asset acquisition loop and download `selected-option-assets.zip`.
-20. Extract selected high-resolution assets into `agent-2-5-output/selected-design/assets/` and preserve the original zip in `agent-2-5-output/selected-design/downloads/`.
-21. Run `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` when selected assets are wired into the run. Treat failures as design package blockers.
-22. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
+18. Run `npm run run:agent25-external-action -- --run-dir runs/<site-id> --action design-options --prompt agent-2-5-output/design-generation-prompt.md --raw-response agent-2-5-output/external-design-evidence/external-response.md --screenshot agent-2-5-output/external-design-evidence/conversation-screenshot.png --artifact <each GPT option image> --artifact agent-2-5-output/chat-delivery/options-board.png --artifact agent-2-5-output/selected-design/target/desktop.png --artifact agent-2-5-output/selected-design/target/mobile.png`. If it prints `EXTERNAL_ACTION_FAILED`, stop; local fallback requires explicit user waiver.
+19. Run `node scripts/run/check-agent25-external-design-proof.mjs --run-dir runs/<site-id> --write`. Agent 3 is blocked until `gate-results/agent25-external-design-proof.json` passes.
+20. After the selected option is confirmed, run the mandatory post-selection high-resolution asset acquisition loop and download `selected-option-assets.zip`.
+21. Extract selected high-resolution assets into `agent-2-5-output/selected-design/assets/` and preserve the original zip in `agent-2-5-output/selected-design/downloads/`.
+22. Run `node scripts/design/asset-quality-gate.mjs --run-dir runs/<site-id>` when selected assets are wired into the run. Treat failures as design package blockers.
+23. Write a handoff that explicitly states which functionality and SEO work is deferred until after the visual restoration gate.
 
 ## Outputs
 

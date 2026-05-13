@@ -30,6 +30,8 @@ Agent 2.5 final A/B/C options must come from an approved high-fidelity visual ge
 - [ ] External prompt avoids hard-to-reproduce effects unless exported as local assets
 - [ ] Missing UI references handled as open exploration, not a skip
 - [ ] At least three design directions generated or hard blocker recorded
+- [ ] `npm run run:agent25-external-action -- --action design-options ...` ran after external capture and wrote `external-design-evidence/action-receipt.json`
+- [ ] `external-design-evidence/action-receipt.json` has `status: pass`, `tool.name: web-access`, prompt hash, raw response hash, conversation screenshot hash, option image hashes, option board hash, and selected target hashes
 - [ ] `external-design-evidence/external-response.md` is the raw/exported GPT response, not a Codex summary
 - [ ] `external-design-evidence/conversation-screenshot.png` is a real GPT/approved design surface screenshot
 - [ ] `external-design-evidence/source-provenance.md` maps Option A/B/C, selected option, desktop target, and mobile target back to the GPT response or option source image
