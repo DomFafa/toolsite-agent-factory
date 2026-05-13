@@ -20,6 +20,7 @@ const OPTIONS_BOARD_PATH = 'agent-2-5-output/chat-delivery/options-board.png';
 const OPTION_SELECTION_PATH = 'agent-2-5-output/chat-delivery/option-selection.md';
 const SELECTED_DESKTOP_PATH = 'agent-2-5-output/selected-design/target/desktop.png';
 const SELECTED_MOBILE_PATH = 'agent-2-5-output/selected-design/target/mobile.png';
+const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
 
 const OPTION_LABELS = ['Option A', 'Option B', 'Option C'];
 const ALWAYS_FORBIDDEN_SOURCE =
@@ -30,6 +31,8 @@ const EXTERNAL_SOURCE_PATTERN = /gpt|chatgpt|openai|external|approved\s+design\s
 const RAW_EXPORT_PATTERN = /raw|export|verbatim|conversation\s+export|model\s+response/i;
 const CODEX_SUMMARY_PATTERN =
   /^#\s*External Design Evidence\b|generated\s+design\s+directions|submitted\s+prompt\s+target|codex\s+summary|not\s+a\s+raw\s+export/i;
+const RECEIPT_PASS_PATTERN = /^pass$/i;
+const VALID_SHA_PATTERN = /^[a-f0-9]{64}$/i;
 
 function parseArgs(argv) {
   const args = { write: false };
@@ -83,6 +86,14 @@ async function readBufferOptional(filePath) {
   }
 }
 
+async function statOptional(filePath) {
+  try {
+    return await stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
 function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
@@ -108,6 +119,24 @@ function pathValue(record, keys) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
+}
+
+function artifactHashFor(receipt, relPath) {
+  const hashes = receipt?.artifact_hashes || receipt?.artifactHashes;
+  if (hashes && typeof hashes === 'object' && !Array.isArray(hashes)) {
+    const value = hashes[relPath];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  if (Array.isArray(hashes)) {
+    const match = hashes.find((entry) => entry?.path === relPath || entry?.relPath === relPath);
+    if (typeof match?.sha256 === 'string' && match.sha256.trim()) return match.sha256.trim();
+  }
+  return '';
+}
+
+function receiptScreenshotFor(receipt, relPath) {
+  const screenshots = Array.isArray(receipt?.screenshots) ? receipt.screenshots : [];
+  return screenshots.find((screenshot) => pathValue(screenshot, ['path']) === relPath) || null;
 }
 
 function normalizeOptionId(value) {
@@ -146,6 +175,7 @@ async function checkFile({
   minBytes = 1,
   requirePng = false,
   expectedSha = '',
+  expectedShaSource = PROOF_PATH,
 }) {
   if (!relPath) {
     failures.push(`missing ${label} path in ${PROOF_PATH}`);
@@ -165,8 +195,8 @@ async function checkFile({
   const buffer = await readBufferOptional(absolutePath);
   if (requirePng && !isPng(buffer)) failures.push(`${relPath} must be a PNG screenshot/image`);
   const actualSha = buffer ? sha256(buffer) : '';
-  if (expectedSha && actualSha !== expectedSha) failures.push(`${relPath} sha256 does not match ${PROOF_PATH}`);
-  return { relPath, sha256: actualSha, size: fileStat.size };
+  if (expectedSha && actualSha !== expectedSha) failures.push(`${expectedShaSource} ${relPath} sha256 does not match actual file`);
+  return { relPath, sha256: actualSha, size: fileStat.size, mtimeMs: fileStat.mtimeMs };
 }
 
 function requireTextContains({ text, pattern, label, failures }) {
@@ -181,9 +211,94 @@ function requireNoForbidden({ text, label, failures, production }) {
 }
 
 function requireSha(record, label, failures) {
-  if (!/^[a-f0-9]{64}$/i.test(String(record?.sha256 || ''))) {
+  if (!VALID_SHA_PATTERN.test(String(record?.sha256 || ''))) {
     failures.push(`${PROOF_PATH} ${label}.sha256 is required`);
   }
+}
+
+async function validateReceiptHeader({ runDir, receipt, receiptStat, failures }) {
+  if (!receipt) {
+    failures.push(`missing or invalid ${ACTION_RECEIPT_PATH}`);
+    return false;
+  }
+  if (receipt.action !== 'design-options') {
+    failures.push(`${ACTION_RECEIPT_PATH} action must be design-options`);
+  }
+  if (!RECEIPT_PASS_PATTERN.test(String(receipt.status || ''))) {
+    failures.push(`${ACTION_RECEIPT_PATH} external action evidence runner status must be pass`);
+  }
+  if (receipt.error) {
+    failures.push(`${ACTION_RECEIPT_PATH} must not contain error when used as passing evidence`);
+  }
+  if (!String(receipt.runner_version || '').trim()) {
+    failures.push(`${ACTION_RECEIPT_PATH} runner_version is required`);
+  }
+  if (!/web-access/i.test(`${receipt.tool?.name || ''} ${receipt.tool?.command || ''}`)) {
+    failures.push(`${ACTION_RECEIPT_PATH} tool must identify repo-local web-access`);
+  }
+  if (!String(receipt.run_dir || '').trim()) {
+    failures.push(`${ACTION_RECEIPT_PATH} run_dir is required`);
+  }
+  const startedAt = Date.parse(receipt.started_at || '');
+  const completedAt = Date.parse(receipt.completed_at || '');
+  if (!Number.isFinite(startedAt)) failures.push(`${ACTION_RECEIPT_PATH} started_at must be an ISO timestamp`);
+  if (!Number.isFinite(completedAt)) failures.push(`${ACTION_RECEIPT_PATH} completed_at must be an ISO timestamp`);
+  if (Number.isFinite(startedAt) && Number.isFinite(completedAt) && completedAt < startedAt) {
+    failures.push(`${ACTION_RECEIPT_PATH} completed_at must not be before started_at`);
+  }
+  if (!receiptStat?.isFile?.()) {
+    failures.push(`${ACTION_RECEIPT_PATH} must be a file`);
+  }
+
+  const promptPath = pathValue(receipt, ['prompt_path', 'promptPath']);
+  if (!promptPath) {
+    failures.push(`${ACTION_RECEIPT_PATH} prompt_path is required`);
+  } else if (!VALID_SHA_PATTERN.test(String(receipt.prompt_sha256 || ''))) {
+    failures.push(`${ACTION_RECEIPT_PATH} prompt_sha256 is required`);
+  } else {
+    await checkFile({
+      runDir,
+      relPath: promptPath,
+      label: 'external action prompt',
+      failures,
+      minBytes: 20,
+      expectedSha: receipt.prompt_sha256,
+      expectedShaSource: ACTION_RECEIPT_PATH,
+    });
+  }
+  return RECEIPT_PASS_PATTERN.test(String(receipt.status || ''));
+}
+
+async function requireReceiptArtifact({
+  runDir,
+  receipt,
+  receiptStat,
+  relPath,
+  label,
+  failures,
+  minBytes = 1,
+  requirePng = false,
+}) {
+  if (!receipt || !relPath) return null;
+  const expectedSha = artifactHashFor(receipt, relPath);
+  if (!VALID_SHA_PATTERN.test(expectedSha)) {
+    failures.push(`${ACTION_RECEIPT_PATH} missing artifact hash for ${relPath}`);
+    return null;
+  }
+  const checked = await checkFile({
+    runDir,
+    relPath,
+    label,
+    failures,
+    minBytes,
+    requirePng,
+    expectedSha,
+    expectedShaSource: ACTION_RECEIPT_PATH,
+  });
+  if (checked && receiptStat && checked.mtimeMs > receiptStat.mtimeMs + 10) {
+    failures.push(`${relPath} is newer than ${ACTION_RECEIPT_PATH}; rerun the external action evidence runner`);
+  }
+  return checked;
 }
 
 function optionById(options, id) {
@@ -196,6 +311,9 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
   const failures = [];
   const evidenceDir = path.join(absoluteRunDir, 'agent-2-5-output/external-design-evidence');
   const proof = await readJsonOptional(path.join(absoluteRunDir, PROOF_PATH));
+  const receiptPath = path.join(absoluteRunDir, ACTION_RECEIPT_PATH);
+  const receipt = await readJsonOptional(receiptPath);
+  const receiptStat = await statOptional(receiptPath);
   const externalResponse = await readTextOptional(path.join(absoluteRunDir, EXTERNAL_RESPONSE_PATH));
   const sourceProvenance = await readTextOptional(path.join(absoluteRunDir, SOURCE_PROVENANCE_PATH));
   const selectedLineage = await readTextOptional(path.join(absoluteRunDir, SELECTED_LINEAGE_PATH));
@@ -204,6 +322,7 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
   if (!proof) {
     failures.push(`missing or invalid ${PROOF_PATH}`);
   }
+  await validateReceiptHeader({ runDir: absoluteRunDir, receipt, receiptStat, failures });
 
   const mode = proof?.mode || 'production';
   const production = isProductionMode(mode);
@@ -253,6 +372,18 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
     minBytes: 200,
     expectedSha: externalResponseRecord.sha256,
   });
+  if (receipt?.raw_response && pathValue(receipt.raw_response, ['path']) !== EXTERNAL_RESPONSE_PATH) {
+    failures.push(`${ACTION_RECEIPT_PATH} raw_response.path must map to ${EXTERNAL_RESPONSE_PATH}`);
+  }
+  await requireReceiptArtifact({
+    runDir: absoluteRunDir,
+    receipt,
+    receiptStat,
+    relPath: EXTERNAL_RESPONSE_PATH,
+    label: 'runner-captured raw external GPT response',
+    failures,
+    minBytes: 200,
+  });
 
   const screenshotRecord = proof?.conversationScreenshot || proof?.conversation || {};
   requireSha(screenshotRecord, 'conversationScreenshot', failures);
@@ -270,6 +401,19 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
     minBytes: 10_000,
     requirePng: true,
     expectedSha: screenshotRecord.sha256,
+  });
+  if (!receiptScreenshotFor(receipt, CONVERSATION_SCREENSHOT_PATH)) {
+    failures.push(`${ACTION_RECEIPT_PATH} screenshots must include ${CONVERSATION_SCREENSHOT_PATH}`);
+  }
+  await requireReceiptArtifact({
+    runDir: absoluteRunDir,
+    receipt,
+    receiptStat,
+    relPath: CONVERSATION_SCREENSHOT_PATH,
+    label: 'runner-captured GPT conversation screenshot',
+    failures,
+    minBytes: 10_000,
+    requirePng: true,
   });
 
   if (!sourceProvenance.trim()) {
@@ -329,6 +473,16 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
       requirePng: true,
       expectedSha: option.sha256,
     });
+    await requireReceiptArtifact({
+      runDir: absoluteRunDir,
+      receipt,
+      receiptStat,
+      relPath: imagePath,
+      label: `${label} runner receipt option image`,
+      failures,
+      minBytes: 10_000,
+      requirePng: true,
+    });
     if (checked) {
       optionEvidence.push({ label, imagePath, sha256: checked.sha256 });
       if (sourceProvenance && !sourceProvenance.includes(checked.sha256) && !sourceProvenance.includes(imagePath)) {
@@ -363,6 +517,16 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
     minBytes: 10_000,
     requirePng: true,
     expectedSha: boardRecord.sha256,
+  });
+  await requireReceiptArtifact({
+    runDir: absoluteRunDir,
+    receipt,
+    receiptStat,
+    relPath: OPTIONS_BOARD_PATH,
+    label: 'runner receipt GPT option board',
+    failures,
+    minBytes: 10_000,
+    requirePng: true,
   });
 
   if (!optionSelection.trim()) {
@@ -422,6 +586,16 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
       requirePng: true,
       expectedSha: record.sha256,
     });
+    await requireReceiptArtifact({
+      runDir: absoluteRunDir,
+      receipt,
+      receiptStat,
+      relPath: canonicalPath,
+      label: `${name} runner receipt selected target`,
+      failures,
+      minBytes: 10_000,
+      requirePng: true,
+    });
   }
 
   if (!selectedLineage.trim()) {
@@ -468,6 +642,7 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
       selectedDesignLineage: SELECTED_LINEAGE_PATH,
       optionsBoard: OPTIONS_BOARD_PATH,
       optionSelection: OPTION_SELECTION_PATH,
+      actionReceipt: ACTION_RECEIPT_PATH,
     },
   });
 }

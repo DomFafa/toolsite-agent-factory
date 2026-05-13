@@ -7,6 +7,8 @@ import test from 'node:test';
 
 import { runAgent25ExternalDesignProofGate } from './check-agent25-external-design-proof.mjs';
 
+const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
+
 function pngBuffer(seed = 'a') {
   const header = Buffer.alloc(33);
   header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
@@ -42,7 +44,88 @@ async function writePng(runDir, relPath, seed) {
   return sha256(buffer);
 }
 
-async function writePassingFixture(runDir, { mode = 'production', selectionSource = 'current-chat-user', selectionText } = {}) {
+async function writeActionReceipt(
+  runDir,
+  {
+    status = 'pass',
+    error = null,
+    promptPath = 'agent-2-5-output/design-generation-prompt.md',
+    uploadedAssets = [],
+    rawResponsePath,
+    conversationPath,
+    optionsBoardPath,
+    optionPaths,
+    desktopPath,
+    mobilePath,
+    artifactOverrides = {},
+  },
+) {
+  await writeFile(
+    path.join(runDir, promptPath),
+    [
+      '# Design Generation Prompt',
+      '',
+      'Generate three external GPT UI options for this toolsite.',
+    ].join('\n'),
+  );
+  const artifactPaths = [
+    rawResponsePath,
+    conversationPath,
+    optionsBoardPath,
+    ...Object.values(optionPaths),
+    desktopPath,
+    mobilePath,
+  ];
+  const artifact_hashes = {};
+  for (const relPath of artifactPaths) {
+    const buffer = await readFile(path.join(runDir, relPath));
+    artifact_hashes[relPath] = sha256(buffer);
+  }
+  Object.assign(artifact_hashes, artifactOverrides);
+  const promptSha = sha256(await readFile(path.join(runDir, promptPath)));
+  await writeFile(
+    path.join(runDir, ACTION_RECEIPT_PATH),
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        action: 'design-options',
+        run_dir: path.relative(process.cwd(), runDir).replace(/\\/g, '/'),
+        started_at: '2026-05-11T00:00:00.000Z',
+        completed_at: '2026-05-11T00:00:05.000Z',
+        tool: {
+          name: 'web-access',
+          surface: 'ChatGPT web UI',
+          command: 'web-access/scripts/check-deps.sh',
+        },
+        prompt_path: promptPath,
+        prompt_sha256: promptSha,
+        uploaded_assets: uploadedAssets,
+        screenshots: [{ path: conversationPath, sha256: artifact_hashes[conversationPath], kind: 'conversation' }],
+        raw_response: { path: rawResponsePath, sha256: artifact_hashes[rawResponsePath], kind: 'raw exported model response' },
+        downloads: [],
+        artifact_hashes,
+        status,
+        error,
+        runner_version: 'agent25-external-action-evidence/1',
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function writePassingFixture(
+  runDir,
+  {
+    mode = 'production',
+    selectionSource = 'current-chat-user',
+    selectionText,
+    writeReceipt = true,
+    receiptStatus = 'pass',
+    receiptError = null,
+    receiptArtifactOverrides = {},
+  } = {},
+) {
   const externalResponsePath = 'agent-2-5-output/external-design-evidence/external-response.md';
   const conversationPath = 'agent-2-5-output/external-design-evidence/conversation-screenshot.png';
   const sourceProvenancePath = 'agent-2-5-output/external-design-evidence/source-provenance.md';
@@ -185,6 +268,20 @@ async function writePassingFixture(runDir, { mode = 'production', selectionSourc
       2,
     ),
   );
+
+  if (writeReceipt) {
+    await writeActionReceipt(runDir, {
+      status: receiptStatus,
+      error: receiptError,
+      rawResponsePath: externalResponsePath,
+      conversationPath,
+      optionsBoardPath,
+      optionPaths,
+      desktopPath,
+      mobilePath,
+      artifactOverrides: receiptArtifactOverrides,
+    });
+  }
 }
 
 test('external design proof gate passes real GPT option evidence and explicit user selection', async () => {
@@ -193,6 +290,51 @@ test('external design proof gate passes real GPT option evidence and explicit us
 
   const result = await runAgent25ExternalDesignProofGate({ runDir });
   assert.equal(result.passed, true);
+});
+
+test('external design proof gate fails when the external action evidence runner receipt is missing', async () => {
+  const runDir = await makeRun();
+  await writePassingFixture(runDir, { writeReceipt: false });
+
+  const result = await runAgent25ExternalDesignProofGate({ runDir });
+  assert.equal(result.passed, false);
+  assert.match(result.failures.join('\n'), /action-receipt\.json/);
+});
+
+test('external design proof gate fails when receipt hashes do not match artifacts', async () => {
+  const runDir = await makeRun();
+  await writePassingFixture(runDir, {
+    receiptArtifactOverrides: {
+      'agent-2-5-output/external-design-evidence/external-response.md': '0'.repeat(64),
+    },
+  });
+
+  const result = await runAgent25ExternalDesignProofGate({ runDir });
+  assert.equal(result.passed, false);
+  assert.match(result.failures.join('\n'), /action-receipt\.json.*external-response\.md.*sha256/i);
+});
+
+test('external design proof gate fails when critical artifacts are newer than the receipt', async () => {
+  const runDir = await makeRun();
+  await writePassingFixture(runDir);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await writeFile(path.join(runDir, 'agent-2-5-output/chat-delivery/options-board.png'), pngBuffer('board'));
+
+  const result = await runAgent25ExternalDesignProofGate({ runDir });
+  assert.equal(result.passed, false);
+  assert.match(result.failures.join('\n'), /newer than.*action-receipt\.json/i);
+});
+
+test('external design proof gate fails when the external action evidence runner failed without a waiver', async () => {
+  const runDir = await makeRun();
+  await writePassingFixture(runDir, {
+    receiptStatus: 'failed',
+    receiptError: 'web-access preflight failed',
+  });
+
+  const result = await runAgent25ExternalDesignProofGate({ runDir });
+  assert.equal(result.passed, false);
+  assert.match(result.failures.join('\n'), /external action evidence runner.*failed|status.*pass/i);
 });
 
 test('external design proof gate fails Codex-local fake option board and target evidence', async () => {
