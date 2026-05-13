@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { createDesktopRun, DESKTOP_RUN_CREATED } from './create-run.mjs';
 import {
+  AGENT2_COMPLETE,
   DEPLOY_REQUIRES_APPROVAL,
   HUMAN_REVIEW_REQUIRED,
   NO_STAGE_RUNNER_CONFIGURED,
@@ -133,7 +134,7 @@ test('desktop continue refuses to skip unconfirmed SPEC', async () => {
   assert.equal((await readDesktopState(created.runDir)).stage, 'spec-review');
 });
 
-test('desktop confirmation advances to unconfigured Agent2 runner instead of fake ready', async () => {
+test('desktop:agent2 writes Agent2 outputs, runs compliance, and stops before Agent2.5', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent2-'));
   const inputPath = await makeInput(root);
   const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
@@ -148,8 +149,42 @@ test('desktop confirmation advances to unconfigured Agent2 runner instead of fak
   assert.equal((await readDesktopState(created.runDir)).stage, 'agent2');
 
   const result = await runDesktopStage({ runDir: created.runDir });
-  assert.equal(result.code, NO_STAGE_RUNNER_CONFIGURED);
-  assert.equal(result.stage, 'agent2');
+  assert.equal(result.code, AGENT2_COMPLETE);
+  assert.equal(result.stage, 'agent25');
+  assert.equal((await readDesktopState(created.runDir)).stage, 'agent25');
+
+  for (const filePath of [
+    'agent-2-output/site-brief.md',
+    'agent-2-output/tool-spec.md',
+    'agent-2-output/content-plan.md',
+    'agent-2-output/seo-plan.md',
+    'agent-2-output/page-plan.md',
+    'agent-2-output/ui-reference-dossier.md',
+    'agent-2-output/design-generation-input.md',
+    'agent-2-output/brief-compliance-summary.md',
+    'gate-results/pre-agent2-toolsite-spec.json',
+    'gate-results/page-plan.json',
+    'gate-results/agent2-brief-compliance.json',
+  ]) {
+    assert.equal(await exists(path.join(created.runDir, filePath)), true, `${filePath} should exist`);
+  }
+
+  const compliance = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent2-brief-compliance.json'), 'utf8'));
+  assert.equal(compliance.passed, true);
+  assert.equal(compliance.can_proceed_to_agent25, true);
+});
+
+test('desktop:agent2 refuses to run before SPEC confirmation', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent2-unconfirmed-'));
+  const inputPath = await makeInput(root);
+  const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
+  await runDesktopStage({ runDir: created.runDir });
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'agent2' });
+
+  assert.equal(result.code, HUMAN_REVIEW_REQUIRED);
+  assert.equal(result.stage, 'spec-review');
+  assert.equal(await exists(path.join(created.runDir, 'agent-2-output/site-brief.md')), false);
 });
 
 test('desktop deploy refuses without pre_deploy_approval', async () => {
@@ -186,4 +221,3 @@ test('desktop flow scripts do not use Hermes, Telegram senders, or remote worker
   const combined = (await Promise.all(files.map((file) => readFile(file, 'utf8')))).join('\n');
   assert.doesNotMatch(combined, /toolsite-inbox|Hermes|sendTelegramMessage|remote-toolsite-worker|remote:toolsite-worker/i);
 });
-

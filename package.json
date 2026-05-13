@@ -37,6 +37,7 @@
     "continue:human-review": "node scripts/run/continue-human-review.mjs",
     "run:toolsite": "node scripts/run/run-toolsite-orchestrator.mjs",
     "remote:toolsite-worker": "node scripts/run/remote-toolsite-worker.mjs",
+    "desktop:intake": "node scripts/desktop/intake.mjs",
     "desktop:create-run": "node scripts/desktop/create-run.mjs",
     "desktop:pre-agent2": "node scripts/desktop/run.mjs --stage pre-agent2",
     "desktop:agent2": "node scripts/desktop/run.mjs --stage agent2",
