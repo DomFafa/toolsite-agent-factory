@@ -2,6 +2,8 @@
 
 Production run behavior is governed by `docs/production-run-master-contract.md`. If this workflow conflicts with the contract, the contract wins.
 
+Desktop-first production flow is the current primary workflow. Use `docs/desktop-first-flow.md` and the `desktop:*` scripts for new production runs. Telegram / Hermes / remote worker support is a secondary optional enhancement and must not be required for the desktop-first flow.
+
 Standard flow reference: before starting any new toolsite run, Codex must read `examples/typing-test-online/README.md` and `examples/typing-test-online/workflow-example.md`.
 
 ## Phase 0: Prepare run folder
@@ -94,9 +96,9 @@ The command reads `runs/<site-id>/human-review-events.jsonl` and `/Users/dom/age
 
 If there is exactly one current open review in the run, Codex may use the newest unconsumed Hermes inbox message whose `created_at` is at or after that open event's `created_at`. If there are multiple current open reviews, the Hermes inbox message must include the target review id using `review:<review-id>`, for example `review:agent25-option-selection Choose Option B`. Consumed inbox messages are tracked by `inbox_message_key` in resolved events and must not be reused.
 
-## Mobile-controlled production run
+## Optional mobile-controlled production run
 
-For a remote production run, keep the computer-side orchestrator running and use Telegram only for human decisions:
+The remote production run remains optional. It is not the current desktop-first main flow. For a remote production run, keep the computer-side orchestrator running and use Telegram only for human decisions:
 
 ```bash
 npm run run:toolsite -- --run-dir runs/<site-id> --remote
