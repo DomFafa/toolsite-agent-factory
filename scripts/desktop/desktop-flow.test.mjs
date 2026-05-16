@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import crypto from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -168,6 +169,13 @@ function validPngBuffer(width, height) {
     pngChunk('IDAT', deflateSync(Buffer.concat(rows))),
     pngChunk('IEND'),
   ]);
+}
+
+function pngDimensions(buffer) {
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+  };
 }
 
 async function writePng(runDir, relPath, seed) {
@@ -1707,6 +1715,57 @@ test('desktop:qa repair loop does not let repair task hand-edit gate results', a
   assert.equal(pagePlan.passed, true);
   assert.match(repairLog, /Repair real artifacts for page-plan/);
   assert.match(repairLog, /do not edit gate-results manually/);
+});
+
+test('desktop:qa regenerates stale visual restoration screenshots before rerunning similarity', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-stale-visual-restoration-'));
+  const created = await makeQaReadyRun(root);
+  const target = validPngBuffer(558, 941);
+  const staleRestored = validPngBuffer(1672, 941);
+  await writeFile(path.join(created.runDir, 'agent-2-5-output/selected-design/target/desktop.png'), target);
+  await writeFile(path.join(created.runDir, 'agent-2-5-output/selected-design/target/mobile.png'), target);
+  await mkdir(path.join(created.runDir, 'agent-3-output/final-screenshots'), { recursive: true });
+  await writeFile(path.join(created.runDir, 'agent-3-output/final-screenshots/desktop.png'), staleRestored);
+  await writeFile(path.join(created.runDir, 'agent-3-output/final-screenshots/mobile.png'), staleRestored);
+
+  const runQaGate = passingQaGateRunner({
+    fail: {
+      'visual-restoration-similarity': ({ runDir, gate, attempt }) => {
+        if (attempt === 0) {
+          return mockGateResult(runDir, gate, {
+            passed: false,
+            failures: [
+              'STALE_VISUAL_RESTORATION_ARTIFACT: desktop restored screenshot dimensions 1672x941 differ from target 558x941',
+            ],
+          });
+        }
+        const desktop = pngDimensions(readFileSync(path.join(runDir, 'agent-3-output/final-screenshots/desktop.png')));
+        return mockGateResult(runDir, gate, {
+          passed: desktop.width === 558 && desktop.height === 941,
+          failures: [`desktop dimensions ${desktop.width}x${desktop.height}`],
+        });
+      },
+    },
+  });
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate,
+  });
+  const desktop = await readFile(path.join(created.runDir, 'agent-3-output/final-screenshots/desktop.png'));
+  const mobile = await readFile(path.join(created.runDir, 'agent-3-output/final-screenshots/mobile.png'));
+  const manifest = JSON.parse(await readFile(
+    path.join(created.runDir, 'agent-3-output/final-screenshots/restoration-manifest.json'),
+    'utf8',
+  ));
+
+  assert.equal(result.code, QA_COMPLETE);
+  assert.deepEqual(pngDimensions(desktop), { width: 558, height: 941 });
+  assert.deepEqual(pngDimensions(mobile), { width: 558, height: 941 });
+  assert.equal(manifest.targets.desktop.target_sha256, sha256(target));
+  assert.equal(manifest.targets.desktop.restored_sha256, sha256(desktop));
+  assert.deepEqual(runQaGate.calls.filter((call) => call.gate === 'visual-restoration-similarity').map((call) => call.attempt), [0, 1]);
 });
 
 test('desktop deploy refuses without pre_deploy_approval', async () => {

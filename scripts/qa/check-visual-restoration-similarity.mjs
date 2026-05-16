@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { resultFromFailures, writeGateResult } from '../run/gate-result-utils.mjs';
+
+export const STALE_VISUAL_RESTORATION_ARTIFACT = 'STALE_VISUAL_RESTORATION_ARTIFACT';
+export const VISUAL_TARGET_DIMENSION_MISMATCH = 'VISUAL_TARGET_DIMENSION_MISMATCH';
 
 function parseArgs(argv) {
   const args = { write: false, threshold: 0.9 };
@@ -60,6 +64,91 @@ function parseJsOutput(stdout) {
 async function imageDataUri(filePath) {
   const data = await readFile(filePath);
   return `data:image/png;base64,${data.toString('base64')}`;
+}
+
+function sha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+function pngInfo(buffer) {
+  const signature = '89504e470d0a1a0a';
+  if (!Buffer.isBuffer(buffer) || buffer.length < 24 || buffer.subarray(0, 8).toString('hex') !== signature) {
+    throw new Error('invalid PNG signature');
+  }
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+    sha256: sha256(buffer),
+    size: buffer.length,
+  };
+}
+
+async function imageInfo(filePath) {
+  return pngInfo(await readFile(filePath));
+}
+
+async function readJsonOptional(filePath) {
+  try {
+    return JSON.parse(await readFile(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function manifestTarget(manifest, name) {
+  return manifest?.targets?.[name] || manifest?.[name] || {};
+}
+
+async function visualArtifactDetails({ runDir, sourcePairs }) {
+  const manifest = await readJsonOptional(path.join(runDir, 'agent-3-output/final-screenshots/restoration-manifest.json'));
+  const artifacts = [];
+  const staleArtifacts = [];
+
+  for (const pair of sourcePairs) {
+    const target = await imageInfo(pair.targetPath);
+    const restored = await imageInfo(pair.restoredPath);
+    const manifestRecord = manifestTarget(manifest, pair.name);
+    const targetRelPath = path.relative(runDir, pair.targetPath);
+    const restoredRelPath = path.relative(runDir, pair.restoredPath);
+    const artifact = {
+      name: pair.name,
+      targetPath: targetRelPath,
+      restoredPath: restoredRelPath,
+      target,
+      restored,
+      manifestTargetSha256: manifestRecord.target_sha256 || manifestRecord.targetSha256 || '',
+      manifestTargetDimensions: manifestRecord.target_dimensions || manifestRecord.targetDimensions || null,
+    };
+    artifacts.push(artifact);
+
+    if (target.width !== restored.width || target.height !== restored.height) {
+      staleArtifacts.push({
+        name: pair.name,
+        code: STALE_VISUAL_RESTORATION_ARTIFACT,
+        reason: `${pair.name}: restored screenshot dimensions ${restored.width}x${restored.height} differ from target ${target.width}x${target.height}`,
+      });
+    }
+    if (artifact.manifestTargetSha256 && artifact.manifestTargetSha256 !== target.sha256) {
+      staleArtifacts.push({
+        name: pair.name,
+        code: STALE_VISUAL_RESTORATION_ARTIFACT,
+        reason: `${pair.name}: target sha256 changed since restored screenshot was generated`,
+      });
+    }
+    const manifestDimensions = artifact.manifestTargetDimensions;
+    if (
+      manifestDimensions &&
+      (Number(manifestDimensions.width) !== target.width || Number(manifestDimensions.height) !== target.height)
+    ) {
+      staleArtifacts.push({
+        name: pair.name,
+        code: STALE_VISUAL_RESTORATION_ARTIFACT,
+        reason: `${pair.name}: target dimensions changed since restored screenshot was generated`,
+      });
+    }
+  }
+
+  return { artifacts, staleArtifacts };
 }
 
 function compareHtml(pairs) {
@@ -158,6 +247,27 @@ export async function runVisualRestorationSimilarityGate({ runDir, threshold = 0
 
   let details = { results: [], overall: 0 };
   try {
+    const artifactDetails = await visualArtifactDetails({ runDir: absoluteRunDir, sourcePairs });
+    details = {
+      ...details,
+      artifacts: artifactDetails.artifacts,
+      staleArtifacts: artifactDetails.staleArtifacts,
+    };
+    if (artifactDetails.staleArtifacts.length > 0) {
+      failures.push(...artifactDetails.staleArtifacts.map((artifact) => `${artifact.code}: ${artifact.reason}`));
+      return resultFromFailures({
+        gate: 'visual-restoration-similarity',
+        runDir: absoluteRunDir,
+        failures,
+        details,
+        evidence,
+      });
+    }
+  } catch (error) {
+    failures.push(`visual restoration artifact precheck failed: ${error.message}`);
+  }
+
+  try {
     const pairs = [];
     for (const pair of sourcePairs) {
       pairs.push({
@@ -182,13 +292,14 @@ export async function runVisualRestorationSimilarityGate({ runDir, threshold = 0
   }
 
   for (const result of details.results || []) {
-    if (result.similarity < threshold) {
-      failures.push(`${result.name}: similarity ${Math.round(result.similarity * 100)}% below ${Math.round(threshold * 100)}%`);
-    }
     if (result.width !== result.restoredWidth || result.height !== result.restoredHeight) {
       failures.push(
-        `${result.name}: restored screenshot dimensions ${result.restoredWidth}x${result.restoredHeight} differ from target ${result.width}x${result.height}`,
+        `${VISUAL_TARGET_DIMENSION_MISMATCH}: ${result.name}: restored screenshot dimensions ${result.restoredWidth}x${result.restoredHeight} differ from target ${result.width}x${result.height}`,
       );
+      continue;
+    }
+    if (result.similarity < threshold) {
+      failures.push(`${result.name}: similarity ${Math.round(result.similarity * 100)}% below ${Math.round(threshold * 100)}%`);
     }
   }
   if ((details.results || []).length !== sourcePairs.length) {
