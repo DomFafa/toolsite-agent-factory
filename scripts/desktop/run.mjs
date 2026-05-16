@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,7 @@ export const DESKTOP_STAGE_DONE = 'DESKTOP_STAGE_DONE';
 export const DEPLOY_REQUIRES_APPROVAL = 'DEPLOY_REQUIRES_APPROVAL';
 export const AGENT2_COMPLETE = 'AGENT2_COMPLETE';
 export const AGENT2_COMPLIANCE_FAILED = 'AGENT2_COMPLIANCE_FAILED';
+export const DESKTOP_PRECONDITION_FAILED = 'DESKTOP_PRECONDITION_FAILED';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
@@ -28,6 +29,8 @@ const STATE_FILE = 'desktop-run-state.json';
 const EVENT_FILE = 'human-review-events.jsonl';
 
 const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2']);
+const AGENT2_ALLOWED_CURRENT_STAGES = new Set(['spec-review', 'agent2']);
+const ASSET_REFERENCE_PURPOSES = new Set(['design_reference', 'illustration_reference']);
 
 function nowIso() {
   return new Date().toISOString();
@@ -54,6 +57,15 @@ function parseArgs(argv) {
   }
   if (!args.help && !args.runDir) throw new Error('Usage: node scripts/desktop/run.mjs --run-dir runs/<site-id> [--stage <stage>]');
   return args;
+}
+
+async function exists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function readOptional(filePath) {
@@ -161,6 +173,29 @@ async function writeGateResult(runDir, fileName, result) {
   await writeFile(path.join(runDir, 'gate-results', fileName), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
 }
 
+function gatePassed(result) {
+  return Boolean(result && result.status === 'pass' && result.passed === true);
+}
+
+function isDesktopProductionRun(meta) {
+  return Boolean(
+    meta &&
+    meta.mode === 'desktop' &&
+    meta.run_type === 'production' &&
+    meta.deployable === true,
+  );
+}
+
+async function blockAgent2(runDir, state, { blockingReason, nextAction, now = nowIso } = {}) {
+  await writeDesktopState(runDir, {
+    ...state,
+    stage: 'agent2',
+    next_action: nextAction || 'repair desktop:agent2 input before rerunning',
+    blocking_reason: blockingReason,
+    updated_at: now(),
+  });
+}
+
 function stripMarkdown(value) {
   return String(value || '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
@@ -188,7 +223,7 @@ function findLabeledValue(text, aliases) {
   return '';
 }
 
-function extractSpecFacts(specText, runDir) {
+function extractSpecFacts(specText) {
   const keyword = findLabeledValue(specText, ['keyword', 'primary keyword', '关键词']) || 'current tool';
   const targetDomain = findLabeledValue(specText, ['target domain', 'domain', '目标域名']) || 'target domain';
   const uiReference = findLabeledValue(specText, ['ui reference', 'ui 参考']) || 'confirmed UI direction';
@@ -196,13 +231,127 @@ function extractSpecFacts(specText, runDir) {
   const extraNotes =
     findLabeledValue(specText, ['extra ideas', 'constraints', 'mimic points', '额外想法', '限制', '模仿点']) ||
     'confirmed Toolsite SPEC constraints';
-  const inputAssetLines = specText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /input-assets\//i.test(line))
-    .map((line) => line.replace(new RegExp(`^${runDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?`), ''));
 
-  return { keyword, targetDomain, uiReference, uxReference, extraNotes, inputAssetLines };
+  return { keyword, targetDomain, uiReference, uxReference, extraNotes };
+}
+
+function normalizeRunAssetPath(value) {
+  let normalized = stripMarkdown(value)
+    .replace(/\\/g, '/')
+    .replace(/[),.;:：，。]+$/g, '')
+    .trim();
+  const marker = 'input-assets/';
+  const markerIndex = normalized.indexOf(marker);
+  if (markerIndex >= 0) normalized = normalized.slice(markerIndex);
+  normalized = normalized.replace(/^\.?\//, '');
+  if (!normalized.startsWith(marker)) return '';
+  return normalized;
+}
+
+function purposeFromText(value, fallback = 'design_reference') {
+  const text = String(value || '');
+  if (/illustration_reference/i.test(text)) return 'illustration_reference';
+  if (/design_reference/i.test(text)) return 'design_reference';
+  if (/screenshot_reference/i.test(text)) return 'screenshot_reference';
+  return fallback;
+}
+
+function addAsset(map, asset) {
+  const runPath = normalizeRunAssetPath(asset?.run_path || asset?.runPath || asset?.path || '');
+  if (!runPath) return;
+  const current = map.get(runPath) || {};
+  map.set(runPath, {
+    ...current,
+    ...asset,
+    run_path: runPath,
+    purpose: asset?.purpose || current.purpose || 'design_reference',
+    source_local_path: asset?.source_local_path || current.source_local_path || '',
+    file_name: asset?.file_name || current.file_name || path.basename(runPath),
+  });
+}
+
+function addMetadataAssets(map, assets) {
+  if (!Array.isArray(assets)) return;
+  for (const asset of assets) addAsset(map, asset);
+}
+
+function addInputAssets(map, inputText) {
+  const intake = parseRunInput(inputText);
+  addMetadataAssets(map, intake.input_assets);
+}
+
+function addSpecAssets(map, specText) {
+  const matches = String(specText || '').matchAll(/\binput-assets\/[^\s`'"）),;；]+/gi);
+  for (const match of matches) {
+    const line = String(specText || '')
+      .split(/\r?\n/)
+      .find((candidate) => candidate.includes(match[0])) || match[0];
+    addAsset(map, {
+      run_path: match[0],
+      purpose: purposeFromText(line),
+    });
+  }
+}
+
+async function listInputAssets(runDir, relativeDir = 'input-assets') {
+  const dirPath = path.join(runDir, relativeDir);
+  let entries = [];
+  try {
+    entries = await readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const files = [];
+  for (const entry of entries) {
+    const relativePath = path.posix.join(relativeDir.replace(/\\/g, '/'), entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listInputAssets(runDir, relativePath)));
+    } else if (entry.isFile()) {
+      files.push(relativePath);
+    }
+  }
+  return files;
+}
+
+async function collectInputAssets({ runDir, inputText, runMeta, specText }) {
+  const assets = new Map();
+  addMetadataAssets(assets, runMeta?.input_assets);
+  addMetadataAssets(assets, runMeta?.assets);
+  addInputAssets(assets, inputText);
+  addSpecAssets(assets, specText);
+
+  for (const runPath of await listInputAssets(runDir)) {
+    addAsset(assets, {
+      run_path: runPath,
+      purpose: assets.get(runPath)?.purpose || 'design_reference',
+    });
+  }
+
+  return [...assets.values()]
+    .map((asset) => ({
+      run_path: normalizeRunAssetPath(asset.run_path),
+      purpose: purposeFromText(asset.purpose, 'design_reference'),
+      source_local_path: asset.source_local_path || '',
+      file_name: asset.file_name || path.basename(asset.run_path || ''),
+    }))
+    .filter((asset) => asset.run_path)
+    .sort((left, right) => left.run_path.localeCompare(right.run_path));
+}
+
+function assetLines(inputAssets) {
+  const relevantAssets = inputAssets.filter((asset) => ASSET_REFERENCE_PURPOSES.has(asset.purpose));
+  const assets = relevantAssets.length ? relevantAssets : inputAssets;
+  if (assets.length === 0) return '- No input-assets were supplied.';
+  return assets
+    .map((asset) => {
+      const source = asset.source_local_path ? `; source: ${asset.source_local_path}` : '';
+      const preservation = ASSET_REFERENCE_PURPOSES.has(asset.purpose)
+        ? `Preserve as ${asset.purpose}.`
+        : `Keep as ${asset.purpose || 'visual_reference'} if the confirmed SPEC needs it.`;
+      return `- ${asset.run_path} - purpose: ${asset.purpose}${source}. ${preservation}`;
+    })
+    .join('\n');
 }
 
 function pagePlanTable({ keyword }) {
@@ -224,19 +373,19 @@ function pagePlanTable({ keyword }) {
   ].join('\n');
 }
 
-function renderAgent2Outputs({ specText, runDir }) {
-  const facts = extractSpecFacts(specText, runDir);
+function renderAgent2Outputs({ specText, inputText, runMeta, runDir, inputAssets }) {
+  const facts = extractSpecFacts(specText);
   const common = [
     `Keyword: ${facts.keyword}`,
     `Target Domain: ${facts.targetDomain}`,
     `UI Reference: ${facts.uiReference}`,
     `UX Reference: ${facts.uxReference}`,
     `Extra Constraints: ${facts.extraNotes}`,
-    'No login. No account. No dashboard. No pricing. No API. No upload. No saved history. No AI rewrite.',
+    `Run Metadata: ${runMeta?.site_id || siteIdFromRunDir(runDir)} desktop production run.`,
+    'Source of truth: toolsite-spec.md. Use input.md, run-meta.json, and input-assets/ only as supporting run context.',
+    'No login. No account. No dashboard. No pricing. No backend. No database. No server API. No upload. No saved history. No AI rewrite.',
   ].join('\n');
-  const assets = facts.inputAssetLines.length
-    ? facts.inputAssetLines.map((line) => `- ${line} — design_reference / illustration_reference`).join('\n')
-    : '- No input-assets were supplied.';
+  const assets = assetLines(inputAssets);
   const plan = pagePlanTable(facts);
 
   return {
@@ -248,6 +397,7 @@ function renderAgent2Outputs({ specText, runDir }) {
       '## Confirmed SPEC Source',
       '',
       'Use `toolsite-spec.md` as the factual source for product, content, design, and scope decisions.',
+      'Use `input.md`, `run-meta.json`, and `input-assets/` only to preserve confirmed run context and reference assets.',
       '',
       '## Build Direction',
       '',
@@ -256,6 +406,10 @@ function renderAgent2Outputs({ specText, runDir }) {
       '## Input Assets',
       '',
       assets,
+      '',
+      '## Input Context',
+      '',
+      `Input length: ${inputText.length} characters. Agent2 must not introduce requirements missing from the confirmed SPEC.`,
       '',
     ].join('\n'),
     'tool-spec.md': [
@@ -269,7 +423,7 @@ function renderAgent2Outputs({ specText, runDir }) {
       '',
       '## Boundaries',
       '',
-      'No login. No account. No backend. No database. No API. No upload. No saved history. No AI rewrite.',
+      'No login. No account. No backend. No database. No server API. No upload. No saved history. No AI rewrite.',
       '',
     ].join('\n'),
     'content-plan.md': [
@@ -337,7 +491,7 @@ function renderAgent2Outputs({ specText, runDir }) {
       '',
       '## Production Constraints',
       '',
-      'No login. No account. No backend. No database. No API. No upload. No saved history. No AI rewrite.',
+      'No login. No account. No backend. No database. No server API. No upload. No saved history. No AI rewrite.',
       '',
     ].join('\n'),
   };
@@ -411,23 +565,44 @@ export async function runDesktopAgent2({ runDir, now = nowIso } = {}) {
     return { ok: true, code: HUMAN_REVIEW_REQUIRED, stage: 'spec-review', review_type: 'spec-confirmation' };
   }
 
+  if (!AGENT2_ALLOWED_CURRENT_STAGES.has(state.stage)) {
+    await blockAgent2(runDir, state, {
+      blockingReason: `invalid-stage:${state.stage || '(missing)'}`,
+      nextAction: 'return desktop-run-state.json to spec-review or agent2 before running desktop:agent2',
+      now,
+    });
+    return { ok: false, code: DESKTOP_PRECONDITION_FAILED, stage: 'agent2', reason: 'invalid-stage' };
+  }
+
+  const runMeta = await readJsonOptional(path.join(runDir, 'run-meta.json'));
+  if (!isDesktopProductionRun(runMeta)) {
+    await blockAgent2(runDir, state, {
+      blockingReason: 'desktop-production-run-required',
+      nextAction: 'fix run-meta.json before running desktop:agent2',
+      now,
+    });
+    return { ok: false, code: DESKTOP_PRECONDITION_FAILED, stage: 'agent2', reason: 'run-meta' };
+  }
+
   await ensurePreAgent2GateConfirmationEvent(runDir, events, now);
-  const specText = await readFile(path.join(runDir, 'toolsite-spec.md'), 'utf8');
+  const specPath = path.join(runDir, 'toolsite-spec.md');
   const preAgent2Gate = await runPreAgent2ToolsiteSpecGate({ runDir });
   await writeGateResult(runDir, 'pre-agent2-toolsite-spec.json', preAgent2Gate);
-  if (!preAgent2Gate.passed) {
-    await writeDesktopState(runDir, {
-      ...state,
-      stage: 'agent2',
-      next_action: 'Fix Toolsite SPEC before Agent2.',
-      blocking_reason: 'pre-agent2-toolsite-spec',
+  if (!gatePassed(preAgent2Gate) || !(await exists(specPath))) {
+    await blockAgent2(runDir, state, {
+      blockingReason: 'pre-agent2-toolsite-spec',
+      nextAction: 'fix toolsite-spec.md before rerunning desktop:agent2',
+      now,
     });
     return { ok: false, code: AGENT2_COMPLIANCE_FAILED, stage: 'agent2', gateResult: preAgent2Gate };
   }
 
+  const inputText = await readFile(path.join(runDir, 'input.md'), 'utf8');
+  const specText = await readFile(specPath, 'utf8');
+  const inputAssets = await collectInputAssets({ runDir, inputText, runMeta, specText });
   const outputDir = path.join(runDir, 'agent-2-output');
   await mkdir(outputDir, { recursive: true });
-  const outputs = renderAgent2Outputs({ specText, runDir });
+  const outputs = renderAgent2Outputs({ specText, inputText, runMeta, runDir, inputAssets });
   for (const [fileName, content] of Object.entries(outputs)) {
     await writeFile(path.join(outputDir, fileName), content, 'utf8');
   }
@@ -439,12 +614,20 @@ export async function runDesktopAgent2({ runDir, now = nowIso } = {}) {
   await writeFile(path.join(outputDir, 'brief-compliance-summary.md'), renderComplianceSummary(compliance), 'utf8');
   await writeGateResult(runDir, 'agent2-brief-compliance.json', compliance);
 
-  if (!compliance.passed) {
-    await writeDesktopState(runDir, {
-      ...state,
-      stage: 'agent2',
-      next_action: 'Repair Agent2 outputs before Agent2.5.',
-      blocking_reason: 'agent2-brief-compliance',
+  if (!gatePassed(pagePlanGate)) {
+    await blockAgent2(runDir, state, {
+      blockingReason: 'page-plan',
+      nextAction: 'repair Agent2 page plan before rerunning desktop:agent2',
+      now,
+    });
+    return { ok: false, code: AGENT2_COMPLIANCE_FAILED, stage: 'agent2', gateResult: pagePlanGate, compliance };
+  }
+
+  if (!gatePassed(compliance)) {
+    await blockAgent2(runDir, state, {
+      blockingReason: 'agent2-brief-compliance',
+      nextAction: 'repair Agent2 outputs before rerunning desktop:agent2',
+      now,
     });
     return { ok: false, code: AGENT2_COMPLIANCE_FAILED, stage: 'agent2', compliance };
   }
@@ -453,7 +636,7 @@ export async function runDesktopAgent2({ runDir, now = nowIso } = {}) {
     ...state,
     stage: 'agent25',
     last_completed_stage: 'agent2',
-    next_action: 'Run desktop:agent25.',
+    next_action: 'run desktop:agent25',
     blocking_reason: null,
     updated_at: now(),
   });
@@ -539,8 +722,12 @@ async function main() {
       '',
       'desktop:agent2:',
       '  npm run desktop:agent2 -- --run-dir runs/<site-id>',
-      '  Reads toolsite-spec.md, run-meta.json, desktop-run-state.json, human-review-events.jsonl, and input-assets references.',
+      '  Runs only after spec-confirmation is resolved with resolution_text="确认 SPEC".',
+      '  Requires toolsite-spec.md, desktop production run-meta.json, and current state spec-review or agent2.',
+      '  Reads input.md, run-meta.json, toolsite-spec.md, desktop-run-state.json, human-review-events.jsonl, and input-assets/.',
       '  Writes agent-2-output/* plus gate-results/pre-agent2-toolsite-spec.json, page-plan.json, and agent2-brief-compliance.json.',
+      '  On gate failure, leaves stage=agent2 with blocking_reason set to the failing gate.',
+      '  On success, writes stage=agent25, last_completed_stage=agent2, next_action="run desktop:agent25", then stops.',
     ].join('\n'));
     return;
   }
