@@ -975,6 +975,13 @@ async function main() {
       '  Requires the Agent2 brief compliance gate to pass and referenced input-assets/ to be readable.',
       '  Writes Agent2.5 external evidence, opens a local A/B/C UI option review, and writes agent25-option-images and agent25-external-design-proof gate results.',
       '  On success, writes stage=ui-review and waits for desktop:select-ui.',
+      '',
+      'desktop:select-ui:',
+      '  npm run desktop:select-ui -- --run-dir runs/<site-id> --option A',
+      '  Runs only from stage=ui-review after Agent2.5 opened the local A/B/C review.',
+      '  Verifies agent25-external-design-proof and agent25-option-images, records the chosen option, and writes selected-design artifacts.',
+      '  If formal selected-assets or lineage requirements are not ready, keeps stage=ui-review with blocking_reason=SELECTED_ASSETS_NOT_READY.',
+      '  If all post-selection requirements are ready, writes stage=implement and stops before Agent3.',
     ].join('\n'));
     return;
   }

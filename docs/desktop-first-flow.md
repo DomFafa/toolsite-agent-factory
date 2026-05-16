@@ -256,6 +256,76 @@ Success behavior:
 - It does not implement selected assets.
 - It does not deploy.
 
+## `desktop:select-ui`
+
+`desktop:select-ui` runs after `desktop:agent25` has generated the A/B/C options board and opened the local `agent25_option_selection` review.
+
+Run it with:
+
+```bash
+npm run desktop:select-ui -- --run-dir runs/<site-id> --option A
+```
+
+Valid options are `A`, `B`, and `C`. Any other value returns `INVALID_UI_OPTION`.
+
+Purpose:
+
+- Resolve the open local Agent2.5 UI option review using append-only events.
+- Record the selected A/B/C option and selected design label.
+- Preserve the link to the Agent2.5 options board and external action receipt.
+- Check whether the run is ready to move to implementation without starting Agent3.
+
+Required preconditions:
+
+- `desktop-run-state.json` has `stage: "ui-review"` and `last_completed_stage: "agent25"`.
+- `human-review-events.jsonl` contains an open `agent25_option_selection` or `desktop_ui_option_selection` review.
+- `agent-2-5-output/chat-delivery/options-board.png` exists.
+- `agent-2-5-output/external-design-evidence/action-receipt.json` exists.
+- `agent25-external-design-proof` passes or can be rerun to pass.
+- `agent25-option-images` passes or can be rerun to pass.
+
+Events appended:
+
+- `review_type: "agent25_option_selection"`
+- `status: "resolved"`
+- `resolution_text: "A"`, `"B"`, or `"C"`
+- `selected_option: "A"`, `"B"`, or `"C"`
+- `selected_design: "Option A"`, `"Option B"`, or `"Option C"`
+- `blocking: false`
+
+Existing open events are not edited.
+
+Selected design outputs written:
+
+- `agent-2-5-output/selected-design/selected-option.json`
+- `agent-2-5-output/selected-design/selected-design-lineage.md`
+
+`selected-option.json` records the selected option, selected design label, source options board, external action receipt, timestamp, and `selection_source: "desktop:select-ui"`.
+
+`selected-design-lineage.md` records that the current user selected the option, where the options board came from, which external action receipt it maps to, that the selection is not a Codex local self-signed design choice, and that Agent3/4 must not switch to a different option.
+
+Gates run or verified:
+
+- `agent25-external-design-proof`
+- `agent25-option-images`
+- `agent25-lineage`
+- `selected-assets`
+
+Failure behavior:
+
+- Outside `ui-review`, it returns `UI_REVIEW_REQUIRED`.
+- Missing option board or action receipt returns `AGENT25_OUTPUT_MISSING`.
+- Failing external proof returns `AGENT25_EXTERNAL_PROOF_REQUIRED`.
+- Failing option image evidence returns `AGENT25_OPTION_IMAGE_REQUIRED`.
+- If formal selected-assets or lineage requirements are not ready, it appends the resolved selection, writes the selected-design artifacts, keeps `stage: "ui-review"`, sets `blocking_reason: "SELECTED_ASSETS_NOT_READY"`, and writes `next_action: "complete selected-assets / lineage requirements before implement"`.
+
+Success behavior:
+
+- If the selected design artifacts exist and all post-selection requirements pass, `desktop-run-state.json` is updated with `stage: "implement"`, `last_completed_stage: "ui-selection"`, `next_action: "run desktop:implement"`, and `blocking_reason: null`.
+- The flow stops before Agent3.
+- It does not create selected-assets through a new external action.
+- It does not deploy.
+
 ## Human Review Points
 
 Desktop mode uses local files and terminal output:
