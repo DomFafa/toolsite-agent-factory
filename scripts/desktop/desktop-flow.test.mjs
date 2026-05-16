@@ -15,16 +15,29 @@ import {
   AGENT25_EXECUTOR_FAILED,
   AGENT3_GATE_BLOCKED,
   BUILD_FAILED,
+  DEPLOY_APPROVAL_REQUIRED,
+  DEPLOY_COMPLETE,
+  DEPLOY_FAILED,
+  DEPLOY_REVIEW_REQUIRED,
   DEPLOY_REQUIRES_APPROVAL,
   DESKTOP_PRECONDITION_FAILED,
+  GATE_EVIDENCE_INTEGRITY_REQUIRED,
   HUMAN_REVIEW_REQUIRED,
   IMPLEMENT_COMPLETE,
   IMPLEMENT_STAGE_REQUIRED,
   INVALID_DESKTOP_STAGE,
+  INVALID_DEPLOY_APPROVAL,
+  NEEDS_BING_CREDENTIALS,
+  NEEDS_CLOUDFLARE_CREDENTIALS,
+  NEEDS_SEARCH_CONSOLE_CREDENTIALS,
+  NO_DEPLOY_RUNNER_CONFIGURED,
+  NOT_PRODUCTION_RUN,
+  QA_NOT_PASSED,
   NO_STAGE_RUNNER_CONFIGURED,
   QA_COMPLETE,
   QA_REPAIR_LIMIT_REACHED,
   QA_STAGE_REQUIRED,
+  RUN_NOT_DEPLOYABLE,
   readDesktopState,
   runDesktopStage,
   SELECTED_ASSETS_COMPLETE,
@@ -34,6 +47,7 @@ import {
   SITE_MISSING,
   SPEC_REVIEW_OPEN,
   UI_SELECTION_REQUIRED,
+  AGENT6_GATE_BLOCKED,
 } from './run.mjs';
 import {
   continueDesktopRun,
@@ -381,6 +395,27 @@ async function makeQaReadyRun(root, { selectedOptionId = 'option-a' } = {}) {
   return created;
 }
 
+async function makeDeployReviewReadyRun(root, { approve = true } = {}) {
+  const created = await makeQaReadyRun(root);
+  const qa = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate: passingQaGateRunner(),
+  });
+  assert.equal(qa.code, QA_COMPLETE);
+  assert.equal((await readDesktopState(created.runDir)).stage, 'deploy-review');
+  if (approve) {
+    const continued = await continueDesktopRun({
+      runDir: created.runDir,
+      review: 'pre-deploy-approval',
+      reply: '确认部署',
+    });
+    assert.equal(continued.code, REVIEW_RESOLVED);
+    assert.equal((await readDesktopState(created.runDir)).stage, 'deploy-review');
+  }
+  return created;
+}
+
 function mockGateResult(runDir, gate, { passed = true, failures = [] } = {}) {
   return {
     gate,
@@ -408,6 +443,79 @@ function passingQaGateRunner({ fail = {} } = {}) {
   };
   runner.calls = calls;
   return runner;
+}
+
+const DEPLOY_ENV = {
+  CLOUDFLARE_API_TOKEN: 'cf-token',
+  CLOUDFLARE_ACCOUNT_ID: 'cf-account',
+  GOOGLE_SEARCH_CONSOLE_CREDENTIALS: '/tmp/gsc.json',
+  BING_WEBMASTER_API_KEY: 'bing-key',
+};
+
+function passingDeployGate(runDir) {
+  return {
+    gate: 'before-agent-6',
+    runDir,
+    status: 'pass',
+    passed: true,
+    allowed: true,
+    missing: [],
+    failures: [],
+    details: { allowed: true, missing: [] },
+    evidence: {},
+    generatedAt: '2026-05-16T12:00:00.000Z',
+  };
+}
+
+function mockCloudflareDeploy(calls = []) {
+  return async ({ runDir, siteDir, meta }) => {
+    calls.push({ service: 'cloudflare', runDir, siteDir, target_domain: meta.target_domain });
+    return {
+      ok: true,
+      project_name: 'wordcounter-desktop',
+      deployment_id: 'mock-deployment-1',
+      deployment_url: 'https://wordcounter-desktop.pages.dev',
+      custom_domain: meta.target_domain,
+      status: 'success',
+      dry_run: true,
+      launch_gates: {
+        apex_custom_domain: { completed: true, evidence: 'mock apex custom domain active' },
+        www_custom_domain: { completed: true, evidence: 'mock www custom domain active' },
+        dns_switched_to_pages: { completed: true, evidence: 'mock DNS switched to Cloudflare Pages' },
+        email_routing_catch_all: { completed: true, evidence: 'mock Email Routing catch-all completed' },
+        speed_settings: { completed: true, evidence: 'mock Cloudflare Speed Settings completed' },
+        image_transformations: { completed: true, evidence: 'mock Cloudflare Images Transformations enabled' },
+        web_analytics: { completed: true, evidence: 'mock Web Analytics beacon verified' },
+      },
+    };
+  };
+}
+
+function mockSearchConsoleSubmit(calls = []) {
+  return async ({ domain, sitemapUrl }) => {
+    calls.push({ service: 'gsc', domain, sitemapUrl });
+    return {
+      ok: true,
+      status: 'completed',
+      sitemap_url: sitemapUrl,
+      evidence: 'mock GSC sitemap submission',
+      dry_run: true,
+    };
+  };
+}
+
+function mockBingSubmit(calls = []) {
+  return async ({ domain, sitemapUrl }) => {
+    calls.push({ service: 'bing', domain, sitemapUrl });
+    return {
+      ok: true,
+      status: 'completed',
+      sitemap_url: sitemapUrl,
+      submitted_url_count: 3,
+      evidence: 'mock Bing sitemap and URL submission',
+      dry_run: true,
+    };
+  };
 }
 
 test('desktop create-run creates expected run structure', async () => {
@@ -1438,16 +1546,271 @@ test('desktop:qa repair loop does not let repair task hand-edit gate results', a
 });
 
 test('desktop deploy refuses without pre_deploy_approval', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-'));
-  const inputPath = await makeInput(root);
-  const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-no-approval-'));
+  const created = await makeDeployReviewReadyRun(root, { approve: false });
 
   const result = await runDesktopStage({ runDir: created.runDir, stage: 'deploy' });
   const state = await readDesktopState(created.runDir);
 
-  assert.equal(result.code, DEPLOY_REQUIRES_APPROVAL);
+  assert.equal(result.code, DEPLOY_APPROVAL_REQUIRED);
   assert.equal(state.stage, 'deploy-review');
   assert.equal(state.blocking_reason, 'pre-deploy-approval');
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
+test('desktop:deploy refuses outside deploy-review stage', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-stage-'));
+  const created = await makeQaReadyRun(root);
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'deploy' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, DEPLOY_REVIEW_REQUIRED);
+  assert.equal(result.stage, 'qa');
+  assert.equal(state.stage, 'qa');
+});
+
+test('desktop:deploy refuses if approval text is not 确认部署', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-bad-approval-'));
+  const created = await makeDeployReviewReadyRun(root, { approve: false });
+  await writeFile(
+    path.join(created.runDir, 'human-review-events.jsonl'),
+    `${JSON.stringify({
+      schema_version: 'human-review-event.v1',
+      type: 'human_review',
+      review_type: 'pre_deploy_approval',
+      id: 'pre-deploy-approval',
+      status: 'resolved',
+      blocking: false,
+      blocks: 'agent-6',
+      resolution_text: '批准上线',
+      created_at: '2026-05-16T12:00:00.000Z',
+    })}\n`,
+    { flag: 'a' },
+  );
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'deploy' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, INVALID_DEPLOY_APPROVAL);
+  assert.equal(state.stage, 'deploy-review');
+  assert.equal(state.blocking_reason, INVALID_DEPLOY_APPROVAL);
+});
+
+test('desktop:deploy refuses smoke and non-production runs', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-smoke-'));
+  const created = await makeDeployReviewReadyRun(root);
+  await writeFile(
+    path.join(created.runDir, 'run-meta.json'),
+    JSON.stringify({ mode: 'desktop', run_type: 'smoke', deployable: false }, null, 2),
+  );
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'deploy' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, NOT_PRODUCTION_RUN);
+  assert.equal(state.stage, 'deploy-review');
+  assert.equal(state.blocking_reason, NOT_PRODUCTION_RUN);
+});
+
+test('desktop:deploy refuses deployable=false', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-not-deployable-'));
+  const created = await makeDeployReviewReadyRun(root);
+  const meta = JSON.parse(await readFile(path.join(created.runDir, 'run-meta.json'), 'utf8'));
+  await writeFile(
+    path.join(created.runDir, 'run-meta.json'),
+    JSON.stringify({ ...meta, deployable: false }, null, 2),
+  );
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'deploy' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, RUN_NOT_DEPLOYABLE);
+  assert.equal(state.blocking_reason, RUN_NOT_DEPLOYABLE);
+});
+
+test('desktop:deploy refuses when QA evidence is not passed', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-qa-fail-'));
+  const created = await makeDeployReviewReadyRun(root);
+  await writeFile(
+    path.join(created.runDir, 'gate-results/final-qa-evidence.json'),
+    JSON.stringify({ gate: 'final-qa-evidence', status: 'fail', passed: false, failures: ['missing final evidence'] }, null, 2),
+  );
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'deploy' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, QA_NOT_PASSED);
+  assert.equal(state.blocking_reason, QA_NOT_PASSED);
+});
+
+test('desktop:deploy refuses when gate evidence integrity fails', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-integrity-fail-'));
+  const created = await makeDeployReviewReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    runDeployGateEvidenceIntegrity: async () => ({ passed: false, failures: ['stale gate result'] }),
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, GATE_EVIDENCE_INTEGRITY_REQUIRED);
+  assert.equal(state.blocking_reason, GATE_EVIDENCE_INTEGRITY_REQUIRED);
+});
+
+test('desktop:deploy refuses when check-gates before agent-6 fails', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-before-agent6-fail-'));
+  const created = await makeDeployReviewReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    runDeployGateEvidenceIntegrity: async () => ({ passed: true, failures: [] }),
+    runDeployBeforeAgent6Gate: async () => ({ allowed: false, missing: ['agent-5-output/qa-report.md'] }),
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, AGENT6_GATE_BLOCKED);
+  assert.equal(state.blocking_reason, AGENT6_GATE_BLOCKED);
+});
+
+test('desktop:deploy returns NEEDS_CLOUDFLARE_CREDENTIALS when Cloudflare creds are missing', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-no-cf-'));
+  const created = await makeDeployReviewReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    env: {},
+    runDeployGateEvidenceIntegrity: async () => ({ passed: true, failures: [] }),
+    runDeployBeforeAgent6Gate: async ({ runDir }) => passingDeployGate(runDir),
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, NEEDS_CLOUDFLARE_CREDENTIALS);
+  assert.equal(state.blocking_reason, NEEDS_CLOUDFLARE_CREDENTIALS);
+});
+
+test('desktop:deploy returns NEEDS_SEARCH_CONSOLE_CREDENTIALS when GSC creds are missing', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-no-gsc-'));
+  const created = await makeDeployReviewReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    env: {
+      CLOUDFLARE_API_TOKEN: 'cf-token',
+      CLOUDFLARE_ACCOUNT_ID: 'cf-account',
+      BING_WEBMASTER_API_KEY: 'bing-key',
+    },
+    runDeployGateEvidenceIntegrity: async () => ({ passed: true, failures: [] }),
+    runDeployBeforeAgent6Gate: async ({ runDir }) => passingDeployGate(runDir),
+  });
+
+  assert.equal(result.code, NEEDS_SEARCH_CONSOLE_CREDENTIALS);
+});
+
+test('desktop:deploy returns NEEDS_BING_CREDENTIALS when Bing creds are missing', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-no-bing-'));
+  const created = await makeDeployReviewReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    env: {
+      CLOUDFLARE_API_TOKEN: 'cf-token',
+      CLOUDFLARE_ACCOUNT_ID: 'cf-account',
+      GOOGLE_SEARCH_CONSOLE_CREDENTIALS: '/tmp/gsc.json',
+    },
+    runDeployGateEvidenceIntegrity: async () => ({ passed: true, failures: [] }),
+    runDeployBeforeAgent6Gate: async ({ runDir }) => passingDeployGate(runDir),
+  });
+
+  assert.equal(result.code, NEEDS_BING_CREDENTIALS);
+});
+
+test('desktop:deploy returns NO_DEPLOY_RUNNER_CONFIGURED when no real deploy runner is configured', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-no-runner-'));
+  const created = await makeDeployReviewReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    env: DEPLOY_ENV,
+    runDeployGateEvidenceIntegrity: async () => ({ passed: true, failures: [] }),
+    runDeployBeforeAgent6Gate: async ({ runDir }) => passingDeployGate(runDir),
+  });
+  const state = await readDesktopState(created.runDir);
+  const log = await readFile(path.join(created.runDir, 'deployment-output/deployment-log.md'), 'utf8');
+
+  assert.equal(result.code, NO_DEPLOY_RUNNER_CONFIGURED);
+  assert.equal(state.stage, 'deploy-review');
+  assert.equal(state.blocking_reason, NO_DEPLOY_RUNNER_CONFIGURED);
+  assert.match(log, /No real Cloudflare Pages deployment runner is configured/);
+});
+
+test('desktop:deploy writes deployment-output and advances to done on mocked success path', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-success-'));
+  const created = await makeDeployReviewReadyRun(root);
+  const calls = [];
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    env: DEPLOY_ENV,
+    runDeployGateEvidenceIntegrity: async () => ({ passed: true, failures: [] }),
+    runDeployBeforeAgent6Gate: async ({ runDir }) => passingDeployGate(runDir),
+    deployCloudflarePages: mockCloudflareDeploy(calls),
+    submitSearchConsole: mockSearchConsoleSubmit(calls),
+    submitBingWebmaster: mockBingSubmit(calls),
+    now: () => '2026-05-16T12:00:00.000Z',
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, DEPLOY_COMPLETE);
+  assert.equal(result.stage, 'done');
+  assert.equal(state.stage, 'done');
+  assert.equal(state.last_completed_stage, 'deploy');
+  assert.deepEqual(calls.map((call) => call.service), ['cloudflare', 'gsc', 'bing']);
+
+  for (const filePath of [
+    'deployment-output/deployment-report.md',
+    'deployment-output/cloudflare-pages.json',
+    'deployment-output/launch-status.json',
+    'deployment-output/indexing-status.json',
+    'deployment-output/deployment-log.md',
+    'agent-6-output/launch-report.md',
+    'gate-results/agent6-completion.json',
+  ]) {
+    assert.equal(await exists(path.join(created.runDir, filePath)), true, `${filePath} should exist`);
+  }
+
+  const agent6 = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent6-completion.json'), 'utf8'));
+  assert.equal(agent6.passed, true);
+  const launchStatus = JSON.parse(await readFile(path.join(created.runDir, 'deployment-output/launch-status.json'), 'utf8'));
+  assert.equal(launchStatus.final_status, 'full_launch_completed');
+});
+
+test('desktop:deploy keeps deploy-review and records DEPLOY_FAILED when Cloudflare deploy fails', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-failed-'));
+  const created = await makeDeployReviewReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'deploy',
+    env: DEPLOY_ENV,
+    runDeployGateEvidenceIntegrity: async () => ({ passed: true, failures: [] }),
+    runDeployBeforeAgent6Gate: async ({ runDir }) => passingDeployGate(runDir),
+    deployCloudflarePages: async () => ({ ok: false, error: 'mock Cloudflare failure' }),
+  });
+  const state = await readDesktopState(created.runDir);
+  const log = await readFile(path.join(created.runDir, 'deployment-output/deployment-log.md'), 'utf8');
+
+  assert.equal(result.code, DEPLOY_FAILED);
+  assert.equal(state.stage, 'deploy-review');
+  assert.equal(state.blocking_reason, DEPLOY_FAILED);
+  assert.match(log, /mock Cloudflare failure/);
 });
 
 test('missing stage runner returns NO_STAGE_RUNNER_CONFIGURED', async () => {

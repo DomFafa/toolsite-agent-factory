@@ -149,9 +149,9 @@ function nextStateFor(reviewType, reply, state) {
     if (reply === '确认部署') {
       return {
         ...state,
-        stage: 'deploy',
-        last_completed_stage: 'deploy-review',
-        next_action: 'Run desktop:deploy.',
+        stage: 'deploy-review',
+        last_completed_stage: 'qa',
+        next_action: 'run desktop:deploy',
         blocking_reason: null,
       };
     }
