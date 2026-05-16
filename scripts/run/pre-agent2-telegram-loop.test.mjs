@@ -21,6 +21,7 @@ import {
   renderSpecReviewCard,
   runPreAgent2TelegramLoop,
   sanitizeSpecContent,
+  sendTelegramMessage,
   shouldGenerateSpec,
   splitTelegramMessages,
   validateReply,
@@ -392,6 +393,26 @@ test('401K SPEC renders image attachment as design reference', () => {
   assert.match(card, /页面点缀和视觉风格参考/);
 });
 
+test('renderSpecReviewCard renders reference URLs as clean domain labels', () => {
+  const intake = parseRunInput(fourOhOneKInputMarkdown());
+  const spec = renderToolsiteSpec({
+    siteId: '401k-calculator',
+    intake,
+    answeredEvents: [],
+    allowEarlySpec: true,
+  });
+  const card = renderSpecReviewCard({
+    specText: spec,
+    specPath: 'runs/401k-calculator/toolsite-spec.md',
+  });
+
+  assert.match(card, /UI 参考 usa\.gov/);
+  assert.match(card, /UX 参考 calculator\.net 401K Calculator/);
+  assert.doesNotMatch(card, /https?:\/\/(?:www\.)?usa\.gov/);
+  assert.doesNotMatch(card, /https?:\/\/(?:www\.)?calculator\.net/);
+  assert.doesNotMatch(card, /www\.calculator\.net \(/);
+});
+
 test('401K SPEC content contract rejects internal meta and dirty link residue', () => {
   const intake = parseRunInput(fourOhOneKInputMarkdown());
   const spec = renderToolsiteSpec({
@@ -417,6 +438,36 @@ test('401K SPEC content contract rejects internal meta and dirty link residue', 
   assert.match(combined, /401K Calculator/);
   assert.match(combined, /expected annual return|expected return/);
   assert.match(combined, /employer match/);
+});
+
+test('sendTelegramMessage disables Telegram link previews', async () => {
+  const fixture = await makeFixture();
+  await writeJsonl(fixture.inboxPath, [inboxMessage('hello')]);
+  const originalFetch = globalThis.fetch;
+  let capturedBody = null;
+  globalThis.fetch = async (_url, options) => {
+    capturedBody = options.body;
+    return {
+      ok: true,
+      async json() {
+        return { ok: true, result: { message_id: 42 } };
+      },
+    };
+  };
+
+  try {
+    await sendTelegramMessage({
+      text: '查看 https://www.calculator.net/401k-calculator.html',
+      inboxPath: fixture.inboxPath,
+      telegramEnvPath: fixture.telegramEnvPath,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.ok(capturedBody instanceof URLSearchParams);
+  assert.equal(capturedBody.get('disable_web_page_preview'), 'true');
+  assert.deepEqual(JSON.parse(capturedBody.get('link_preview_options')), { is_disabled: true });
 });
 
 function wordCounterIntake() {
