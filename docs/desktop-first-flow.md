@@ -94,13 +94,26 @@ If the user replies with `修改：...`, Codex must apply the requested change a
 
 ## `desktop:agent2`
 
-`desktop:agent2` runs after SPEC confirmation and before Agent2.5 UI generation.
+`desktop:agent2` runs after the local SPEC review has been resolved with `确认 SPEC` and before Agent2.5 UI generation.
+
+Run it with:
+
+```bash
+npm run desktop:agent2 -- --run-dir runs/<site-id>
+```
 
 Purpose:
 
 - Turn the confirmed `toolsite-spec.md` into Agent2 working documents.
 - Run the machine checks needed before Agent2.5 may start.
 - Stop at `stage: "agent25"` when Agent2 output and compliance pass.
+
+Required preconditions:
+
+- `runs/<site-id>/toolsite-spec.md` exists.
+- `human-review-events.jsonl` contains a resolved `spec-confirmation` event with `resolution_text: "确认 SPEC"`.
+- `desktop-run-state.json` is currently at `stage: "spec-review"` or `stage: "agent2"`.
+- `run-meta.json` describes a desktop production run: `mode: "desktop"`, `run_type: "production"`, and `deployable: true`.
 
 It does not:
 
@@ -144,15 +157,18 @@ Gates run:
 Failure behavior:
 
 - If SPEC is not confirmed, it returns `HUMAN_REVIEW_REQUIRED`, keeps or returns the state to `spec-review`, and does not write Agent2 outputs.
-- If `toolsite-spec.md` is missing or invalid, the Pre-Agent2 SPEC gate fails and the state remains blocked at `agent2`.
-- If Page Plan or Agent2 brief compliance fails, it writes the gate result, keeps the state at `agent2`, and reports `AGENT2_COMPLIANCE_FAILED`.
+- If `run-meta.json` is not a desktop production run, it returns `DESKTOP_PRECONDITION_FAILED`, keeps the state at `agent2`, and writes `blocking_reason: "desktop-production-run-required"`.
+- If the current state is not `spec-review` or `agent2`, it returns `DESKTOP_PRECONDITION_FAILED`, keeps the state at `agent2`, and writes `blocking_reason: "invalid-stage:<stage>"`.
+- If `toolsite-spec.md` is missing or invalid, the Pre-Agent2 SPEC gate writes `gate-results/pre-agent2-toolsite-spec.json`, keeps the state at `agent2`, and writes `blocking_reason: "pre-agent2-toolsite-spec"`.
+- If Page Plan fails, it writes `gate-results/page-plan.json` and `gate-results/agent2-brief-compliance.json`, keeps the state at `agent2`, and writes `blocking_reason: "page-plan"`.
+- If Agent2 brief compliance fails, it writes `gate-results/agent2-brief-compliance.json`, keeps the state at `agent2`, and writes `blocking_reason: "agent2-brief-compliance"`.
 - It must not fake Agent2 success or advance to Agent2.5 when compliance fails.
 
 Success behavior:
 
 - `agent-2-output/*` is complete.
 - `gate-results/agent2-brief-compliance.json` passes with `can_proceed_to_agent25: true`.
-- `desktop-run-state.json` is updated to `stage: "agent25"`.
+- `desktop-run-state.json` is updated with `stage: "agent25"`, `last_completed_stage: "agent2"`, `next_action: "run desktop:agent25"`, and `blocking_reason: null`.
 - The flow stops before Agent2.5.
 
 ## Agent2.5 UI Selection

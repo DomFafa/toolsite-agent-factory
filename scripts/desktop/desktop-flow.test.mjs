@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { createDesktopRun, DESKTOP_RUN_CREATED } from './create-run.mjs';
 import {
+  AGENT2_COMPLIANCE_FAILED,
   AGENT2_COMPLETE,
   DEPLOY_REQUIRES_APPROVAL,
+  DESKTOP_PRECONDITION_FAILED,
   HUMAN_REVIEW_REQUIRED,
   NO_STAGE_RUNNER_CONFIGURED,
   readDesktopState,
@@ -151,7 +153,11 @@ test('desktop:agent2 writes Agent2 outputs, runs compliance, and stops before Ag
   const result = await runDesktopStage({ runDir: created.runDir });
   assert.equal(result.code, AGENT2_COMPLETE);
   assert.equal(result.stage, 'agent25');
-  assert.equal((await readDesktopState(created.runDir)).stage, 'agent25');
+  const state = await readDesktopState(created.runDir);
+  assert.equal(state.stage, 'agent25');
+  assert.equal(state.last_completed_stage, 'agent2');
+  assert.equal(state.next_action, 'run desktop:agent25');
+  assert.equal(state.blocking_reason, null);
 
   for (const filePath of [
     'agent-2-output/site-brief.md',
@@ -169,9 +175,21 @@ test('desktop:agent2 writes Agent2 outputs, runs compliance, and stops before Ag
     assert.equal(await exists(path.join(created.runDir, filePath)), true, `${filePath} should exist`);
   }
 
+  const preAgent2SpecGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/pre-agent2-toolsite-spec.json'), 'utf8'));
+  assert.equal(preAgent2SpecGate.gate, 'pre-agent2-toolsite-spec');
+  assert.equal(preAgent2SpecGate.passed, true);
+
+  const pagePlanGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/page-plan.json'), 'utf8'));
+  assert.equal(pagePlanGate.gate, 'page-plan');
+  assert.equal(pagePlanGate.passed, true);
+
   const compliance = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent2-brief-compliance.json'), 'utf8'));
+  assert.equal(compliance.gate, 'agent2-brief-compliance');
   assert.equal(compliance.passed, true);
   assert.equal(compliance.can_proceed_to_agent25, true);
+
+  assert.deepEqual(await readdir(path.join(created.runDir, 'agent-2-5-output')), []);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
 });
 
 test('desktop:agent2 refuses to run before SPEC confirmation', async () => {
@@ -185,6 +203,109 @@ test('desktop:agent2 refuses to run before SPEC confirmation', async () => {
   assert.equal(result.code, HUMAN_REVIEW_REQUIRED);
   assert.equal(result.stage, 'spec-review');
   assert.equal(await exists(path.join(created.runDir, 'agent-2-output/site-brief.md')), false);
+});
+
+test('desktop:agent2 refuses non-desktop production run metadata', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent2-meta-'));
+  const inputPath = await makeInput(root);
+  const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
+  await runDesktopStage({ runDir: created.runDir });
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'spec-confirmation',
+    reply: '确认 SPEC',
+  });
+  await writeFile(
+    path.join(created.runDir, 'run-meta.json'),
+    JSON.stringify({ mode: 'desktop', run_type: 'smoke', deployable: false }, null, 2),
+  );
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'agent2' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, DESKTOP_PRECONDITION_FAILED);
+  assert.equal(state.stage, 'agent2');
+  assert.equal(state.blocking_reason, 'desktop-production-run-required');
+  assert.equal(await exists(path.join(created.runDir, 'agent-2-output/site-brief.md')), false);
+});
+
+test('desktop:agent2 writes pre-agent2 SPEC gate result when SPEC file is missing', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent2-missing-spec-'));
+  const inputPath = await makeInput(root);
+  const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
+  await runDesktopStage({ runDir: created.runDir });
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'spec-confirmation',
+    reply: '确认 SPEC',
+  });
+  await rm(path.join(created.runDir, 'toolsite-spec.md'));
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'agent2' });
+  const state = await readDesktopState(created.runDir);
+  const preAgent2SpecGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/pre-agent2-toolsite-spec.json'), 'utf8'));
+
+  assert.equal(result.code, AGENT2_COMPLIANCE_FAILED);
+  assert.equal(state.stage, 'agent2');
+  assert.equal(state.blocking_reason, 'pre-agent2-toolsite-spec');
+  assert.equal(preAgent2SpecGate.passed, false);
+  assert.match(preAgent2SpecGate.failures.join('\n'), /missing toolsite-spec\.md/);
+  assert.equal(await exists(path.join(created.runDir, 'agent-2-output/site-brief.md')), false);
+});
+
+test('desktop:agent2 preserves image design_reference in design-generation-input', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent2-asset-'));
+  const inputPath = await makeInput(root);
+  const assetDir = path.join(root, 'assets');
+  await mkdir(assetDir);
+  await writeFile(path.join(assetDir, 'reference.png'), 'fake image bytes');
+  const created = await createDesktopRun({
+    rootDir: root,
+    siteId: 'wordcounter-desktop',
+    inputPath,
+    assetDir,
+  });
+  await runDesktopStage({ runDir: created.runDir });
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'spec-confirmation',
+    reply: '确认 SPEC',
+  });
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'agent2' });
+  assert.equal(result.code, AGENT2_COMPLETE);
+
+  const designInput = await readFile(path.join(created.runDir, 'agent-2-output/design-generation-input.md'), 'utf8');
+  assert.match(designInput, /input-assets\/01-reference\.png/);
+  assert.match(designInput, /design_reference/);
+});
+
+test('desktop:agent2 stays at agent2 when a gate fails', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent2-gate-fail-'));
+  const inputPath = await makeInput(root);
+  const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
+  await runDesktopStage({ runDir: created.runDir });
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'spec-confirmation',
+    reply: '确认 SPEC',
+  });
+  await mkdir(path.join(created.runDir, 'site/src/pages'), { recursive: true });
+  await writeFile(path.join(created.runDir, 'site/src/pages/login.astro'), '<h1>Login</h1>');
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'agent2' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, AGENT2_COMPLIANCE_FAILED);
+  assert.equal(state.stage, 'agent2');
+  assert.equal(state.blocking_reason, 'page-plan');
+
+  const pagePlanGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/page-plan.json'), 'utf8'));
+  assert.equal(pagePlanGate.passed, false);
+  const compliance = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent2-brief-compliance.json'), 'utf8'));
+  assert.equal(compliance.passed, false);
+  assert.equal(await exists(path.join(created.runDir, 'agent-2-5-output/design-generation-prompt.md')), false);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
 });
 
 test('desktop deploy refuses without pre_deploy_approval', async () => {
@@ -219,6 +340,6 @@ test('desktop flow scripts use only local desktop review state', async () => {
     'scripts/desktop/gate-repair-loop.mjs',
   ];
   const combined = (await Promise.all(files.map((file) => readFile(file, 'utf8')))).join('\n');
-  const retiredLogPattern = new RegExp(`${['toolsite', 'in' + 'box'].join('-')}|send[A-Z][A-Za-z]*Message|${'work' + 'er'}`, 'i');
+  const retiredLogPattern = new RegExp(`${['toolsite', 'in' + 'box'].join('-')}|send[A-Z][A-Za-z]*Message|Telegram|Hermes|remote|${'work' + 'er'}`, 'i');
   assert.doesNotMatch(combined, retiredLogPattern);
 });
