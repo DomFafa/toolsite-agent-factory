@@ -24,8 +24,12 @@ import {
 } from './run.mjs';
 import {
   continueDesktopRun,
+  AGENT25_OUTPUT_MISSING,
+  INVALID_UI_OPTION,
   REVIEW_RESOLVED,
+  SELECTED_ASSETS_NOT_READY,
   SPEC_NOT_CONFIRMED,
+  UI_REVIEW_REQUIRED,
 } from './continue.mjs';
 
 async function exists(filePath) {
@@ -278,6 +282,20 @@ async function makeAgent25ReadyRun(root, { withAssets = false } = {}) {
   });
   const agent2 = await runDesktopStage({ runDir: created.runDir, stage: 'agent2' });
   assert.equal(agent2.code, AGENT2_COMPLETE);
+  return created;
+}
+
+async function makeUiReviewReadyRun(root, { withAssets = false } = {}) {
+  const created = await makeAgent25ReadyRun(root, { withAssets });
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'agent25',
+    executeAgent25DesignOptions: async ({ runDir }) => {
+      await writeAgent25ExecutorFixture(runDir);
+      return { status: 0, stdout: 'PASS Agent2.5 design-options executor' };
+    },
+  });
+  assert.equal(result.code, AGENT25_COMPLETE);
   return created;
 }
 
@@ -677,30 +695,142 @@ test('desktop:agent25 successful executor writes option review, gates, and stops
   assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
 });
 
-test('desktop:select-ui can resolve the local Agent2.5 option review', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent25-select-ui-'));
+test('desktop:select-ui refuses outside ui-review stage', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-select-outside-'));
   const created = await makeAgent25ReadyRun(root);
-  await runDesktopStage({
+
+  const result = await continueDesktopRun({
     runDir: created.runDir,
-    stage: 'agent25',
-    executeAgent25DesignOptions: async ({ runDir }) => {
-      await writeAgent25ExecutorFixture(runDir);
-      return { status: 0, stdout: 'PASS Agent2.5 design-options executor' };
-    },
+    review: 'ui-option-selection',
+    reply: 'A',
   });
 
-  const selected = await continueDesktopRun({
+  assert.equal(result.code, UI_REVIEW_REQUIRED);
+  assert.equal((await readDesktopState(created.runDir)).stage, 'agent25');
+});
+
+test('desktop:select-ui rejects invalid option', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-select-invalid-'));
+  const created = await makeUiReviewReadyRun(root);
+
+  const result = await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'D',
+  });
+
+  assert.equal(result.code, INVALID_UI_OPTION);
+  assert.equal((await readDesktopState(created.runDir)).stage, 'ui-review');
+});
+
+test('desktop:select-ui requires open UI option review', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-select-no-open-'));
+  const created = await makeUiReviewReadyRun(root);
+  const events = await readEvents(created.runDir);
+  const withoutOpenUiReview = events.filter((event) => event.id !== 'agent25-option-selection');
+  await writeFile(
+    path.join(created.runDir, 'human-review-events.jsonl'),
+    withoutOpenUiReview.map((event) => JSON.stringify(event)).join('\n') + '\n',
+  );
+
+  const result = await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'A',
+  });
+
+  assert.equal(result.code, UI_REVIEW_REQUIRED);
+  assert.equal((await readDesktopState(created.runDir)).stage, 'ui-review');
+});
+
+test('desktop:select-ui requires Agent2.5 option board and action receipt', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-select-missing-output-'));
+  const created = await makeUiReviewReadyRun(root);
+  await rm(path.join(created.runDir, 'agent-2-5-output/chat-delivery/options-board.png'));
+
+  const result = await continueDesktopRun({
     runDir: created.runDir,
     review: 'ui-option-selection',
     reply: 'A',
   });
   const state = await readDesktopState(created.runDir);
-  const events = await readEvents(created.runDir);
-  const resolved = events.find((event) => event.id === 'agent25-option-selection' && event.status === 'resolved');
 
-  assert.equal(selected.code, REVIEW_RESOLVED);
-  assert.equal(state.stage, 'implement');
+  assert.equal(result.code, AGENT25_OUTPUT_MISSING);
+  assert.deepEqual(result.missing, ['agent-2-5-output/chat-delivery/options-board.png']);
+  assert.equal(state.stage, 'ui-review');
+  assert.equal(state.blocking_reason, 'agent25-output-missing');
+});
+
+test('desktop:select-ui resolves review append-only, writes selected artifacts, and blocks on selected-assets readiness', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-agent25-select-ui-'));
+  const created = await makeUiReviewReadyRun(root);
+
+  const selected = await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'A',
+    now: () => '2026-05-16T08:00:00.000Z',
+  });
+  const state = await readDesktopState(created.runDir);
+  const events = await readEvents(created.runDir);
+  const openEvents = events.filter((event) => event.id === 'agent25-option-selection' && event.status === 'open');
+  const resolved = events.find((event) => event.id === 'agent25-option-selection' && event.status === 'resolved');
+  const selectedOption = JSON.parse(await readFile(
+    path.join(created.runDir, 'agent-2-5-output/selected-design/selected-option.json'),
+    'utf8',
+  ));
+  const lineage = await readFile(
+    path.join(created.runDir, 'agent-2-5-output/selected-design/selected-design-lineage.md'),
+    'utf8',
+  );
+
+  assert.equal(selected.code, SELECTED_ASSETS_NOT_READY);
+  assert.equal(selected.selected_option, 'A');
+  assert.equal(selected.selected_design, 'Option A');
+  assert.equal(state.stage, 'ui-review');
+  assert.equal(state.last_completed_stage, 'agent25');
+  assert.equal(state.next_action, 'complete selected-assets / lineage requirements before implement');
+  assert.equal(state.blocking_reason, SELECTED_ASSETS_NOT_READY);
+
+  assert.equal(openEvents.length, 1);
+  assert.ok(resolved);
+  assert.equal(resolved.review_type, 'agent25_option_selection');
+  assert.equal(resolved.resolution_text, 'A');
   assert.equal(resolved.selected_option, 'A');
+  assert.equal(resolved.selected_design, 'Option A');
+  assert.equal(resolved.blocking, false);
+
+  assert.deepEqual(selectedOption, {
+    selected_option: 'A',
+    selected_design: 'Option A',
+    source_options_board: 'agent-2-5-output/chat-delivery/options-board.png',
+    external_action_receipt: 'agent-2-5-output/external-design-evidence/action-receipt.json',
+    selected_at: '2026-05-16T08:00:00.000Z',
+    selection_source: 'desktop:select-ui',
+  });
+  assert.match(lineage, /User selected: Option A/);
+  assert.match(lineage, /agent-2-5-output\/chat-delivery\/options-board\.png/);
+  assert.match(lineage, /agent-2-5-output\/external-design-evidence\/action-receipt\.json/);
+  assert.match(lineage, /not a Codex local self-signed design choice/);
+  assert.match(lineage, /Agent3 and Agent4 must implement this selected option/);
+
+  for (const filePath of [
+    'gate-results/agent25-external-design-proof.json',
+    'gate-results/agent25-option-images.json',
+    'gate-results/agent25-lineage.json',
+    'gate-results/selected-assets.json',
+  ]) {
+    assert.equal(await exists(path.join(created.runDir, filePath)), true, `${filePath} should exist`);
+  }
+  const externalProof = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent25-external-design-proof.json'), 'utf8'));
+  const optionImages = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent25-option-images.json'), 'utf8'));
+  const selectedAssets = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/selected-assets.json'), 'utf8'));
+  assert.equal(externalProof.passed, true);
+  assert.equal(optionImages.passed, true);
+  assert.equal(selectedAssets.passed, false);
+
+  assert.deepEqual(await readdir(path.join(created.runDir, 'agent-3-output')), []);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
 });
 
 test('desktop deploy refuses without pre_deploy_approval', async () => {
