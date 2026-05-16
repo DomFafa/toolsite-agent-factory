@@ -13,15 +13,20 @@ import {
   AGENT2_OUTPUT_MISSING,
   AGENT25_COMPLETE,
   AGENT25_EXECUTOR_FAILED,
+  AGENT3_GATE_BLOCKED,
+  BUILD_FAILED,
   DEPLOY_REQUIRES_APPROVAL,
   DESKTOP_PRECONDITION_FAILED,
   HUMAN_REVIEW_REQUIRED,
+  IMPLEMENT_COMPLETE,
+  IMPLEMENT_STAGE_REQUIRED,
   INVALID_DESKTOP_STAGE,
   NO_STAGE_RUNNER_CONFIGURED,
   readDesktopState,
   runDesktopStage,
   SELECTED_ASSETS_COMPLETE,
   SELECTED_ASSETS_GATE_FAILED,
+  SELECTED_ASSETS_MISSING,
   SELECTED_OPTION_MISSING,
   SPEC_REVIEW_OPEN,
   UI_SELECTION_REQUIRED,
@@ -344,6 +349,20 @@ async function writeBeforeAgent3DesktopPrereqs(runDir) {
       2,
     ),
   );
+}
+
+async function makeImplementReadyRun(root, { selectedOptionId = 'option-a' } = {}) {
+  const created = await makeUiReviewReadyRun(root, { selectedOptionId });
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: selectedOptionId === 'option-b' ? 'B' : selectedOptionId === 'option-c' ? 'C' : 'A',
+  });
+  await writeBeforeAgent3DesktopPrereqs(created.runDir);
+  const selectedAssets = await runDesktopStage({ runDir: created.runDir, stage: 'selected-assets' });
+  assert.equal(selectedAssets.code, SELECTED_ASSETS_COMPLETE);
+  assert.equal((await readDesktopState(created.runDir)).stage, 'implement');
+  return created;
 }
 
 test('desktop create-run creates expected run structure', async () => {
@@ -1036,6 +1055,156 @@ test('desktop:selected-assets blocks when before-agent-3 gates are not ready', a
   assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
 });
 
+test('desktop:implement refuses outside implement stage', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-implement-stage-'));
+  const created = await makeUiReviewReadyRun(root);
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'implement' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, IMPLEMENT_STAGE_REQUIRED);
+  assert.equal(result.stage, 'ui-review');
+  assert.equal(state.stage, 'ui-review');
+  assert.equal(await exists(path.join(created.runDir, 'site/package.json')), false);
+});
+
+test('desktop:implement refuses without selected-assets', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-implement-no-selected-assets-'));
+  const created = await makeUiReviewReadyRun(root);
+  await writeFile(
+    path.join(created.runDir, 'desktop-run-state.json'),
+    JSON.stringify(
+      {
+        mode: 'desktop',
+        stage: 'implement',
+        last_completed_stage: 'selected-assets',
+        next_action: 'run desktop:implement',
+        blocking_reason: null,
+      },
+      null,
+      2,
+    ),
+  );
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'implement' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, SELECTED_ASSETS_MISSING);
+  assert.equal(result.stage, 'implement');
+  assert.match(result.missing.join('\n'), /selected-assets-manifest\.json/);
+  assert.equal(state.stage, 'implement');
+  assert.equal(state.blocking_reason, SELECTED_ASSETS_MISSING);
+  assert.equal(await exists(path.join(created.runDir, 'agent-3-output/ui-direction.md')), false);
+});
+
+test('desktop:implement refuses when before-agent-3 gate fails', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-implement-before-agent3-'));
+  const created = await makeImplementReadyRun(root);
+  await rm(path.join(created.runDir, 'gate-results/web-access-preflight.json'));
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'implement',
+    runSiteBuild: async () => {
+      throw new Error('build should not run when before-agent-3 is blocked');
+    },
+  });
+  const state = await readDesktopState(created.runDir);
+  const beforeAgent3 = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/before-agent-3.json'), 'utf8'));
+
+  assert.equal(result.code, AGENT3_GATE_BLOCKED);
+  assert.equal(result.stage, 'implement');
+  assert.equal(state.stage, 'implement');
+  assert.equal(state.blocking_reason, AGENT3_GATE_BLOCKED);
+  assert.equal(beforeAgent3.passed, false);
+  assert.equal(await exists(path.join(created.runDir, 'site/package.json')), false);
+});
+
+test('desktop:implement creates Agent3, Agent4, and Astro site outputs, then advances to qa on build success', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-implement-success-'));
+  const created = await makeImplementReadyRun(root, { selectedOptionId: 'option-b' });
+  const buildCalls = [];
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    now: () => '2026-05-16T10:00:00.000Z',
+    runSiteBuild: async ({ siteDir }) => {
+      buildCalls.push(siteDir);
+      return { status: 0, command: 'npm run build', stdout: 'build ok', stderr: '' };
+    },
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, IMPLEMENT_COMPLETE);
+  assert.equal(result.stage, 'qa');
+  assert.equal(state.stage, 'qa');
+  assert.equal(state.last_completed_stage, 'implement');
+  assert.equal(state.next_action, 'run desktop:qa');
+  assert.equal(state.blocking_reason, null);
+  assert.equal(buildCalls.length, 1);
+  assert.equal(buildCalls[0], path.join(created.runDir, 'site'));
+
+  for (const filePath of [
+    'agent-3-output/ui-direction.md',
+    'agent-3-output/implementation-handoff.md',
+    'agent-3-output/selected-design-summary.md',
+    'agent-3-output/visual-targets.md',
+    'agent-4-output/implementation-report.md',
+    'agent-4-output/changed-files.md',
+    'agent-4-output/build-report.md',
+    'site/package.json',
+    'site/astro.config.mjs',
+    'site/tsconfig.json',
+    'site/src/pages/index.astro',
+    'site/src/pages/privacy.astro',
+    'site/src/pages/terms.astro',
+    'site/src/pages/sitemap.xml.ts',
+    'site/src/styles/global.css',
+    'site/public/robots.txt',
+  ]) {
+    assert.equal(await exists(path.join(created.runDir, filePath)), true, `${filePath} should exist`);
+  }
+
+  const handoff = await readFile(path.join(created.runDir, 'agent-3-output/implementation-handoff.md'), 'utf8');
+  assert.match(handoff, /Selected design: Option B/);
+  assert.match(handoff, /Do not add backend, database, login, accounts, server APIs/);
+  const visualTargets = await readFile(path.join(created.runDir, 'agent-3-output/visual-targets.md'), 'utf8');
+  assert.match(visualTargets, /selected-target-desktop\.png/);
+  assert.match(visualTargets, /selected-target-mobile\.png/);
+  const index = await readFile(path.join(created.runDir, 'site/src/pages/index.astro'), 'utf8');
+  assert.match(index, /data-tool-root/);
+  assert.match(index, /Words/);
+  assert.doesNotMatch(index, /Login|Dashboard|Pricing|API route/);
+  const buildReport = await readFile(path.join(created.runDir, 'agent-4-output/build-report.md'), 'utf8');
+  assert.match(buildReport, /Decision: PASS/);
+  assert.match(buildReport, /build ok/);
+
+  assert.equal(await exists(path.join(created.runDir, 'agent-5-output/qa-report.md')), false);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
+test('desktop:implement build failure keeps stage implement and records BUILD_FAILED', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-implement-build-fail-'));
+  const created = await makeImplementReadyRun(root);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'implement',
+    runSiteBuild: async () => ({ status: 1, command: 'npm run build', stdout: '', stderr: 'Astro build failed' }),
+  });
+  const state = await readDesktopState(created.runDir);
+  const buildReport = await readFile(path.join(created.runDir, 'agent-4-output/build-report.md'), 'utf8');
+
+  assert.equal(result.code, BUILD_FAILED);
+  assert.equal(result.stage, 'implement');
+  assert.equal(state.stage, 'implement');
+  assert.equal(state.blocking_reason, BUILD_FAILED);
+  assert.match(buildReport, /Decision: FAIL/);
+  assert.match(buildReport, /Astro build failed/);
+  assert.equal(await exists(path.join(created.runDir, 'agent-5-output/qa-report.md')), false);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
 test('desktop deploy refuses without pre_deploy_approval', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-'));
   const inputPath = await makeInput(root);
@@ -1054,10 +1223,10 @@ test('missing stage runner returns NO_STAGE_RUNNER_CONFIGURED', async () => {
   const inputPath = await makeInput(root);
   const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
 
-  const result = await runDesktopStage({ runDir: created.runDir, stage: 'implement' });
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'qa' });
 
   assert.equal(result.code, NO_STAGE_RUNNER_CONFIGURED);
-  assert.equal(result.stage, 'implement');
+  assert.equal(result.stage, 'qa');
 });
 
 test('desktop flow scripts use only local desktop review state', async () => {

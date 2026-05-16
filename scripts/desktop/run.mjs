@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { access, appendFile, copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { access, appendFile, copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -46,13 +46,20 @@ export const SELECTED_ASSETS_GATE_FAILED = 'SELECTED_ASSETS_GATE_FAILED';
 export const SELECTED_ASSETS_NOT_READY = 'SELECTED_ASSETS_NOT_READY';
 export const SELECTED_ASSETS_COMPLETE = 'SELECTED_ASSETS_COMPLETE';
 export const NO_APPROVED_UI_GENERATION_AVAILABLE = 'NO_APPROVED_UI_GENERATION_AVAILABLE';
+export const IMPLEMENT_STAGE_REQUIRED = 'IMPLEMENT_STAGE_REQUIRED';
+export const SPEC_MISSING = 'SPEC_MISSING';
+export const SELECTED_ASSETS_MISSING = 'SELECTED_ASSETS_MISSING';
+export const SELECTED_TARGET_MISSING = 'SELECTED_TARGET_MISSING';
+export const AGENT3_GATE_BLOCKED = 'AGENT3_GATE_BLOCKED';
+export const BUILD_FAILED = 'BUILD_FAILED';
+export const IMPLEMENT_COMPLETE = 'IMPLEMENT_COMPLETE';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const STATE_FILE = 'desktop-run-state.json';
 const EVENT_FILE = 'human-review-events.jsonl';
 
-const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25', 'selected-assets']);
+const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25', 'selected-assets', 'implement']);
 const AGENT2_ALLOWED_CURRENT_STAGES = new Set(['spec-review', 'agent2']);
 const ASSET_REFERENCE_PURPOSES = new Set(['design_reference', 'illustration_reference']);
 const AGENT25_EXECUTOR_SCRIPT = 'scripts/run/execute-agent25-design-options.mjs';
@@ -62,6 +69,27 @@ const OPTIONS_BOARD_PATH = 'agent-2-5-output/chat-delivery/options-board.png';
 const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
 const SELECTED_OPTION_PATH = 'agent-2-5-output/selected-design/selected-option.json';
 const SELECTED_LINEAGE_PATH = 'agent-2-5-output/selected-design/selected-design-lineage.md';
+const SELECTED_ASSETS_DIR = 'agent-2-5-output/selected-assets';
+const SELECTED_ASSETS_MANIFEST_PATH = `${SELECTED_ASSETS_DIR}/selected-assets-manifest.json`;
+const SELECTED_ASSETS_PACKAGE_PATH = `${SELECTED_ASSETS_DIR}/selected-design-package.md`;
+const SELECTED_ASSETS_LINEAGE_PATH = `${SELECTED_ASSETS_DIR}/selected-design-lineage.md`;
+const SELECTED_TARGET_DESKTOP_PATH = `${SELECTED_ASSETS_DIR}/selected-target-desktop.png`;
+const SELECTED_TARGET_MOBILE_PATH = `${SELECTED_ASSETS_DIR}/selected-target-mobile.png`;
+const IMPLEMENT_AGENT2_FILES = [
+  'agent-2-output/site-brief.md',
+  'agent-2-output/tool-spec.md',
+  'agent-2-output/page-plan.md',
+  'agent-2-output/design-generation-input.md',
+];
+const IMPLEMENT_SELECTED_ASSETS_FILES = [
+  SELECTED_ASSETS_MANIFEST_PATH,
+  SELECTED_ASSETS_PACKAGE_PATH,
+  SELECTED_ASSETS_LINEAGE_PATH,
+];
+const IMPLEMENT_SELECTED_TARGET_FILES = [
+  SELECTED_TARGET_DESKTOP_PATH,
+  SELECTED_TARGET_MOBILE_PATH,
+];
 
 function nowIso() {
   return new Date().toISOString();
@@ -302,6 +330,17 @@ async function blockUiReview(runDir, state, { blockingReason, nextAction, now = 
   });
 }
 
+async function blockImplement(runDir, state, { blockingReason, nextAction, now = nowIso } = {}) {
+  await writeDesktopState(runDir, {
+    ...state,
+    stage: 'implement',
+    last_completed_stage: state.last_completed_stage || 'selected-assets',
+    next_action: nextAction || 'repair implementation inputs before rerunning desktop:implement',
+    blocking_reason: blockingReason,
+    updated_at: now(),
+  });
+}
+
 function executorFailureCode(result) {
   const text = `${result?.stdout || ''}\n${result?.stderr || ''}`;
   if (/NO_APPROVED_UI_GENERATION_AVAILABLE/.test(text)) return 'NO_APPROVED_UI_GENERATION_AVAILABLE';
@@ -315,6 +354,37 @@ async function defaultExecuteAgent25DesignOptions({ runDir, promptPath, argv }) 
     encoding: 'utf8',
     timeout: 360_000,
   });
+}
+
+async function defaultRunSiteBuild({ siteDir }) {
+  let install = null;
+  if (!(await exists(path.join(siteDir, 'node_modules/.bin/astro')))) {
+    install = spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
+      cwd: siteDir,
+      encoding: 'utf8',
+      timeout: 360_000,
+    });
+    if (install.status !== 0) {
+      return {
+        status: install.status ?? 1,
+        command: 'npm install --no-audit --no-fund',
+        stdout: install.stdout || '',
+        stderr: install.stderr || '',
+      };
+    }
+  }
+
+  const build = spawnSync('npm', ['run', 'build'], {
+    cwd: siteDir,
+    encoding: 'utf8',
+    timeout: 360_000,
+  });
+  return {
+    status: build.status ?? 1,
+    command: 'npm run build',
+    stdout: [install?.stdout || '', build.stdout || ''].filter(Boolean).join('\n'),
+    stderr: [install?.stderr || '', build.stderr || ''].filter(Boolean).join('\n'),
+  };
 }
 
 function normalizeRelativeRunPath(value) {
@@ -1632,6 +1702,822 @@ export async function runDesktopSelectedAssets({
   };
 }
 
+async function missingRunFiles(runDir, relPaths) {
+  const missing = [];
+  for (const relPath of relPaths) {
+    if (!(await exists(path.join(runDir, relPath)))) missing.push(relPath);
+  }
+  return missing;
+}
+
+async function writeRunText(runDir, relPath, content) {
+  const filePath = path.join(runDir, relPath);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, content, 'utf8');
+}
+
+async function writeBeforeAgent3GateResult(runDir, beforeAgent3, now = nowIso) {
+  const gateResult = {
+    gate: 'before-agent-3',
+    runDir: path.resolve(runDir),
+    status: beforeAgent3.allowed ? 'pass' : 'fail',
+    passed: beforeAgent3.allowed,
+    failures: beforeAgent3.allowed ? [] : beforeAgent3.missing,
+    details: beforeAgent3,
+    evidence: { output: 'gate-results/before-agent-3.json' },
+    generatedAt: now(),
+  };
+  await writeGateResult(runDir, 'before-agent-3.json', gateResult);
+  return gateResult;
+}
+
+function toPackageName(value) {
+  const normalized = String(value || 'desktop-toolsite')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return normalized || 'desktop-toolsite';
+}
+
+function originFromDomain(value) {
+  const domain = String(value || 'example.com').trim().replace(/\/+$/, '');
+  return /^https?:\/\//i.test(domain) ? domain : `https://${domain || 'example.com'}`;
+}
+
+function textExcerpt(value, maxLength = 900) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
+}
+
+function factsFromImplementationInputs({ specText, selectedManifest }) {
+  const facts = extractSpecFacts(specText);
+  const keyword = facts.keyword || 'browser tool';
+  const targetDomain = facts.targetDomain || selectedManifest?.target_domain || 'example.com';
+  const selectedOption = normalizeUiOption(selectedManifest?.selected_option) || normalizeUiOption(selectedManifest?.selectedOption) || '';
+  const selectedDesign = selectedManifest?.selected_design || selectedManifest?.selectedDesign || (selectedOption ? optionLabelFromUi(selectedOption) : 'Selected design');
+  return {
+    ...facts,
+    keyword,
+    targetDomain,
+    selectedOption,
+    selectedDesign,
+    siteUrl: originFromDomain(targetDomain),
+    siteId: toPackageName(targetDomain.replace(/^https?:\/\//i, '').replace(/\..*$/, '') || keyword),
+  };
+}
+
+async function readImplementationInputs(runDir) {
+  const selectedManifest = await readJsonOptional(path.join(runDir, SELECTED_ASSETS_MANIFEST_PATH));
+  const files = {
+    specText: await readOptional(path.join(runDir, 'toolsite-spec.md')),
+    siteBrief: await readOptional(path.join(runDir, 'agent-2-output/site-brief.md')),
+    toolSpec: await readOptional(path.join(runDir, 'agent-2-output/tool-spec.md')),
+    pagePlan: await readOptional(path.join(runDir, 'agent-2-output/page-plan.md')),
+    designInput: await readOptional(path.join(runDir, 'agent-2-output/design-generation-input.md')),
+    selectedPackage: await readOptional(path.join(runDir, SELECTED_ASSETS_PACKAGE_PATH)),
+    selectedLineage: await readOptional(path.join(runDir, SELECTED_ASSETS_LINEAGE_PATH)),
+  };
+  return {
+    ...files,
+    selectedManifest,
+    facts: factsFromImplementationInputs({ specText: files.specText, selectedManifest }),
+  };
+}
+
+function agent3Outputs(inputs) {
+  const { facts, selectedManifest } = inputs;
+  const sourceMap = selectedManifest?.source_map || 'agent-2-5-output/selected-assets/source-map.json';
+  const manifestPath = SELECTED_ASSETS_MANIFEST_PATH;
+  const lineagePath = SELECTED_ASSETS_LINEAGE_PATH;
+  return {
+    'agent-3-output/ui-direction.md': [
+      `# ${facts.keyword} UI Direction`,
+      '',
+      `Selected design: ${facts.selectedDesign}.`,
+      `Selected option: ${facts.selectedOption || 'recorded in selected-assets manifest'}.`,
+      '',
+      '## Direction',
+      '',
+      `Implement the already selected ${facts.selectedDesign}; do not re-rank, remix, or switch A/B/C options.`,
+      'The first viewport must be the working tool surface with input, controls, live output, and feedback visible before support content.',
+      '',
+      '## Required Evidence Links',
+      '',
+      `- Selected-assets manifest: ${manifestPath}`,
+      `- Selected design lineage: ${lineagePath}`,
+      `- Source map: ${sourceMap}`,
+      `- Desktop target image: ${SELECTED_TARGET_DESKTOP_PATH}`,
+      `- Mobile target image: ${SELECTED_TARGET_MOBILE_PATH}`,
+      '',
+    ].join('\n'),
+    'agent-3-output/implementation-handoff.md': [
+      `# ${facts.keyword} Agent4 Implementation Handoff`,
+      '',
+      `Target domain: ${facts.targetDomain}`,
+      `Selected design: ${facts.selectedDesign}`,
+      '',
+      '## Non-Negotiables',
+      '',
+      '- Preserve the selected A/B/C option exactly; do not choose a new direction.',
+      '- Use the selected-assets package and lineage as the visual contract.',
+      '- Build a static Astro site only.',
+      '- Do not add backend, database, login, accounts, server APIs, upload, saved history, or unapproved pages.',
+      '- Include the required page-plan pages and crawler files.',
+      '',
+      '## Inputs',
+      '',
+      `- Toolsite SPEC: toolsite-spec.md`,
+      `- Agent2 tool spec: agent-2-output/tool-spec.md`,
+      `- Agent2 page plan: agent-2-output/page-plan.md`,
+      `- Selected design package: ${SELECTED_ASSETS_PACKAGE_PATH}`,
+      `- Selected design lineage: ${lineagePath}`,
+      '',
+    ].join('\n'),
+    'agent-3-output/selected-design-summary.md': [
+      `# ${facts.keyword} Selected Design Summary`,
+      '',
+      `User-selected option: ${facts.selectedDesign}.`,
+      `Selection evidence: ${manifestPath}.`,
+      `External action receipt: ${selectedManifest?.external_action_receipt || ACTION_RECEIPT_PATH}.`,
+      '',
+      '## Selected Package Summary',
+      '',
+      textExcerpt(inputs.selectedPackage),
+      '',
+      '## Lineage Summary',
+      '',
+      textExcerpt(inputs.selectedLineage),
+      '',
+    ].join('\n'),
+    'agent-3-output/visual-targets.md': [
+      `# ${facts.keyword} Visual Targets`,
+      '',
+      `Desktop selected target: ${SELECTED_TARGET_DESKTOP_PATH}`,
+      `Mobile selected target: ${SELECTED_TARGET_MOBILE_PATH}`,
+      '',
+      'These images are the selected target references from Agent2.5 selected-assets. They are not Codex-local replacement mockups.',
+      'Agent4 must use them as implementation guidance and must not change the selected option.',
+      '',
+    ].join('\n'),
+  };
+}
+
+async function writeAgent3Outputs(runDir, inputs) {
+  await mkdir(path.join(runDir, 'agent-3-output'), { recursive: true });
+  const outputs = agent3Outputs(inputs);
+  for (const [relPath, content] of Object.entries(outputs)) await writeRunText(runDir, relPath, content);
+  return Object.keys(outputs);
+}
+
+function astroPackageJson(facts) {
+  return `${JSON.stringify({
+    name: facts.siteId,
+    version: '0.1.0',
+    private: true,
+    type: 'module',
+    scripts: {
+      dev: 'astro dev',
+      build: 'astro check && astro build',
+      preview: 'astro preview',
+    },
+    dependencies: {
+      '@astrojs/check': 'latest',
+      astro: 'latest',
+      typescript: 'latest',
+    },
+    devDependencies: {},
+  }, null, 2)}\n`;
+}
+
+function indexAstro(inputs) {
+  const { facts } = inputs;
+  const title = `${facts.keyword} - Free Browser Tool`;
+  const description = `Use this ${facts.keyword} tool locally in your browser.`;
+  return `---
+import '../styles/global.css';
+
+const title = ${JSON.stringify(title)};
+const description = ${JSON.stringify(description)};
+const keyword = ${JSON.stringify(facts.keyword)};
+const selectedDesign = ${JSON.stringify(facts.selectedDesign)};
+const siteUrl = ${JSON.stringify(facts.siteUrl)};
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="canonical" href={new URL('/', siteUrl).toString()} />
+  </head>
+  <body>
+    <main class="app-shell" data-selected-design={selectedDesign}>
+      <section class="tool-workbench" aria-labelledby="tool-title">
+        <div class="tool-copy">
+          <p class="kicker">Browser-local tool</p>
+          <h1 id="tool-title">{keyword}</h1>
+          <p class="summary">Paste or type text and get live counts for words, characters, sentences, paragraphs, reading time, and speaking time. Nothing is uploaded.</p>
+        </div>
+
+        <div class="tool-panel" data-tool-root>
+          <label for="source-text">Text to analyze</label>
+          <textarea id="source-text" rows="10" placeholder="Paste or type text here"></textarea>
+          <div class="control-row">
+            <button id="copy-summary" type="button">Copy summary</button>
+            <button id="clear-text" type="button" class="secondary">Clear</button>
+          </div>
+          <output id="status" class="status" aria-live="polite">Ready for text.</output>
+        </div>
+
+        <div class="metric-grid" aria-label="Live text statistics">
+          <article><span>Words</span><strong id="words">0</strong></article>
+          <article><span>Characters</span><strong id="characters">0</strong></article>
+          <article><span>Sentences</span><strong id="sentences">0</strong></article>
+          <article><span>Paragraphs</span><strong id="paragraphs">0</strong></article>
+          <article><span>Reading time</span><strong id="reading-time">0 min</strong></article>
+          <article><span>Speaking time</span><strong id="speaking-time">0 min</strong></article>
+        </div>
+      </section>
+
+      <section class="support-band" aria-label="Tool details">
+        <article>
+          <h2>How it works</h2>
+          <p>The tool counts text locally as you type, then updates every metric without account creation, uploads, or server calls.</p>
+        </article>
+        <article>
+          <h2>Privacy</h2>
+          <p>Your text stays in this browser session. Use the clear control to reset the input and all live results.</p>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const input = document.querySelector('#source-text');
+      const status = document.querySelector('#status');
+      const copyButton = document.querySelector('#copy-summary');
+      const clearButton = document.querySelector('#clear-text');
+      const targets = {
+        words: document.querySelector('#words'),
+        characters: document.querySelector('#characters'),
+        sentences: document.querySelector('#sentences'),
+        paragraphs: document.querySelector('#paragraphs'),
+        readingTime: document.querySelector('#reading-time'),
+        speakingTime: document.querySelector('#speaking-time'),
+      };
+
+      function stats(value) {
+        const trimmed = value.trim();
+        const words = trimmed ? trimmed.split(/\\s+/).filter(Boolean).length : 0;
+        const characters = value.length;
+        const sentences = trimmed ? (trimmed.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).length : 0;
+        const paragraphs = trimmed ? trimmed.split(/\\n\\s*\\n/).filter((part) => part.trim()).length : 0;
+        return {
+          words,
+          characters,
+          sentences,
+          paragraphs,
+          readingTime: words ? Math.max(1, Math.ceil(words / 225)) : 0,
+          speakingTime: words ? Math.max(1, Math.ceil(words / 150)) : 0,
+        };
+      }
+
+      function render() {
+        const value = input?.value || '';
+        const current = stats(value);
+        if (targets.words) targets.words.textContent = String(current.words);
+        if (targets.characters) targets.characters.textContent = String(current.characters);
+        if (targets.sentences) targets.sentences.textContent = String(current.sentences);
+        if (targets.paragraphs) targets.paragraphs.textContent = String(current.paragraphs);
+        if (targets.readingTime) targets.readingTime.textContent = current.readingTime + ' min';
+        if (targets.speakingTime) targets.speakingTime.textContent = current.speakingTime + ' min';
+        if (status) status.textContent = current.words ? 'Live results updated.' : 'Ready for text.';
+        return current;
+      }
+
+      input?.addEventListener('input', render);
+      clearButton?.addEventListener('click', () => {
+        if (input) input.value = '';
+        render();
+        input?.focus();
+      });
+      copyButton?.addEventListener('click', async () => {
+        const current = render();
+        const summary = \`Words: \${current.words}; Characters: \${current.characters}; Sentences: \${current.sentences}; Paragraphs: \${current.paragraphs}\`;
+        try {
+          await navigator.clipboard.writeText(summary);
+          if (status) status.textContent = 'Summary copied.';
+        } catch {
+          if (status) status.textContent = summary;
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>
+`;
+}
+
+function textPageAstro({ title, description, heading, body }) {
+  return `---
+import '../styles/global.css';
+
+const title = ${JSON.stringify(title)};
+const description = ${JSON.stringify(description)};
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex,nofollow" />
+  </head>
+  <body>
+    <main class="text-page">
+      <a href="/">Back to tool</a>
+      <h1>${heading}</h1>
+      <p>${body}</p>
+    </main>
+  </body>
+</html>
+`;
+}
+
+function globalCss() {
+  return `:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #172033;
+  --muted: #5d6677;
+  --line: #d7dde7;
+  --primary: #3157d5;
+  --success: #0c7a5b;
+  --warning: #b67800;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 40px;
+}
+
+.tool-workbench {
+  min-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(320px, 1.2fr);
+  grid-template-areas:
+    "copy panel"
+    "metrics metrics";
+  gap: 16px;
+  align-content: start;
+}
+
+.tool-copy,
+.tool-panel,
+.metric-grid article,
+.support-band article,
+.text-page {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.tool-copy {
+  grid-area: copy;
+  padding: 20px;
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: var(--success);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+}
+
+p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.summary {
+  margin-bottom: 0;
+}
+
+.tool-panel {
+  grid-area: panel;
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+label {
+  font-weight: 800;
+}
+
+textarea {
+  width: 100%;
+  min-height: 280px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcfe;
+  color: var(--ink);
+}
+
+.control-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 800;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #e8edf7;
+  color: var(--ink);
+}
+
+.status {
+  min-height: 42px;
+  border-left: 4px solid var(--warning);
+  padding: 10px 12px;
+  background: #fff8ea;
+  color: #604500;
+}
+
+.metric-grid {
+  grid-area: metrics;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-grid article {
+  padding: 14px;
+  min-height: 92px;
+}
+
+.metric-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.metric-grid strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.65rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.support-band {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.support-band article,
+.text-page {
+  padding: 20px;
+}
+
+.text-page {
+  width: min(760px, calc(100% - 32px));
+  margin: 32px auto;
+}
+
+a {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .tool-workbench {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "copy"
+      "panel"
+      "metrics";
+  }
+
+  .metric-grid,
+  .support-band {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    width: min(100% - 20px, 1180px);
+    padding-top: 10px;
+  }
+
+  h1 {
+    font-size: 1.85rem;
+  }
+
+  textarea {
+    min-height: 220px;
+  }
+
+  .metric-grid,
+  .support-band {
+    grid-template-columns: 1fr;
+  }
+}
+`;
+}
+
+function sitemapEndpoint(facts) {
+  return `const site = ${JSON.stringify(facts.siteUrl)};
+
+export async function GET() {
+  const urls = ['/', '/privacy', '/terms'].map((route) => new URL(route, site).toString());
+  const body = \`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+\${urls.map((url) => \`  <url><loc>\${url}</loc></url>\`).join('\\n')}
+</urlset>\`;
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'application/xml',
+    },
+  });
+}
+`;
+}
+
+function astroConfig(facts) {
+  return `import { defineConfig } from 'astro/config';
+
+export default defineConfig({
+  output: 'static',
+  site: ${JSON.stringify(facts.siteUrl)},
+});
+`;
+}
+
+async function writeAstroSite(runDir, inputs) {
+  const { facts } = inputs;
+  const siteDir = path.join(runDir, 'site');
+  await rm(siteDir, { recursive: true, force: true });
+  await mkdir(path.join(siteDir, 'src/pages'), { recursive: true });
+  await mkdir(path.join(siteDir, 'src/styles'), { recursive: true });
+  await mkdir(path.join(siteDir, 'public'), { recursive: true });
+
+  const files = {
+    'site/package.json': astroPackageJson(facts),
+    'site/astro.config.mjs': astroConfig(facts),
+    'site/tsconfig.json': `${JSON.stringify({ extends: 'astro/tsconfigs/strict' }, null, 2)}\n`,
+    'site/src/pages/index.astro': indexAstro(inputs),
+    'site/src/pages/privacy.astro': textPageAstro({
+      title: `Privacy - ${facts.keyword}`,
+      description: `Privacy details for ${facts.keyword}.`,
+      heading: 'Privacy',
+      body: 'This static tool is designed for browser-local processing. Do not enter sensitive information unless you are comfortable processing it in your own browser session.',
+    }),
+    'site/src/pages/terms.astro': textPageAstro({
+      title: `Terms - ${facts.keyword}`,
+      description: `Terms for ${facts.keyword}.`,
+      heading: 'Terms',
+      body: 'This tool is provided as a browser-based utility. Results are informational and should be reviewed before relying on them for important work.',
+    }),
+    'site/src/pages/sitemap.xml.ts': sitemapEndpoint(facts),
+    'site/src/styles/global.css': globalCss(),
+    'site/public/robots.txt': `User-agent: *\nAllow: /\nSitemap: ${facts.siteUrl}/sitemap.xml\n`,
+    'site/public/favicon.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="8" fill="#3157d5"/><path d="M16 18h32v6H16zm0 12h24v6H16zm0 12h30v6H16z" fill="#fff"/></svg>\n',
+  };
+
+  for (const [relPath, content] of Object.entries(files)) await writeRunText(runDir, relPath, content);
+  return Object.keys(files);
+}
+
+function buildReport({ buildResult, passed, generatedAt }) {
+  return [
+    '# Build Report',
+    '',
+    `Decision: ${passed ? 'PASS' : 'FAIL'}`,
+    `Command: ${buildResult.command || 'npm run build'}`,
+    `Exit status: ${buildResult.status ?? 1}`,
+    `Generated at: ${generatedAt}`,
+    '',
+    '## stdout',
+    '',
+    '```text',
+    String(buildResult.stdout || '').trim(),
+    '```',
+    '',
+    '## stderr',
+    '',
+    '```text',
+    String(buildResult.stderr || '').trim(),
+    '```',
+    '',
+  ].join('\n');
+}
+
+async function writeAgent4Reports(runDir, { inputs, agent3Files, siteFiles, buildResult, passed, now = nowIso }) {
+  const generatedAt = now();
+  await mkdir(path.join(runDir, 'agent-4-output'), { recursive: true });
+  await writeRunText(
+    runDir,
+    'agent-4-output/implementation-report.md',
+    [
+      `# ${inputs.facts.keyword} Implementation Report`,
+      '',
+      `Decision: ${passed ? 'PASS' : 'FAIL'}`,
+      `Selected design implemented: ${inputs.facts.selectedDesign}`,
+      `Selected-assets manifest: ${SELECTED_ASSETS_MANIFEST_PATH}`,
+      `Selected design lineage: ${SELECTED_ASSETS_LINEAGE_PATH}`,
+      '',
+      '## Scope',
+      '',
+      '- Generated a static Astro site in `site/`.',
+      '- Implemented the first viewport as the usable tool, not a marketing hero.',
+      '- Included `/`, `/privacy`, `/terms`, `/robots.txt`, and `/sitemap.xml`.',
+      '- Did not add backend, database, login, accounts, API routes, deployment, or Agent5 QA.',
+      '',
+    ].join('\n'),
+  );
+  await writeRunText(
+    runDir,
+    'agent-4-output/changed-files.md',
+    [
+      '# Changed Files',
+      '',
+      '## Agent3',
+      '',
+      ...agent3Files.map((file) => `- ${file}`),
+      '',
+      '## Site',
+      '',
+      ...siteFiles.map((file) => `- ${file}`),
+      '',
+      '## Agent4',
+      '',
+      '- agent-4-output/implementation-report.md',
+      '- agent-4-output/changed-files.md',
+      '- agent-4-output/build-report.md',
+      '',
+    ].join('\n'),
+  );
+  await writeRunText(
+    runDir,
+    'agent-4-output/build-report.md',
+    buildReport({ buildResult, passed, generatedAt }),
+  );
+}
+
+export async function runDesktopImplement({
+  runDir,
+  now = nowIso,
+  runSiteBuild = defaultRunSiteBuild,
+} = {}) {
+  const state = await readDesktopState(runDir);
+  if (state.stage !== 'implement' || state.last_completed_stage !== 'selected-assets') {
+    return {
+      ok: false,
+      code: IMPLEMENT_STAGE_REQUIRED,
+      stage: state.stage || '',
+      last_completed_stage: state.last_completed_stage || null,
+    };
+  }
+
+  if (!(await exists(path.join(runDir, 'toolsite-spec.md')))) {
+    await blockImplement(runDir, state, {
+      blockingReason: SPEC_MISSING,
+      nextAction: 'restore toolsite-spec.md before desktop:implement',
+      now,
+    });
+    return { ok: false, code: SPEC_MISSING, stage: 'implement', missing: ['toolsite-spec.md'] };
+  }
+
+  const missingAgent2 = await missingRunFiles(runDir, IMPLEMENT_AGENT2_FILES);
+  if (missingAgent2.length > 0) {
+    await blockImplement(runDir, state, {
+      blockingReason: AGENT2_OUTPUT_MISSING,
+      nextAction: 'rerun or repair desktop:agent2 outputs before desktop:implement',
+      now,
+    });
+    return { ok: false, code: AGENT2_OUTPUT_MISSING, stage: 'implement', missing: missingAgent2 };
+  }
+
+  const missingSelectedAssets = await missingRunFiles(runDir, IMPLEMENT_SELECTED_ASSETS_FILES);
+  if (missingSelectedAssets.length > 0) {
+    await blockImplement(runDir, state, {
+      blockingReason: SELECTED_ASSETS_MISSING,
+      nextAction: 'run desktop:selected-assets before desktop:implement',
+      now,
+    });
+    return { ok: false, code: SELECTED_ASSETS_MISSING, stage: 'implement', missing: missingSelectedAssets };
+  }
+
+  const missingTargets = await missingRunFiles(runDir, IMPLEMENT_SELECTED_TARGET_FILES);
+  if (missingTargets.length > 0) {
+    await blockImplement(runDir, state, {
+      blockingReason: SELECTED_TARGET_MISSING,
+      nextAction: 'restore selected target images before desktop:implement',
+      now,
+    });
+    return { ok: false, code: SELECTED_TARGET_MISSING, stage: 'implement', missing: missingTargets };
+  }
+
+  const beforeAgent3 = await checkRunGates({ runDir, before: 'agent-3' });
+  await writeBeforeAgent3GateResult(runDir, beforeAgent3, now);
+  if (!beforeAgent3.allowed) {
+    await blockImplement(runDir, state, {
+      blockingReason: AGENT3_GATE_BLOCKED,
+      nextAction: beforeAgent3.allowedNextStep || 'complete before-agent-3 gates before desktop:implement',
+      now,
+    });
+    return { ok: false, code: AGENT3_GATE_BLOCKED, stage: 'implement', gateResult: beforeAgent3 };
+  }
+
+  const inputs = await readImplementationInputs(runDir);
+  const agent3Files = await writeAgent3Outputs(runDir, inputs);
+  const siteFiles = await writeAstroSite(runDir, inputs);
+  const buildResult = await runSiteBuild({ runDir, siteDir: path.join(runDir, 'site') });
+  const buildPassed = buildResult.status === 0;
+  await writeAgent4Reports(runDir, {
+    inputs,
+    agent3Files,
+    siteFiles,
+    buildResult,
+    passed: buildPassed,
+    now,
+  });
+
+  if (!buildPassed) {
+    await blockImplement(runDir, state, {
+      blockingReason: BUILD_FAILED,
+      nextAction: 'fix the Astro site build before desktop:implement can advance',
+      now,
+    });
+    return { ok: false, code: BUILD_FAILED, stage: 'implement', buildResult };
+  }
+
+  await writeDesktopState(runDir, {
+    ...state,
+    stage: 'qa',
+    last_completed_stage: 'implement',
+    next_action: 'run desktop:qa',
+    blocking_reason: null,
+    updated_at: now(),
+  });
+
+  return {
+    ok: true,
+    code: IMPLEMENT_COMPLETE,
+    stage: 'qa',
+    agent3Files,
+    siteFiles,
+    buildResult,
+  };
+}
+
 function configuredStage(stage) {
   return STAGE_RUNNERS.has(stage);
 }
@@ -1642,6 +2528,7 @@ export async function runDesktopStage({
   now = nowIso,
   executeAgent25DesignOptions = defaultExecuteAgent25DesignOptions,
   refreshReceipt = refreshDesignOptionsReceipt,
+  runSiteBuild = defaultRunSiteBuild,
 } = {}) {
   const state = await readDesktopState(runDir);
   const targetStage = stage || state.stage || 'pre-agent2';
@@ -1651,6 +2538,7 @@ export async function runDesktopStage({
   if (targetStage === 'agent2') return runDesktopAgent2({ runDir, now });
   if (targetStage === 'agent25') return runDesktopAgent25({ runDir, now, executeAgent25DesignOptions });
   if (targetStage === 'selected-assets') return runDesktopSelectedAssets({ runDir, now, refreshReceipt });
+  if (targetStage === 'implement') return runDesktopImplement({ runDir, now, runSiteBuild });
   if (targetStage === 'ui-review') {
     if (await readSelectedOption(runDir)) return runDesktopSelectedAssets({ runDir, now, refreshReceipt });
     return { ok: false, code: UI_SELECTION_REQUIRED, stage: 'ui-review', review_type: 'agent25_option_selection' };
@@ -1710,7 +2598,7 @@ async function main() {
       '  pre-agent2   Generate toolsite-spec.md and open local spec-confirmation review.',
       '  agent2       Require confirmed SPEC, write agent-2-output/*, run pre-agent2-toolsite-spec, page-plan, and agent2-brief-compliance gates, then stop at stage=agent25.',
       '  agent25      Require Agent2 compliance, call Agent2.5 design-options executor, run option image and external proof gates, then stop at ui-review.',
-      '  implement    Not wired yet; returns NO_STAGE_RUNNER_CONFIGURED.',
+      '  implement    Require selected-assets, generate Agent3 handoff, implement Astro site, run build, then stop at qa.',
       '  qa           Not wired yet; returns NO_STAGE_RUNNER_CONFIGURED.',
       '  deploy       Requires pre_deploy_approval before deployment; real deployment runner is not wired in this skeleton.',
       '',
@@ -1745,6 +2633,16 @@ async function main() {
       '  Writes selected design package files, selected-assets manifest/source map, selected target copies, and selected-assets/lineage gate results.',
       '  On gate failure, keeps stage=ui-review with blocking_reason=SELECTED_ASSETS_GATE_FAILED.',
       '  On success, writes stage=implement and stops before Agent3.',
+      '',
+      'desktop:implement:',
+      '  npm run desktop:implement -- --run-dir runs/<site-id>',
+      '  Runs only after stage=implement and last_completed_stage=selected-assets.',
+      '  Reads toolsite-spec.md, agent-2-output/*, selected-assets manifest/package/lineage, and selected target images.',
+      '  Verifies check-gates --before agent-3 before generating implementation output.',
+      '  Writes agent-3-output/ui-direction.md, implementation-handoff.md, selected-design-summary.md, and visual-targets.md.',
+      '  Writes an Astro static site in site/ plus agent-4-output/implementation-report.md, changed-files.md, and build-report.md.',
+      '  Runs npm run build in site/. On build failure, keeps stage=implement with blocking_reason=BUILD_FAILED.',
+      '  On success, writes stage=qa and stops before Agent5 QA. It does not deploy.',
     ].join('\n'));
     return;
   }
