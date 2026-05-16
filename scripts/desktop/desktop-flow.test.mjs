@@ -22,12 +22,16 @@ import {
   IMPLEMENT_STAGE_REQUIRED,
   INVALID_DESKTOP_STAGE,
   NO_STAGE_RUNNER_CONFIGURED,
+  QA_COMPLETE,
+  QA_REPAIR_LIMIT_REACHED,
+  QA_STAGE_REQUIRED,
   readDesktopState,
   runDesktopStage,
   SELECTED_ASSETS_COMPLETE,
   SELECTED_ASSETS_GATE_FAILED,
   SELECTED_ASSETS_MISSING,
   SELECTED_OPTION_MISSING,
+  SITE_MISSING,
   SPEC_REVIEW_OPEN,
   UI_SELECTION_REQUIRED,
 } from './run.mjs';
@@ -363,6 +367,47 @@ async function makeImplementReadyRun(root, { selectedOptionId = 'option-a' } = {
   assert.equal(selectedAssets.code, SELECTED_ASSETS_COMPLETE);
   assert.equal((await readDesktopState(created.runDir)).stage, 'implement');
   return created;
+}
+
+async function makeQaReadyRun(root, { selectedOptionId = 'option-a' } = {}) {
+  const created = await makeImplementReadyRun(root, { selectedOptionId });
+  const implemented = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'implement',
+    runSiteBuild: async () => ({ status: 0, command: 'npm run build', stdout: 'build ok', stderr: '' }),
+  });
+  assert.equal(implemented.code, IMPLEMENT_COMPLETE);
+  assert.equal((await readDesktopState(created.runDir)).stage, 'qa');
+  return created;
+}
+
+function mockGateResult(runDir, gate, { passed = true, failures = [] } = {}) {
+  return {
+    gate,
+    runDir,
+    status: passed ? 'pass' : 'fail',
+    passed,
+    failures,
+    details: {},
+    evidence: {},
+    generatedAt: '2026-05-16T11:00:00.000Z',
+  };
+}
+
+function passingQaGateRunner({ fail = {} } = {}) {
+  const calls = [];
+  const runner = async ({ runDir, gate, attempt }) => {
+    calls.push({ gate, attempt });
+    const failure = fail[gate];
+    if (typeof failure === 'function') return failure({ runDir, gate, attempt });
+    if (failure) return mockGateResult(runDir, gate, { passed: false, failures: Array.isArray(failure) ? failure : [String(failure)] });
+    if (gate === 'before-agent-6') {
+      return mockGateResult(runDir, gate, { passed: false, failures: ['approval.md'] });
+    }
+    return mockGateResult(runDir, gate);
+  };
+  runner.calls = calls;
+  return runner;
 }
 
 test('desktop create-run creates expected run structure', async () => {
@@ -1205,6 +1250,193 @@ test('desktop:implement build failure keeps stage implement and records BUILD_FA
   assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
 });
 
+test('desktop:qa refuses outside qa stage', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-stage-'));
+  const created = await makeImplementReadyRun(root);
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'qa' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, QA_STAGE_REQUIRED);
+  assert.equal(result.stage, 'implement');
+  assert.equal(state.stage, 'implement');
+  assert.equal(await exists(path.join(created.runDir, 'agent-5-output/qa-report.md')), false);
+});
+
+test('desktop:qa refuses without site directory', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-no-site-'));
+  const created = await makeQaReadyRun(root);
+  await rm(path.join(created.runDir, 'site'), { recursive: true, force: true });
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'qa' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, SITE_MISSING);
+  assert.equal(state.stage, 'qa');
+  assert.equal(state.blocking_reason, SITE_MISSING);
+});
+
+test('desktop:qa runs build and QA gate sequence using mocks, then opens pre-deploy review', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-success-'));
+  const created = await makeQaReadyRun(root);
+  const runQaGate = passingQaGateRunner();
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    now: () => '2026-05-16T11:00:00.000Z',
+    runQaGate,
+  });
+  const state = await readDesktopState(created.runDir);
+  const events = await readEvents(created.runDir);
+  const review = events.find((event) => event.review_type === 'pre_deploy_approval' && event.status === 'open');
+
+  assert.equal(result.code, QA_COMPLETE);
+  assert.equal(result.stage, 'deploy-review');
+  assert.equal(state.stage, 'deploy-review');
+  assert.equal(state.last_completed_stage, 'qa');
+  assert.equal(state.blocking_reason, 'pre-deploy-approval');
+  assert.ok(review);
+  assert.equal(review.blocking, true);
+  assert.equal(review.blocks, 'agent-6');
+
+  assert.deepEqual(runQaGate.calls.map((call) => call.gate), [
+    'site-build',
+    'page-plan',
+    'tool-spec',
+    'selected-assets',
+    'agent25-lineage',
+    'toolsite-design-review',
+    'rendered-assets',
+    'final-visual-lock',
+    'visual-restoration-similarity',
+    'final-visual-similarity',
+    'final-qa-evidence',
+    'gate-evidence-integrity',
+    'before-agent-6',
+  ]);
+
+  for (const filePath of [
+    'agent-5-output/qa-report.md',
+    'agent-5-output/final-qa-report.md',
+    'agent-5-output/launch-readiness.md',
+    'agent-5-output/repair-log.md',
+    'agent-5-output/gate-summary.json',
+    'agent-5-output/chat-delivery/final-screenshot-delivery.md',
+    'gate-results/site-build.json',
+    'gate-results/page-plan.json',
+    'gate-results/tool-spec.json',
+    'gate-results/rendered-assets.json',
+    'gate-results/final-visual-lock.json',
+    'gate-results/final-visual-similarity.json',
+    'gate-results/visual-restoration-similarity.json',
+    'gate-results/final-qa-evidence.json',
+    'gate-results/gate-evidence-integrity.json',
+    'gate-results/before-agent-6.json',
+  ]) {
+    assert.equal(await exists(path.join(created.runDir, filePath)), true, `${filePath} should exist`);
+  }
+
+  const qaReport = await readFile(path.join(created.runDir, 'agent-5-output/qa-report.md'), 'utf8');
+  assert.match(qaReport, /Decision: PASS/);
+  const gateSummary = JSON.parse(await readFile(path.join(created.runDir, 'agent-5-output/gate-summary.json'), 'utf8'));
+  assert.equal(gateSummary.qa_passed, true);
+  assert.equal(gateSummary.deploy_approval_pending, true);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
+test('desktop:qa gate failure enters repair loop and reruns the gate', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-repair-pass-'));
+  const created = await makeQaReadyRun(root);
+  const runQaGate = passingQaGateRunner({
+    fail: {
+      'tool-spec': ({ runDir, gate, attempt }) =>
+        attempt === 0
+          ? mockGateResult(runDir, gate, { passed: false, failures: ['missing restart behavior'] })
+          : mockGateResult(runDir, gate),
+    },
+  });
+  const repairs = [];
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate,
+    repairQaGate: async ({ gate, attempt, failure }) => {
+      repairs.push({ gate, attempt, failure });
+      return { repaired: true, note: 'patched implementation' };
+    },
+  });
+
+  assert.equal(result.code, QA_COMPLETE);
+  assert.equal(repairs.length, 1);
+  assert.equal(repairs[0].gate, 'tool-spec');
+  assert.deepEqual(runQaGate.calls.filter((call) => call.gate === 'tool-spec').map((call) => call.attempt), [0, 1]);
+  const repairLog = await readFile(path.join(created.runDir, 'agent-5-output/repair-log.md'), 'utf8');
+  assert.match(repairLog, /tool-spec repair attempt 1/);
+  assert.match(repairLog, /do not edit gate-results manually/);
+});
+
+test('desktop:qa repair loop retries up to limit and keeps stage qa', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-repair-limit-'));
+  const created = await makeQaReadyRun(root);
+  const runQaGate = passingQaGateRunner({
+    fail: {
+      'rendered-assets': ({ runDir, gate }) => mockGateResult(runDir, gate, { passed: false, failures: ['missing rendered asset'] }),
+    },
+  });
+  let repairCount = 0;
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate,
+    repairQaGate: async () => {
+      repairCount += 1;
+      return { repaired: true };
+    },
+    maxQaRepairAttempts: 3,
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, QA_REPAIR_LIMIT_REACHED);
+  assert.equal(result.failed_gate, 'rendered-assets');
+  assert.equal(repairCount, 3);
+  assert.equal(state.stage, 'qa');
+  assert.equal(state.blocking_reason, QA_REPAIR_LIMIT_REACHED);
+  assert.equal(state.repair_attempts['rendered-assets'], 3);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
+test('desktop:qa repair loop does not let repair task hand-edit gate results', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-repair-no-manual-gate-'));
+  const created = await makeQaReadyRun(root);
+  const runQaGate = passingQaGateRunner({
+    fail: {
+      'page-plan': ({ runDir, gate, attempt }) =>
+        attempt === 0
+          ? mockGateResult(runDir, gate, { passed: false, failures: ['missing /privacy'] })
+          : mockGateResult(runDir, gate),
+    },
+  });
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate,
+    repairQaGate: async ({ runDir }) => {
+      assert.equal(await exists(path.join(runDir, 'gate-results/page-plan.json')), true);
+      return { repaired: true, changed_files: ['site/src/pages/privacy.astro'] };
+    },
+  });
+  const pagePlan = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/page-plan.json'), 'utf8'));
+  const repairLog = await readFile(path.join(created.runDir, 'agent-5-output/repair-log.md'), 'utf8');
+
+  assert.equal(result.code, QA_COMPLETE);
+  assert.equal(pagePlan.passed, true);
+  assert.match(repairLog, /Repair real artifacts for page-plan/);
+  assert.match(repairLog, /do not edit gate-results manually/);
+});
+
 test('desktop deploy refuses without pre_deploy_approval', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-'));
   const inputPath = await makeInput(root);
@@ -1223,10 +1455,10 @@ test('missing stage runner returns NO_STAGE_RUNNER_CONFIGURED', async () => {
   const inputPath = await makeInput(root);
   const created = await createDesktopRun({ rootDir: root, siteId: 'wordcounter-desktop', inputPath });
 
-  const result = await runDesktopStage({ runDir: created.runDir, stage: 'qa' });
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'agent6' });
 
   assert.equal(result.code, NO_STAGE_RUNNER_CONFIGURED);
-  assert.equal(result.stage, 'qa');
+  assert.equal(result.stage, 'agent6');
 });
 
 test('desktop flow scripts use only local desktop review state', async () => {

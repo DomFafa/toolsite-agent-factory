@@ -27,6 +27,10 @@ const UI_OPTION_REVIEW_TYPES = new Set([
   'agent25_option_selection',
   'desktop_ui_option_selection',
 ]);
+const PRE_DEPLOY_REVIEW_TYPES = new Set([
+  'pre-deploy-approval',
+  'pre_deploy_approval',
+]);
 const OPTIONS_BOARD_PATH = 'agent-2-5-output/chat-delivery/options-board.png';
 const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
 const SELECTED_DESIGN_DIR = 'agent-2-5-output/selected-design';
@@ -85,6 +89,9 @@ function reviewTypeMatches(event, reviewType) {
   if (UI_OPTION_REVIEW_TYPES.has(reviewType)) {
     return UI_OPTION_REVIEW_TYPES.has(event.review_type) || event.id === 'agent25-option-selection';
   }
+  if (PRE_DEPLOY_REVIEW_TYPES.has(reviewType)) {
+    return PRE_DEPLOY_REVIEW_TYPES.has(event.review_type) || event.id === 'pre-deploy-approval';
+  }
   return false;
 }
 
@@ -99,7 +106,7 @@ function validateReply(reviewType, reply) {
   const value = String(reply || '').trim();
   if (reviewType === 'spec-confirmation') return value === '确认 SPEC' || /^修改[:：]/.test(value);
   if (UI_OPTION_REVIEW_TYPES.has(reviewType)) return /^[ABC]$/i.test(value);
-  if (reviewType === 'pre-deploy-approval') return value === '确认部署' || /^修改[:：]/.test(value);
+  if (PRE_DEPLOY_REVIEW_TYPES.has(reviewType)) return value === '确认部署' || /^修改[:：]/.test(value);
   return false;
 }
 
@@ -138,7 +145,7 @@ function nextStateFor(reviewType, reply, state) {
       blocking_reason: 'ui-options-rejected',
     };
   }
-  if (reviewType === 'pre-deploy-approval') {
+  if (PRE_DEPLOY_REVIEW_TYPES.has(reviewType)) {
     if (reply === '确认部署') {
       return {
         ...state,
