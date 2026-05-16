@@ -3,6 +3,7 @@
 // If this entrypoint conflicts with the contract, the contract wins.
 // Selected-assets checks must ground Agent2.5 design assets in real selected-design evidence before downstream implementation.
 import { access, readFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -135,6 +136,129 @@ function isRaster(filePath) {
   return ['.png', '.jpg', '.jpeg', '.webp'].includes(path.extname(filePath).toLowerCase());
 }
 
+function sha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+function normalizeUiOption(value) {
+  const text = String(value || '').trim();
+  if (/^(option[-_\s]*)?a$/i.test(text) || /^Option A$/i.test(text)) return 'A';
+  if (/^(option[-_\s]*)?b$/i.test(text) || /^Option B$/i.test(text)) return 'B';
+  if (/^(option[-_\s]*)?c$/i.test(text) || /^Option C$/i.test(text)) return 'C';
+  return '';
+}
+
+function optionLabel(option) {
+  return option ? `Option ${option}` : '';
+}
+
+function sourceMapTargetPath(sourceMap, name) {
+  return String(
+    sourceMap?.output_targets?.[name]
+      || sourceMap?.outputTargets?.[name]
+      || sourceMap?.targets?.[name]
+      || '',
+  ).trim();
+}
+
+function sourceMapTargetHash(sourceMap, relPath) {
+  return String(
+    sourceMap?.target_hashes?.[relPath]
+      || sourceMap?.targetHashes?.[relPath]
+      || sourceMap?.artifact_hashes?.[relPath]
+      || sourceMap?.artifactHashes?.[relPath]
+      || '',
+  ).trim();
+}
+
+async function selectedTargetDetails({ runDir, relPath }) {
+  const absolutePath = path.join(runDir, relPath);
+  const buffer = await readOptional(absolutePath, null);
+  if (!buffer) return null;
+  const dimensions = rasterDimensions(buffer);
+  return {
+    relPath,
+    sha256: sha256(buffer),
+    dimensions,
+    size: buffer.length,
+  };
+}
+
+async function checkSelectedTargets({ runDir, failures }) {
+  const selectedOptionJson = await readJsonOptional(path.join(runDir, 'agent-2-5-output/selected-design/selected-option.json'));
+  const sourceMap = await readJsonOptional(path.join(runDir, 'agent-2-5-output/selected-assets/source-map.json'));
+  const selectedLineage = await readOptional(path.join(runDir, 'agent-2-5-output/selected-assets/selected-design-lineage.md'), 'utf8');
+  const boardDetails = await selectedTargetDetails({ runDir, relPath: 'agent-2-5-output/chat-delivery/options-board.png' });
+  const selectedOption = normalizeUiOption(selectedOptionJson?.selected_option || selectedOptionJson?.selectedOption);
+  const sourceMapOption = normalizeUiOption(sourceMap?.selected_option || sourceMap?.selectedOption || sourceMap?.derivation?.selected_option);
+  const details = {
+    selectedOption,
+    sourceMapOption,
+    selectedTargets: {},
+  };
+
+  if (!selectedOption) failures.push('selected-option.json must record selected_option A, B, or C');
+  if (!sourceMap) failures.push('missing or invalid agent-2-5-output/selected-assets/source-map.json');
+  if (!boardDetails) failures.push('missing agent-2-5-output/chat-delivery/options-board.png');
+  if (sourceMap && selectedOption && sourceMapOption !== selectedOption) {
+    failures.push(`source-map selected_option ${sourceMapOption || '(missing)'} does not match ${selectedOption}`);
+  }
+  if (selectedLineage && selectedOption && !new RegExp(optionLabel(selectedOption).replace(' ', '\\s+'), 'i').test(selectedLineage)) {
+    failures.push(`selected-design-lineage.md must mention ${optionLabel(selectedOption)}`);
+  }
+
+  const expectedTargets = [
+    ['desktop', 'agent-2-5-output/selected-assets/selected-target-desktop.png'],
+    ['mobile', 'agent-2-5-output/selected-assets/selected-target-mobile.png'],
+  ];
+  for (const [name, relPath] of expectedTargets) {
+    const target = await selectedTargetDetails({ runDir, relPath });
+    details.selectedTargets[name] = {
+      path: relPath,
+      sha256: target?.sha256 || '',
+      dimensions: target?.dimensions || null,
+      derivation: sourceMap?.derivation || null,
+    };
+    if (!target) {
+      failures.push(`missing ${relPath}`);
+      continue;
+    }
+    if (!target.dimensions) failures.push(`${path.basename(relPath)} dimensions could not be read`);
+    if (boardDetails && target.sha256 === boardDetails.sha256) {
+      failures.push(`${path.basename(relPath)} must not equal the full options-board.png`);
+    }
+    if (sourceMap) {
+      const mappedPath = sourceMapTargetPath(sourceMap, name);
+      if (mappedPath !== relPath) failures.push(`source-map output target ${name} must be ${relPath}`);
+      const expectedHash = sourceMapTargetHash(sourceMap, relPath);
+      if (!/^[a-f0-9]{64}$/i.test(expectedHash)) {
+        failures.push(`source-map target hash missing for ${relPath}`);
+      } else if (expectedHash !== target.sha256) {
+        failures.push(`source-map target hash for ${relPath} does not match actual file`);
+      }
+    }
+  }
+
+  if (sourceMap) {
+    const method = String(sourceMap.derivation?.method || sourceMap.derivation_method || sourceMap.derivationMethod || '').trim();
+    if (!method) failures.push('source-map must record a selected target derivation method');
+    if (/crop/i.test(method) && !sourceMap.derivation?.crop_region && !sourceMap.crop_region) {
+      failures.push('source-map crop derivation must record crop_region');
+    }
+    if (String(sourceMap.source_options_board || '').trim() !== 'agent-2-5-output/chat-delivery/options-board.png') {
+      failures.push('source-map must record source_options_board');
+    }
+    const boardSha = String(sourceMap.source_options_board_sha256 || sourceMap.derivation?.source_options_board_sha256 || '').trim();
+    if (!/^[a-f0-9]{64}$/i.test(boardSha)) {
+      failures.push('source-map must record source_options_board_sha256');
+    } else if (boardDetails && boardSha !== boardDetails.sha256) {
+      failures.push('source-map source_options_board_sha256 does not match options-board.png');
+    }
+  }
+
+  return details;
+}
+
 export async function runSelectedAssetsGate({ runDir }) {
   const absoluteRunDir = path.resolve(runDir);
   const selectedDir = path.join(absoluteRunDir, 'agent-2-5-output/selected-design');
@@ -153,6 +277,7 @@ export async function runSelectedAssetsGate({ runDir }) {
   const assetPrompt = await readOptional(assetPromptPath, 'utf8');
   const fallbackReport = await readOptional(fallbackReportPath, 'utf8');
   const manifest = await readJsonOptional(manifestPath);
+  const selectedTargetDetailsResult = await checkSelectedTargets({ runDir: absoluteRunDir, failures });
 
   if (!imageSlotsText) failures.push('missing agent-2-5-output/selected-design/image-slots.md');
   if (!manifest) failures.push('missing or invalid agent-2-5-output/selected-design/asset-manifest.json');
@@ -202,6 +327,7 @@ export async function runSelectedAssetsGate({ runDir }) {
   }
 
   const details = {
+    ...selectedTargetDetailsResult,
     noImageSlots,
     slotCount: slots.length,
     checkedSlots: [],
@@ -284,6 +410,9 @@ export async function runSelectedAssetsGate({ runDir }) {
       assetGenerationPrompt: 'agent-2-5-output/selected-design/asset-generation-prompt.md',
       fallbackReport: 'agent-2-5-output/selected-design/fallback-illustration-report.md',
       assetReport: 'agent-2-5-output/asset-acquisition-report.md',
+      sourceMap: 'agent-2-5-output/selected-assets/source-map.json',
+      selectedTargetDesktop: 'agent-2-5-output/selected-assets/selected-target-desktop.png',
+      selectedTargetMobile: 'agent-2-5-output/selected-assets/selected-target-mobile.png',
     },
   });
 }

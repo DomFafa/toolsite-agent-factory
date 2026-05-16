@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { deflateSync, inflateSync } from 'node:zlib';
 
 import {
   parseRunInput,
@@ -58,6 +59,7 @@ export const IMPLEMENT_STAGE_REQUIRED = 'IMPLEMENT_STAGE_REQUIRED';
 export const SPEC_MISSING = 'SPEC_MISSING';
 export const SELECTED_ASSETS_MISSING = 'SELECTED_ASSETS_MISSING';
 export const SELECTED_TARGET_MISSING = 'SELECTED_TARGET_MISSING';
+export const SELECTED_TARGET_INVALID = 'SELECTED_TARGET_INVALID';
 export const AGENT3_GATE_BLOCKED = 'AGENT3_GATE_BLOCKED';
 export const BUILD_FAILED = 'BUILD_FAILED';
 export const IMPLEMENT_COMPLETE = 'IMPLEMENT_COMPLETE';
@@ -342,6 +344,168 @@ function pathValue(record, keys) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
+}
+
+function pngCrc32(buffer) {
+  if (!pngCrc32.table) {
+    pngCrc32.table = Array.from({ length: 256 }, (_, index) => {
+      let value = index;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+      }
+      return value >>> 0;
+    });
+  }
+  let crc = 0xffffffff;
+  for (const byte of buffer) crc = pngCrc32.table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data = Buffer.alloc(0)) {
+  const typeBuffer = Buffer.from(type, 'ascii');
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(pngCrc32(Buffer.concat([typeBuffer, data])), 0);
+  return Buffer.concat([length, typeBuffer, data, crc]);
+}
+
+function paethPredictor(left, up, upperLeft) {
+  const p = left + up - upperLeft;
+  const pa = Math.abs(p - left);
+  const pb = Math.abs(p - up);
+  const pc = Math.abs(p - upperLeft);
+  if (pa <= pb && pa <= pc) return left;
+  if (pb <= pc) return up;
+  return upperLeft;
+}
+
+function decodePng(buffer) {
+  const signature = '89504e470d0a1a0a';
+  if (!Buffer.isBuffer(buffer) || buffer.length < 24 || buffer.subarray(0, 8).toString('hex') !== signature) {
+    throw new Error('invalid PNG signature');
+  }
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = 0;
+  let interlace = 0;
+  const idat = [];
+  while (offset + 12 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.toString('ascii', offset + 4, offset + 8);
+    const data = buffer.subarray(offset + 8, offset + 8 + length);
+    offset += 12 + length;
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
+      interlace = data[12];
+    } else if (type === 'IDAT') {
+      idat.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+  }
+  const bytesPerPixel = colorType === 6 ? 4 : colorType === 2 ? 3 : 0;
+  if (!width || !height || bitDepth !== 8 || !bytesPerPixel || interlace !== 0) {
+    throw new Error('unsupported PNG format for selected target crop');
+  }
+  const inflated = inflateSync(Buffer.concat(idat));
+  const rowLength = width * bytesPerPixel;
+  const rows = [];
+  let sourceOffset = 0;
+  let previous = Buffer.alloc(rowLength);
+  for (let y = 0; y < height; y += 1) {
+    const filter = inflated[sourceOffset];
+    sourceOffset += 1;
+    const raw = Buffer.from(inflated.subarray(sourceOffset, sourceOffset + rowLength));
+    sourceOffset += rowLength;
+    const row = Buffer.alloc(rowLength);
+    for (let x = 0; x < rowLength; x += 1) {
+      const left = x >= bytesPerPixel ? row[x - bytesPerPixel] : 0;
+      const up = previous[x] || 0;
+      const upperLeft = x >= bytesPerPixel ? previous[x - bytesPerPixel] || 0 : 0;
+      let predictor = 0;
+      if (filter === 1) predictor = left;
+      else if (filter === 2) predictor = up;
+      else if (filter === 3) predictor = Math.floor((left + up) / 2);
+      else if (filter === 4) predictor = paethPredictor(left, up, upperLeft);
+      else if (filter !== 0) throw new Error(`unsupported PNG filter ${filter}`);
+      row[x] = (raw[x] + predictor) & 0xff;
+    }
+    rows.push(row);
+    previous = row;
+  }
+  return { width, height, colorType, bytesPerPixel, rows };
+}
+
+function encodePng({ width, height, colorType, bytesPerPixel, rows }) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = colorType;
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+  const scanlines = [];
+  for (const row of rows) scanlines.push(Buffer.concat([Buffer.from([0]), row]));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(Buffer.concat(scanlines))),
+    pngChunk('IEND'),
+  ]);
+}
+
+function cropRegionForSelectedOption({ width, height, selectedOptionId }) {
+  const index = { 'option-a': 0, 'option-b': 1, 'option-c': 2 }[normalizeOptionId(selectedOptionId)];
+  if (!Number.isInteger(index)) return null;
+  const x = Math.round((width * index) / 3);
+  const nextX = index === 2 ? width : Math.round((width * (index + 1)) / 3);
+  return {
+    x,
+    y: 0,
+    width: nextX - x,
+    height,
+    unit: 'px',
+    source_width: width,
+    source_height: height,
+  };
+}
+
+async function cropPngToRunFile(runDir, sourceRelPath, targetRelPath, cropRegion) {
+  const decoded = decodePng(await readFile(path.join(runDir, sourceRelPath)));
+  const region = {
+    ...cropRegion,
+    x: Math.max(0, Math.min(decoded.width - 1, cropRegion.x)),
+    y: Math.max(0, Math.min(decoded.height - 1, cropRegion.y)),
+    width: Math.max(1, Math.min(cropRegion.width, decoded.width - cropRegion.x)),
+    height: Math.max(1, Math.min(cropRegion.height, decoded.height - cropRegion.y)),
+  };
+  const rows = [];
+  const startByte = region.x * decoded.bytesPerPixel;
+  const byteWidth = region.width * decoded.bytesPerPixel;
+  for (let y = region.y; y < region.y + region.height; y += 1) {
+    rows.push(Buffer.from(decoded.rows[y].subarray(startByte, startByte + byteWidth)));
+  }
+  const output = encodePng({
+    width: region.width,
+    height: region.height,
+    colorType: decoded.colorType,
+    bytesPerPixel: decoded.bytesPerPixel,
+    rows,
+  });
+  const targetPath = path.join(runDir, targetRelPath);
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  await writeFile(targetPath, output);
+  return {
+    crop_region: region,
+    sha256: sha256Buffer(output),
+  };
 }
 
 function isDesktopProductionRun(meta) {
@@ -1198,6 +1362,7 @@ async function refreshDesignOptionsReceipt({ runDir, proof, receipt, promptRelPa
 }
 
 async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = nowIso, refreshReceipt = refreshDesignOptionsReceipt } = {}) {
+  void refreshReceipt;
   const selectedOptionId = optionIdFromUi(selectedOption);
   const selectedLabel = optionLabelFromUi(selectedOption);
   const proofPath = path.join(runDir, 'agent-2-5-output/external-design-evidence/external-design-proof.json');
@@ -1211,16 +1376,83 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
   }
 
   let receiptRefreshed = false;
+  let derivation = {
+    method: 'external-option-image-copy',
+    selected_option: selectedOption,
+    selected_option_id: selectedOptionId,
+    source_option_image: optionImagePath,
+    output_targets: {
+      desktop: 'agent-2-5-output/selected-design/target/desktop.png',
+      mobile: 'agent-2-5-output/selected-design/target/mobile.png',
+    },
+  };
+  const boardExists = await exists(path.join(runDir, OPTIONS_BOARD_PATH));
+  const boardHash = boardExists ? await sha256RunFile(runDir, OPTIONS_BOARD_PATH) : '';
+  const optionImageHash = await sha256RunFile(runDir, optionImagePath);
+  derivation.source_option_image_sha256 = optionImageHash;
+  if (boardHash) {
+    derivation.source_options_board = OPTIONS_BOARD_PATH;
+    derivation.source_options_board_sha256 = boardHash;
+  }
+  const currentDesktopPath = 'agent-2-5-output/selected-design/target/desktop.png';
+  const currentMobilePath = 'agent-2-5-output/selected-design/target/mobile.png';
+  const currentDesktopHash = await exists(path.join(runDir, currentDesktopPath)) ? await sha256RunFile(runDir, currentDesktopPath) : '';
+  const currentMobileHash = await exists(path.join(runDir, currentMobilePath)) ? await sha256RunFile(runDir, currentMobilePath) : '';
+  const optionImageIsFullBoard = Boolean(boardHash && optionImageHash === boardHash);
+  const selectedTargetsAreFullBoard = Boolean(boardHash && (currentDesktopHash === boardHash || currentMobileHash === boardHash));
   const targetsNeedUpdate =
     !selectedTargetsMatch(proof, selectedOptionId) ||
-    !(await exists(path.join(runDir, 'agent-2-5-output/selected-design/target/desktop.png'))) ||
-    !(await exists(path.join(runDir, 'agent-2-5-output/selected-design/target/mobile.png')));
+    optionImageIsFullBoard ||
+    selectedTargetsAreFullBoard ||
+    !(await exists(path.join(runDir, currentDesktopPath))) ||
+    !(await exists(path.join(runDir, currentMobilePath)));
 
   if (targetsNeedUpdate) {
-    await copyIfDifferent(runDir, optionImagePath, 'agent-2-5-output/selected-design/target/desktop.png');
-    await copyIfDifferent(runDir, optionImagePath, 'agent-2-5-output/selected-design/target/mobile.png');
-    const desktopSha = await sha256RunFile(runDir, 'agent-2-5-output/selected-design/target/desktop.png');
-    const mobileSha = await sha256RunFile(runDir, 'agent-2-5-output/selected-design/target/mobile.png');
+    if (optionImageIsFullBoard || selectedTargetsAreFullBoard) {
+      if (!boardExists) return { ok: false, code: SELECTED_TARGET_MISSING, reason: `${OPTIONS_BOARD_PATH} missing` };
+      try {
+        const decoded = decodePng(await readFile(path.join(runDir, OPTIONS_BOARD_PATH)));
+        const cropRegion = cropRegionForSelectedOption({
+          width: decoded.width,
+          height: decoded.height,
+          selectedOptionId,
+        });
+        if (!cropRegion) {
+          return { ok: false, code: SELECTED_TARGET_INVALID, reason: `cannot derive crop region for ${selectedLabel}` };
+        }
+        const desktopCrop = await cropPngToRunFile(runDir, OPTIONS_BOARD_PATH, currentDesktopPath, cropRegion);
+        const mobileCrop = await cropPngToRunFile(runDir, OPTIONS_BOARD_PATH, currentMobilePath, cropRegion);
+        derivation = {
+          method: 'options-board-crop',
+          selected_option: selectedOption,
+          selected_option_id: selectedOptionId,
+          source_options_board: OPTIONS_BOARD_PATH,
+          source_options_board_sha256: boardHash,
+          crop_region: desktopCrop.crop_region,
+          output_targets: {
+            desktop: currentDesktopPath,
+            mobile: currentMobilePath,
+          },
+          target_hashes: {
+            [currentDesktopPath]: desktopCrop.sha256,
+            [currentMobilePath]: mobileCrop.sha256,
+          },
+        };
+      } catch (error) {
+        return { ok: false, code: SELECTED_TARGET_INVALID, reason: `failed to crop ${selectedLabel} from options board: ${error.message}` };
+      }
+    } else {
+      await copyIfDifferent(runDir, optionImagePath, currentDesktopPath);
+      await copyIfDifferent(runDir, optionImagePath, currentMobilePath);
+    }
+
+    const desktopSha = await sha256RunFile(runDir, currentDesktopPath);
+    const mobileSha = await sha256RunFile(runDir, currentMobilePath);
+    derivation.target_hashes = {
+      ...(derivation.target_hashes || {}),
+      [currentDesktopPath]: desktopSha,
+      [currentMobilePath]: mobileSha,
+    };
     proof.selection = {
       ...(proof.selection || {}),
       source: 'current-chat-user',
@@ -1230,14 +1462,18 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
     proof.targets = {
       ...(proof.targets || {}),
       desktop: {
-        path: 'agent-2-5-output/selected-design/target/desktop.png',
-        source: 'derived from GPT external option source',
+        path: currentDesktopPath,
+        source: derivation.method === 'options-board-crop'
+          ? 'derived from GPT external options board crop'
+          : 'derived from GPT external option source',
         sourceOption: selectedOptionId,
         sha256: desktopSha,
       },
       mobile: {
-        path: 'agent-2-5-output/selected-design/target/mobile.png',
-        source: 'derived from GPT external option source',
+        path: currentMobilePath,
+        source: derivation.method === 'options-board-crop'
+          ? 'derived from GPT external options board crop'
+          : 'derived from GPT external option source',
         sourceOption: selectedOptionId,
         sha256: mobileSha,
       },
@@ -1260,6 +1496,9 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
         `Option B: ChatGPT approved external image source agent-2-5-output/generated-designs/option-b/target/desktop.png.`,
         `Option C: ChatGPT approved external image source agent-2-5-output/generated-designs/option-c/target/desktop.png.`,
         `Selected option: ${selectedLabel} from ChatGPT approved external generated image evidence.`,
+        derivation.method === 'options-board-crop'
+          ? `Selected target derivation: ${selectedLabel} was cropped from ${OPTIONS_BOARD_PATH}.`
+          : `Selected target derivation: ${selectedLabel} was copied from ${optionImagePath}.`,
         `Desktop target: agent-2-5-output/selected-design/target/desktop.png maps to ${selectedLabel}.`,
         `Mobile target: agent-2-5-output/selected-design/target/mobile.png maps to ${selectedLabel}.`,
       ].join('\n'),
@@ -1272,6 +1511,9 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
         '',
         'Decision: PASS',
         `${selectedLabel} came from the ChatGPT approved external option image captured by the Agent2.5 design-options executor.`,
+        derivation.method === 'options-board-crop'
+          ? `${selectedLabel} selected targets were derived by cropping the chat-delivered options board, not by using the full A/B/C board as the selected target.`
+          : `${selectedLabel} selected targets were copied from the matching external option image.`,
         `The current chat user selected ${selectedLabel}; Agent3 and Agent4 must not change the option.`,
       ].join('\n'),
       'utf8',
@@ -1288,17 +1530,16 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
       'utf8',
     );
 
-    const promptRelPath = receipt?.prompt_path || 'agent-2-output/design-generation-input.md';
-    const refreshed = await refreshReceipt({ runDir, proof, receipt, promptRelPath });
-    if (refreshed.status !== 0) {
-      return {
-        ok: false,
-        code: NO_APPROVED_UI_GENERATION_AVAILABLE,
-        reason: refreshed.stdout || refreshed.stderr || 'external evidence receipt refresh failed',
-      };
-    }
-    receiptRefreshed = true;
+    receiptRefreshed = false;
   }
+
+  const finalDesktopSha = await sha256RunFile(runDir, currentDesktopPath);
+  const finalMobileSha = await sha256RunFile(runDir, currentMobilePath);
+  derivation.target_hashes = {
+    ...(derivation.target_hashes || {}),
+    [currentDesktopPath]: finalDesktopSha,
+    [currentMobilePath]: finalMobileSha,
+  };
 
   await writeFile(
     path.join(runDir, 'agent-2-5-output/external-design-evidence/source-provenance.md'),
@@ -1310,6 +1551,9 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
       `Option B: ChatGPT approved external image source agent-2-5-output/generated-designs/option-b/target/desktop.png.`,
       `Option C: ChatGPT approved external image source agent-2-5-output/generated-designs/option-c/target/desktop.png.`,
       `Selected option: ${selectedLabel} from ChatGPT approved external generated image evidence.`,
+      derivation.method === 'options-board-crop'
+        ? `Selected target derivation: ${selectedLabel} was cropped from ${OPTIONS_BOARD_PATH}.`
+        : `Selected target derivation: ${selectedLabel} was copied from ${optionImagePath}.`,
       `Desktop target: agent-2-5-output/selected-design/target/desktop.png maps to ${selectedLabel}.`,
       `Mobile target: agent-2-5-output/selected-design/target/mobile.png maps to ${selectedLabel}.`,
     ].join('\n'),
@@ -1322,6 +1566,9 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
       '',
       'Decision: PASS',
       `${selectedLabel} came from the ChatGPT approved external option image captured by the Agent2.5 design-options executor.`,
+      derivation.method === 'options-board-crop'
+        ? `${selectedLabel} selected targets were derived by cropping the chat-delivered options board, not by using the full A/B/C board as the selected target.`
+        : `${selectedLabel} selected targets were copied from the matching external option image.`,
       `The current chat user selected ${selectedLabel}; Agent3 and Agent4 must not change the option.`,
     ].join('\n'),
     'utf8',
@@ -1338,7 +1585,7 @@ async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = no
     'utf8',
   );
 
-  return { ok: true, proof, optionImagePath, selectedOptionId, selectedLabel, receiptRefreshed };
+  return { ok: true, proof, optionImagePath, selectedOptionId, selectedLabel, receiptRefreshed, derivation };
 }
 
 async function writeSelectedPackageText(runDir, relPath, title, lines) {
@@ -1524,16 +1771,34 @@ async function writeSelectedDesignPackage({ runDir, selectedOption, selectedDesi
     'Agent3 and Agent4 must preserve this option.',
   ]);
 
+  const selectedAssetDesktopTarget = `${selectedAssetsDir}/selected-target-desktop.png`;
+  const selectedAssetMobileTarget = `${selectedAssetsDir}/selected-target-mobile.png`;
+  const selectedTargetHashes = {
+    [selectedAssetDesktopTarget]: await sha256RunFile(runDir, selectedAssetDesktopTarget),
+    [selectedAssetMobileTarget]: await sha256RunFile(runDir, selectedAssetMobileTarget),
+  };
+  const sourceOptionsBoardSha = await sha256RunFile(runDir, OPTIONS_BOARD_PATH);
   const sourceMap = {
     selected_option: selectedOption,
     selected_design: selectedLabel,
     source_options_board: OPTIONS_BOARD_PATH,
+    source_options_board_sha256: sourceOptionsBoardSha,
     external_action_receipt: ACTION_RECEIPT_PATH,
     source_provenance: 'agent-2-5-output/external-design-evidence/source-provenance.md',
     selected_at: generatedAt,
     generated_by: 'desktop:selected-assets',
     new_external_action_required: false,
     receipt_refreshed: Boolean(alignment.receiptRefreshed),
+    derivation: {
+      ...(alignment.derivation || {}),
+      selected_option: selectedOption,
+      selected_option_id: selectedOptionId,
+    },
+    output_targets: {
+      desktop: selectedAssetDesktopTarget,
+      mobile: selectedAssetMobileTarget,
+    },
+    target_hashes: selectedTargetHashes,
     targets: {
       desktop: desktopTarget,
       mobile: mobileTarget,
@@ -1605,29 +1870,36 @@ export async function runDesktopSelectedAssets({
   refreshReceipt = refreshDesignOptionsReceipt,
 } = {}) {
   const state = await readDesktopState(runDir);
-  if (state.stage !== 'ui-review') {
+  const qaRepairMode = state.stage === 'qa' && state.last_completed_stage === 'implement';
+  if (state.stage !== 'ui-review' && !qaRepairMode) {
     return { ok: false, code: UI_SELECTION_REQUIRED, stage: state.stage || '' };
   }
+  const blockSelectedAssets = (options) => (
+    qaRepairMode
+      ? blockQa(runDir, state, options)
+      : blockUiReview(runDir, state, options)
+  );
+  const failureStage = qaRepairMode ? 'qa' : 'ui-review';
 
   const selectedOption = await readSelectedOption(runDir);
   if (!selectedOption) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: SELECTED_OPTION_MISSING,
       nextAction: 'run desktop:select-ui before desktop:selected-assets',
       now,
     });
-    return { ok: false, code: SELECTED_OPTION_MISSING, stage: 'ui-review' };
+    return { ok: false, code: SELECTED_OPTION_MISSING, stage: failureStage };
   }
 
   const events = await readEvents(runDir);
   const resolved = resolvedUiSelection(events);
   if (!resolved) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: UI_SELECTION_REQUIRED,
       nextAction: 'resolve the local UI option review before desktop:selected-assets',
       now,
     });
-    return { ok: false, code: UI_SELECTION_REQUIRED, stage: 'ui-review' };
+    return { ok: false, code: UI_SELECTION_REQUIRED, stage: failureStage };
   }
 
   const missing = [];
@@ -1635,22 +1907,22 @@ export async function runDesktopSelectedAssets({
     if (!(await exists(path.join(runDir, relPath)))) missing.push(relPath);
   }
   if (missing.length > 0) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: 'agent25-output-missing',
       nextAction: 'restore Agent2.5 output evidence before desktop:selected-assets',
       now,
     });
-    return { ok: false, code: AGENT25_OUTPUT_MISSING, stage: 'ui-review', missing };
+    return { ok: false, code: AGENT25_OUTPUT_MISSING, stage: failureStage, missing };
   }
 
   const optionImages = await ensureAgent25OptionImagesReady(runDir);
   if (!gatePassed(optionImages)) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: 'agent25-option-images',
       nextAction: 'repair Agent2.5 option image evidence before desktop:selected-assets',
       now,
     });
-    return { ok: false, code: AGENT25_OPTION_IMAGE_REQUIRED, stage: 'ui-review', gateResult: optionImages };
+    return { ok: false, code: AGENT25_OPTION_IMAGE_REQUIRED, stage: failureStage, gateResult: optionImages };
   }
 
   const alignment = await alignSelectedTargetsWithOption({
@@ -1660,23 +1932,12 @@ export async function runDesktopSelectedAssets({
     refreshReceipt,
   });
   if (!alignment.ok) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: alignment.code || SELECTED_ASSETS_NOT_READY,
       nextAction: 'restore approved selected target evidence before desktop:selected-assets',
       now,
     });
-    return { ok: false, code: alignment.code || SELECTED_ASSETS_NOT_READY, stage: 'ui-review', reason: alignment.reason };
-  }
-
-  const externalProof = await runAgent25ExternalDesignProofGate({ runDir });
-  await writeGateResult(runDir, 'agent25-external-design-proof.json', externalProof);
-  if (!gatePassed(externalProof)) {
-    await blockUiReview(runDir, state, {
-      blockingReason: 'agent25-external-design-proof',
-      nextAction: 'repair Agent2.5 external proof before desktop:selected-assets',
-      now,
-    });
-    return { ok: false, code: AGENT25_EXTERNAL_PROOF_REQUIRED, stage: 'ui-review', gateResult: externalProof };
+    return { ok: false, code: alignment.code || SELECTED_ASSETS_NOT_READY, stage: failureStage, reason: alignment.reason };
   }
 
   const packageResult = await writeSelectedDesignPackage({
@@ -1687,12 +1948,23 @@ export async function runDesktopSelectedAssets({
     now,
   });
   if (!packageResult.ok) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: packageResult.code || SELECTED_ASSETS_NOT_READY,
       nextAction: 'restore selected target images before desktop:selected-assets',
       now,
     });
-    return { ok: false, code: packageResult.code || SELECTED_ASSETS_NOT_READY, stage: 'ui-review', reason: packageResult.reason };
+    return { ok: false, code: packageResult.code || SELECTED_ASSETS_NOT_READY, stage: failureStage, reason: packageResult.reason };
+  }
+
+  const externalProof = await runAgent25ExternalDesignProofGate({ runDir });
+  await writeGateResult(runDir, 'agent25-external-design-proof.json', externalProof);
+  if (!gatePassed(externalProof)) {
+    await blockSelectedAssets({
+      blockingReason: 'agent25-external-design-proof',
+      nextAction: 'repair Agent2.5 external proof before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: AGENT25_EXTERNAL_PROOF_REQUIRED, stage: failureStage, gateResult: externalProof };
   }
 
   const lineage = await runAgent25LineageGate({ runDir });
@@ -1702,7 +1974,7 @@ export async function runDesktopSelectedAssets({
 
   if (!gatePassed(lineage) || !gatePassed(selectedAssets)) {
     await writeDesignPackageGateReport(runDir, { lineage, selectedAssets });
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: SELECTED_ASSETS_GATE_FAILED,
       nextAction: 'repair selected assets and lineage before desktop:selected-assets',
       now,
@@ -1710,7 +1982,7 @@ export async function runDesktopSelectedAssets({
     return {
       ok: false,
       code: SELECTED_ASSETS_GATE_FAILED,
-      stage: 'ui-review',
+      stage: failureStage,
       gates: { externalProof, optionImages, lineage, selectedAssets },
     };
   }
@@ -1721,7 +1993,7 @@ export async function runDesktopSelectedAssets({
   await writeDesignPackageGateReport(runDir, { lineage, selectedAssets, toolsiteDesignReview });
 
   if (!gatePassed(toolsiteDesignReview)) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: SELECTED_ASSETS_GATE_FAILED,
       nextAction: 'repair selected design package before desktop:selected-assets',
       now,
@@ -1729,7 +2001,7 @@ export async function runDesktopSelectedAssets({
     return {
       ok: false,
       code: SELECTED_ASSETS_GATE_FAILED,
-      stage: 'ui-review',
+      stage: failureStage,
       gates: { externalProof, optionImages, lineage, selectedAssets, toolsiteDesignReview },
     };
   }
@@ -1747,7 +2019,7 @@ export async function runDesktopSelectedAssets({
   });
 
   if (!beforeAgent3.allowed) {
-    await blockUiReview(runDir, state, {
+    await blockSelectedAssets({
       blockingReason: SELECTED_ASSETS_GATE_FAILED,
       nextAction: beforeAgent3.allowedNextStep || 'complete before-agent-3 gates before implement',
       now,
@@ -1755,24 +2027,36 @@ export async function runDesktopSelectedAssets({
     return {
       ok: false,
       code: SELECTED_ASSETS_GATE_FAILED,
-      stage: 'ui-review',
+      stage: failureStage,
       gates: { externalProof, optionImages, lineage, selectedAssets, toolsiteDesignReview, beforeAgent3 },
     };
   }
 
-  await writeDesktopState(runDir, {
-    ...state,
-    stage: 'implement',
-    last_completed_stage: 'selected-assets',
-    next_action: 'run desktop:implement',
-    blocking_reason: null,
-    updated_at: now(),
-  });
+  if (qaRepairMode) {
+    await writeDesktopState(runDir, {
+      ...state,
+      stage: 'qa',
+      last_completed_stage: 'implement',
+      next_action: 'run desktop:qa',
+      blocking_reason: null,
+      repair_attempts: {},
+      updated_at: now(),
+    });
+  } else {
+    await writeDesktopState(runDir, {
+      ...state,
+      stage: 'implement',
+      last_completed_stage: 'selected-assets',
+      next_action: 'run desktop:implement',
+      blocking_reason: null,
+      updated_at: now(),
+    });
+  }
 
   return {
     ok: true,
     code: SELECTED_ASSETS_COMPLETE,
-    stage: 'implement',
+    stage: qaRepairMode ? 'qa' : 'implement',
     selected_option: selectedOption.selected_option,
     selected_design: selectedOption.selected_design,
     gates: { externalProof, optionImages, lineage, selectedAssets, toolsiteDesignReview, beforeAgent3 },

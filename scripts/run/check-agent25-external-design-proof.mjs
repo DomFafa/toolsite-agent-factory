@@ -21,6 +21,7 @@ const OPTION_SELECTION_PATH = 'agent-2-5-output/chat-delivery/option-selection.m
 const SELECTED_DESKTOP_PATH = 'agent-2-5-output/selected-design/target/desktop.png';
 const SELECTED_MOBILE_PATH = 'agent-2-5-output/selected-design/target/mobile.png';
 const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
+const SELECTED_ASSETS_SOURCE_MAP_PATH = 'agent-2-5-output/selected-assets/source-map.json';
 
 const OPTION_LABELS = ['Option A', 'Option B', 'Option C'];
 const ALWAYS_FORBIDDEN_SOURCE =
@@ -132,6 +133,26 @@ function artifactHashFor(receipt, relPath) {
     if (typeof match?.sha256 === 'string' && match.sha256.trim()) return match.sha256.trim();
   }
   return '';
+}
+
+function sourceMapTargetPath(sourceMap, name, canonicalPath) {
+  return String(
+    sourceMap?.derivation?.output_targets?.[name] ||
+      sourceMap?.selected_design_output_targets?.[name] ||
+      sourceMap?.selectedDesignOutputTargets?.[name] ||
+      (sourceMap?.derivation?.target_hashes?.[canonicalPath] ? canonicalPath : '') ||
+      '',
+  ).trim();
+}
+
+function sourceMapTargetHash(sourceMap, relPath) {
+  return String(
+    sourceMap?.derivation?.target_hashes?.[relPath] ||
+      sourceMap?.derivation?.targetHashes?.[relPath] ||
+      sourceMap?.selected_design_target_hashes?.[relPath] ||
+      sourceMap?.selectedDesignTargetHashes?.[relPath] ||
+      '',
+  ).trim();
 }
 
 function receiptScreenshotFor(receipt, relPath) {
@@ -301,6 +322,86 @@ async function requireReceiptArtifact({
   return checked;
 }
 
+async function requireReceiptArtifactOrSourceMapDerivation({
+  runDir,
+  receipt,
+  receiptStat,
+  sourceMap,
+  name,
+  relPath,
+  selectedOption,
+  label,
+  failures,
+  minBytes = 1,
+  requirePng = false,
+}) {
+  const checked = await checkFile({
+    runDir,
+    relPath,
+    label,
+    failures,
+    minBytes,
+    requirePng,
+  });
+  const expectedReceiptSha = artifactHashFor(receipt, relPath);
+  const receiptMatches = VALID_SHA_PATTERN.test(expectedReceiptSha) && checked?.sha256 === expectedReceiptSha;
+  if (receiptMatches && (!receiptStat || checked.mtimeMs <= receiptStat.mtimeMs + 10)) {
+    return checked;
+  }
+
+  const derivedFailures = [];
+  const method = String(sourceMap?.derivation?.method || '').trim();
+  const sourceBoard = String(sourceMap?.source_options_board || sourceMap?.derivation?.source_options_board || '').trim();
+  const sourceBoardSha = String(sourceMap?.source_options_board_sha256 || sourceMap?.derivation?.source_options_board_sha256 || '').trim();
+  const sourceMapOption = normalizeOptionId(sourceMap?.selected_option || sourceMap?.derivation?.selected_option || sourceMap?.selectedOption);
+  const mappedPath = sourceMapTargetPath(sourceMap, name, relPath);
+  const mappedSha = sourceMapTargetHash(sourceMap, relPath);
+  const board = await checkFile({
+    runDir,
+    relPath: OPTIONS_BOARD_PATH,
+    label: 'source options board for selected target derivation',
+    failures: derivedFailures,
+    minBytes: 10_000,
+    requirePng: true,
+    expectedSha: sourceBoardSha,
+    expectedShaSource: SELECTED_ASSETS_SOURCE_MAP_PATH,
+  });
+
+  if (!sourceMap) derivedFailures.push(`missing ${SELECTED_ASSETS_SOURCE_MAP_PATH} for selected target derivation`);
+  if (!method) derivedFailures.push(`${SELECTED_ASSETS_SOURCE_MAP_PATH} derivation.method is required`);
+  if (/crop/i.test(method) && !sourceMap?.derivation?.crop_region && !sourceMap?.crop_region) {
+    derivedFailures.push(`${SELECTED_ASSETS_SOURCE_MAP_PATH} crop derivation must record crop_region`);
+  }
+  if (sourceBoard !== OPTIONS_BOARD_PATH) {
+    derivedFailures.push(`${SELECTED_ASSETS_SOURCE_MAP_PATH} source_options_board must be ${OPTIONS_BOARD_PATH}`);
+  }
+  if (sourceMapOption !== selectedOption) {
+    derivedFailures.push(`${SELECTED_ASSETS_SOURCE_MAP_PATH} selected_option must match the selected option`);
+  }
+  if (mappedPath !== relPath) {
+    derivedFailures.push(`${SELECTED_ASSETS_SOURCE_MAP_PATH} derivation output target ${name} must be ${relPath}`);
+  }
+  if (!VALID_SHA_PATTERN.test(mappedSha)) {
+    derivedFailures.push(`${SELECTED_ASSETS_SOURCE_MAP_PATH} derivation target hash missing for ${relPath}`);
+  } else if (checked?.sha256 && mappedSha !== checked.sha256) {
+    derivedFailures.push(`${SELECTED_ASSETS_SOURCE_MAP_PATH} derivation target hash for ${relPath} does not match actual file`);
+  }
+  if (board?.sha256 && checked?.sha256 && board.sha256 === checked.sha256) {
+    derivedFailures.push(`${relPath} must not equal the full options-board.png`);
+  }
+
+  if (derivedFailures.length === 0) return checked;
+  if (receiptMatches) {
+    failures.push(`${relPath} is newer than ${ACTION_RECEIPT_PATH} and ${SELECTED_ASSETS_SOURCE_MAP_PATH} derivation is invalid`);
+  } else if (VALID_SHA_PATTERN.test(expectedReceiptSha)) {
+    failures.push(`${ACTION_RECEIPT_PATH} artifact hash for ${relPath} does not match actual file and ${SELECTED_ASSETS_SOURCE_MAP_PATH} derivation is invalid`);
+  } else {
+    failures.push(`${ACTION_RECEIPT_PATH} missing artifact hash for ${relPath} and ${SELECTED_ASSETS_SOURCE_MAP_PATH} derivation is invalid`);
+  }
+  failures.push(...derivedFailures);
+  return checked;
+}
+
 function optionById(options, id) {
   const normalized = normalizeOptionId(id);
   return options.find((option) => normalizeOptionId(option.id || option.label || option.option) === normalized);
@@ -314,6 +415,7 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
   const receiptPath = path.join(absoluteRunDir, ACTION_RECEIPT_PATH);
   const receipt = await readJsonOptional(receiptPath);
   const receiptStat = await statOptional(receiptPath);
+  const sourceMap = await readJsonOptional(path.join(absoluteRunDir, SELECTED_ASSETS_SOURCE_MAP_PATH));
   const externalResponse = await readTextOptional(path.join(absoluteRunDir, EXTERNAL_RESPONSE_PATH));
   const sourceProvenance = await readTextOptional(path.join(absoluteRunDir, SOURCE_PROVENANCE_PATH));
   const selectedLineage = await readTextOptional(path.join(absoluteRunDir, SELECTED_LINEAGE_PATH));
@@ -586,11 +688,14 @@ export async function runAgent25ExternalDesignProofGate({ runDir }) {
       requirePng: true,
       expectedSha: record.sha256,
     });
-    await requireReceiptArtifact({
+    await requireReceiptArtifactOrSourceMapDerivation({
       runDir: absoluteRunDir,
       receipt,
       receiptStat,
+      sourceMap,
+      name,
       relPath: canonicalPath,
+      selectedOption,
       label: `${name} runner receipt selected target`,
       failures,
       minBytes: 10_000,
