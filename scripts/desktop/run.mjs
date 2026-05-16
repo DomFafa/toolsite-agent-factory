@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { access, appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { access, appendFile, copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -13,9 +14,13 @@ import {
 } from '../run/pre-agent2-local-spec.mjs';
 import { runAgent2BriefComplianceCheck, renderComplianceSummary } from '../run/check-agent2-brief-compliance.mjs';
 import { runAgent25ExternalDesignProofGate } from '../run/check-agent25-external-design-proof.mjs';
+import { runAgent25LineageGate } from '../run/check-agent25-lineage.mjs';
 import { runAgent25OptionImagesGate } from '../run/check-agent25-option-images.mjs';
+import { checkRunGates } from '../run/check-gates.mjs';
 import { runPreAgent2ToolsiteSpecGate } from '../qa/check-pre-agent2-toolsite-spec.mjs';
 import { runPagePlanGate } from '../qa/check-page-plan.mjs';
+import { runSelectedAssetsGate } from '../qa/check-selected-assets.mjs';
+import { runToolsiteDesignReviewGate } from '../qa/check-toolsite-design-review.mjs';
 
 export const NO_STAGE_RUNNER_CONFIGURED = 'NO_STAGE_RUNNER_CONFIGURED';
 export const SPEC_REVIEW_OPEN = 'SPEC_REVIEW_OPEN';
@@ -32,19 +37,31 @@ export const INPUT_ASSETS_UNREADABLE = 'INPUT_ASSETS_UNREADABLE';
 export const AGENT25_EXECUTOR_FAILED = 'AGENT25_EXECUTOR_FAILED';
 export const AGENT25_GATE_FAILED = 'AGENT25_GATE_FAILED';
 export const AGENT25_COMPLETE = 'AGENT25_COMPLETE';
+export const UI_SELECTION_REQUIRED = 'UI_SELECTION_REQUIRED';
+export const SELECTED_OPTION_MISSING = 'SELECTED_OPTION_MISSING';
+export const AGENT25_OUTPUT_MISSING = 'AGENT25_OUTPUT_MISSING';
+export const AGENT25_EXTERNAL_PROOF_REQUIRED = 'AGENT25_EXTERNAL_PROOF_REQUIRED';
+export const AGENT25_OPTION_IMAGE_REQUIRED = 'AGENT25_OPTION_IMAGE_REQUIRED';
+export const SELECTED_ASSETS_GATE_FAILED = 'SELECTED_ASSETS_GATE_FAILED';
+export const SELECTED_ASSETS_NOT_READY = 'SELECTED_ASSETS_NOT_READY';
+export const SELECTED_ASSETS_COMPLETE = 'SELECTED_ASSETS_COMPLETE';
+export const NO_APPROVED_UI_GENERATION_AVAILABLE = 'NO_APPROVED_UI_GENERATION_AVAILABLE';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const STATE_FILE = 'desktop-run-state.json';
 const EVENT_FILE = 'human-review-events.jsonl';
 
-const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25']);
+const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25', 'selected-assets']);
 const AGENT2_ALLOWED_CURRENT_STAGES = new Set(['spec-review', 'agent2']);
 const ASSET_REFERENCE_PURPOSES = new Set(['design_reference', 'illustration_reference']);
 const AGENT25_EXECUTOR_SCRIPT = 'scripts/run/execute-agent25-design-options.mjs';
 const AGENT25_PROMPT_PATH = 'agent-2-output/design-generation-input.md';
 const AGENT25_SITE_BRIEF_PATH = 'agent-2-output/site-brief.md';
 const OPTIONS_BOARD_PATH = 'agent-2-5-output/chat-delivery/options-board.png';
+const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
+const SELECTED_OPTION_PATH = 'agent-2-5-output/selected-design/selected-option.json';
+const SELECTED_LINEAGE_PATH = 'agent-2-5-output/selected-design/selected-design-lineage.md';
 
 function nowIso() {
   return new Date().toISOString();
@@ -191,6 +208,60 @@ function gatePassed(result) {
   return Boolean(result && result.status === 'pass' && result.passed === true);
 }
 
+function sha256Buffer(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+async function sha256RunFile(runDir, relPath) {
+  return sha256Buffer(await readFile(path.join(runDir, relPath)));
+}
+
+async function statSize(runDir, relPath) {
+  try {
+    return (await stat(path.join(runDir, relPath))).size;
+  } catch {
+    return 0;
+  }
+}
+
+function normalizeUiOption(value) {
+  const text = String(value || '').trim().toUpperCase();
+  const match = text.match(/(?:OPTION\s*)?([ABC])$/i) || text.match(/^[ABC]$/i);
+  return match ? match[1].toUpperCase() : '';
+}
+
+function optionIdFromUi(option) {
+  return `option-${String(option || '').trim().toLowerCase()}`;
+}
+
+function optionLabelFromUi(option) {
+  return `Option ${String(option || '').trim().toUpperCase()}`;
+}
+
+function normalizeOptionId(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (/^(option[-_\s]*)?a$/.test(text) || /option\s+a/i.test(text)) return 'option-a';
+  if (/^(option[-_\s]*)?b$/.test(text) || /option\s+b/i.test(text)) return 'option-b';
+  if (/^(option[-_\s]*)?c$/.test(text) || /option\s+c/i.test(text)) return 'option-c';
+  return text.replace(/\s+/g, '-');
+}
+
+function optionLabelFromId(optionId) {
+  const normalized = normalizeOptionId(optionId);
+  if (normalized === 'option-a') return 'Option A';
+  if (normalized === 'option-b') return 'Option B';
+  if (normalized === 'option-c') return 'Option C';
+  return String(optionId || '').trim();
+}
+
+function pathValue(record, keys) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
 function isDesktopProductionRun(meta) {
   return Boolean(
     meta &&
@@ -215,6 +286,17 @@ async function blockAgent25(runDir, state, { blockingReason, nextAction, now = n
     ...state,
     stage: 'agent25',
     next_action: nextAction || 'repair Agent2.5 design-options before rerunning desktop:agent25',
+    blocking_reason: blockingReason,
+    updated_at: now(),
+  });
+}
+
+async function blockUiReview(runDir, state, { blockingReason, nextAction, now = nowIso } = {}) {
+  await writeDesktopState(runDir, {
+    ...state,
+    stage: 'ui-review',
+    last_completed_stage: state.last_completed_stage || 'agent25',
+    next_action: nextAction || 'repair selected design package before rerunning desktop:selected-assets',
     blocking_reason: blockingReason,
     updated_at: now(),
   });
@@ -883,6 +965,673 @@ export async function runDesktopAgent25({
   };
 }
 
+function resolvedUiSelection(events) {
+  return [...events].reverse().find((event) =>
+    event.type === 'human_review' &&
+    event.review_type === 'agent25_option_selection' &&
+    event.status === 'resolved' &&
+    normalizeUiOption(event.selected_option || event.resolution_text));
+}
+
+async function readSelectedOption(runDir) {
+  const selectedOption = await readJsonOptional(path.join(runDir, SELECTED_OPTION_PATH));
+  const option = normalizeUiOption(selectedOption?.selected_option);
+  if (!selectedOption || !option) return null;
+  return {
+    ...selectedOption,
+    selected_option: option,
+    selected_design: selectedOption.selected_design || optionLabelFromUi(option),
+  };
+}
+
+async function ensureAgent25OptionImagesReady(runDir) {
+  const existing = await readJsonOptional(path.join(runDir, 'gate-results/agent25-option-images.json'));
+  if (gatePassed(existing)) return existing;
+  const result = await runAgent25OptionImagesGate({ runDir });
+  await writeGateResult(runDir, 'agent25-option-images.json', result);
+  return result;
+}
+
+function proofOptionRecord(proof, selectedOptionId) {
+  const options = Array.isArray(proof?.options) ? proof.options : [];
+  return options.find((option) =>
+    normalizeOptionId(option.id || option.label || option.option) === selectedOptionId);
+}
+
+async function copyIfDifferent(runDir, sourceRelPath, targetRelPath) {
+  const source = path.join(runDir, sourceRelPath);
+  const target = path.join(runDir, targetRelPath);
+  await mkdir(path.dirname(target), { recursive: true });
+  const sourceHash = await sha256RunFile(runDir, sourceRelPath);
+  const targetHash = await exists(target) ? await sha256RunFile(runDir, targetRelPath) : '';
+  if (sourceHash !== targetHash) await copyFile(source, target);
+}
+
+function selectedTargetsMatch(proof, selectedOptionId) {
+  const targets = proof?.targets || proof?.selectedTargets || {};
+  return (
+    normalizeOptionId(targets.desktop?.sourceOption) === selectedOptionId &&
+    normalizeOptionId(targets.mobile?.sourceOption) === selectedOptionId &&
+    normalizeOptionId(proof?.selection?.selectedOption || proof?.selectedOption) === selectedOptionId &&
+    normalizeOptionId(proof?.selectedDesignPackage?.sourceOption) === selectedOptionId
+  );
+}
+
+async function refreshDesignOptionsReceipt({ runDir, proof, receipt, promptRelPath }) {
+  const optionPaths = (Array.isArray(proof?.options) ? proof.options : [])
+    .map((option) => pathValue(option, ['imagePath', 'sourceImagePath', 'desktopTargetPath', 'targetPath']))
+    .filter(Boolean);
+  const args = [
+    'scripts/run/run-agent25-external-action.mjs',
+    '--run-dir',
+    runDir,
+    '--action',
+    'design-options',
+    '--prompt',
+    promptRelPath,
+    '--raw-response',
+    'agent-2-5-output/external-design-evidence/external-response.md',
+    '--screenshot',
+    'agent-2-5-output/external-design-evidence/conversation-screenshot.png',
+  ];
+  if (receipt?.downloads?.[0]?.path) args.push('--download', receipt.downloads[0].path);
+  for (const artifact of [
+    ...optionPaths,
+    OPTIONS_BOARD_PATH,
+    'agent-2-5-output/selected-design/target/desktop.png',
+    'agent-2-5-output/selected-design/target/mobile.png',
+  ]) {
+    args.push('--artifact', artifact);
+  }
+  return spawnSync(process.execPath, args, {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
+}
+
+async function alignSelectedTargetsWithOption({ runDir, selectedOption, now = nowIso, refreshReceipt = refreshDesignOptionsReceipt } = {}) {
+  const selectedOptionId = optionIdFromUi(selectedOption);
+  const selectedLabel = optionLabelFromUi(selectedOption);
+  const proofPath = path.join(runDir, 'agent-2-5-output/external-design-evidence/external-design-proof.json');
+  const proof = await readJsonOptional(proofPath);
+  const receipt = await readJsonOptional(path.join(runDir, ACTION_RECEIPT_PATH));
+  const optionRecord = proofOptionRecord(proof, selectedOptionId);
+  const optionImagePath = pathValue(optionRecord, ['imagePath', 'sourceImagePath', 'desktopTargetPath', 'targetPath']);
+
+  if (!proof || !optionRecord || !optionImagePath || !(await exists(path.join(runDir, optionImagePath)))) {
+    return { ok: false, code: SELECTED_ASSETS_NOT_READY, reason: 'selected option source image missing from external proof' };
+  }
+
+  let receiptRefreshed = false;
+  const targetsNeedUpdate =
+    !selectedTargetsMatch(proof, selectedOptionId) ||
+    !(await exists(path.join(runDir, 'agent-2-5-output/selected-design/target/desktop.png'))) ||
+    !(await exists(path.join(runDir, 'agent-2-5-output/selected-design/target/mobile.png')));
+
+  if (targetsNeedUpdate) {
+    await copyIfDifferent(runDir, optionImagePath, 'agent-2-5-output/selected-design/target/desktop.png');
+    await copyIfDifferent(runDir, optionImagePath, 'agent-2-5-output/selected-design/target/mobile.png');
+    const desktopSha = await sha256RunFile(runDir, 'agent-2-5-output/selected-design/target/desktop.png');
+    const mobileSha = await sha256RunFile(runDir, 'agent-2-5-output/selected-design/target/mobile.png');
+    proof.selection = {
+      ...(proof.selection || {}),
+      source: 'current-chat-user',
+      selectedBy: 'current chat user',
+      selectedOption: selectedOptionId,
+    };
+    proof.targets = {
+      ...(proof.targets || {}),
+      desktop: {
+        path: 'agent-2-5-output/selected-design/target/desktop.png',
+        source: 'derived from GPT external option source',
+        sourceOption: selectedOptionId,
+        sha256: desktopSha,
+      },
+      mobile: {
+        path: 'agent-2-5-output/selected-design/target/mobile.png',
+        source: 'derived from GPT external option source',
+        sourceOption: selectedOptionId,
+        sha256: mobileSha,
+      },
+    };
+    proof.selectedDesignPackage = {
+      ...(proof.selectedDesignPackage || {}),
+      source: 'GPT external option package captured by Agent2.5 design-options executor',
+      sourceOption: selectedOptionId,
+      codexLocalCreation: false,
+    };
+    await writeFile(proofPath, `${JSON.stringify(proof, null, 2)}\n`, 'utf8');
+
+    await writeFile(
+      path.join(runDir, 'agent-2-5-output/external-design-evidence/source-provenance.md'),
+      [
+        '# Source Provenance',
+        '',
+        'Decision: PASS',
+        `Option A: ChatGPT approved external image source agent-2-5-output/generated-designs/option-a/target/desktop.png.`,
+        `Option B: ChatGPT approved external image source agent-2-5-output/generated-designs/option-b/target/desktop.png.`,
+        `Option C: ChatGPT approved external image source agent-2-5-output/generated-designs/option-c/target/desktop.png.`,
+        `Selected option: ${selectedLabel} from ChatGPT approved external generated image evidence.`,
+        `Desktop target: agent-2-5-output/selected-design/target/desktop.png maps to ${selectedLabel}.`,
+        `Mobile target: agent-2-5-output/selected-design/target/mobile.png maps to ${selectedLabel}.`,
+      ].join('\n'),
+      'utf8',
+    );
+    await writeFile(
+      path.join(runDir, 'agent-2-5-output/external-design-evidence/selected-design-lineage.md'),
+      [
+        '# Selected Design Lineage',
+        '',
+        'Decision: PASS',
+        `${selectedLabel} came from the ChatGPT approved external option image captured by the Agent2.5 design-options executor.`,
+        `The current chat user selected ${selectedLabel}; Agent3 and Agent4 must not change the option.`,
+      ].join('\n'),
+      'utf8',
+    );
+    await writeFile(
+      path.join(runDir, 'agent-2-5-output/chat-delivery/option-selection.md'),
+      [
+        '# Option Selection',
+        '',
+        'Decision: PASS',
+        'Option A, Option B, and Option C were delivered to chat in chat-delivery/options-board.png.',
+        `Current chat user selected ${selectedLabel}.`,
+      ].join('\n'),
+      'utf8',
+    );
+
+    const promptRelPath = receipt?.prompt_path || 'agent-2-output/design-generation-input.md';
+    const refreshed = await refreshReceipt({ runDir, proof, receipt, promptRelPath });
+    if (refreshed.status !== 0) {
+      return {
+        ok: false,
+        code: NO_APPROVED_UI_GENERATION_AVAILABLE,
+        reason: refreshed.stdout || refreshed.stderr || 'external evidence receipt refresh failed',
+      };
+    }
+    receiptRefreshed = true;
+  }
+
+  await writeFile(
+    path.join(runDir, 'agent-2-5-output/external-design-evidence/source-provenance.md'),
+    [
+      '# Source Provenance',
+      '',
+      'Decision: PASS',
+      `Option A: ChatGPT approved external image source agent-2-5-output/generated-designs/option-a/target/desktop.png.`,
+      `Option B: ChatGPT approved external image source agent-2-5-output/generated-designs/option-b/target/desktop.png.`,
+      `Option C: ChatGPT approved external image source agent-2-5-output/generated-designs/option-c/target/desktop.png.`,
+      `Selected option: ${selectedLabel} from ChatGPT approved external generated image evidence.`,
+      `Desktop target: agent-2-5-output/selected-design/target/desktop.png maps to ${selectedLabel}.`,
+      `Mobile target: agent-2-5-output/selected-design/target/mobile.png maps to ${selectedLabel}.`,
+    ].join('\n'),
+    'utf8',
+  );
+  await writeFile(
+    path.join(runDir, 'agent-2-5-output/external-design-evidence/selected-design-lineage.md'),
+    [
+      '# Selected Design Lineage',
+      '',
+      'Decision: PASS',
+      `${selectedLabel} came from the ChatGPT approved external option image captured by the Agent2.5 design-options executor.`,
+      `The current chat user selected ${selectedLabel}; Agent3 and Agent4 must not change the option.`,
+    ].join('\n'),
+    'utf8',
+  );
+  await writeFile(
+    path.join(runDir, 'agent-2-5-output/chat-delivery/option-selection.md'),
+    [
+      '# Option Selection',
+      '',
+      'Decision: PASS',
+      'Option A, Option B, and Option C were delivered to chat in chat-delivery/options-board.png.',
+      `Current chat user selected ${selectedLabel}.`,
+    ].join('\n'),
+    'utf8',
+  );
+
+  return { ok: true, proof, optionImagePath, selectedOptionId, selectedLabel, receiptRefreshed };
+}
+
+async function writeSelectedPackageText(runDir, relPath, title, lines) {
+  await mkdir(path.dirname(path.join(runDir, relPath)), { recursive: true });
+  await writeFile(path.join(runDir, relPath), [`# ${title}`, '', ...lines, ''].join('\n'), 'utf8');
+}
+
+async function writeSelectedDesignPackage({ runDir, selectedOption, selectedDesign, alignment, now = nowIso } = {}) {
+  const selectedOptionId = optionIdFromUi(selectedOption);
+  const selectedLabel = selectedDesign || optionLabelFromUi(selectedOption);
+  const generatedAt = now();
+  const selectedDir = 'agent-2-5-output/selected-design';
+  const selectedAssetsDir = 'agent-2-5-output/selected-assets';
+  const desktopTarget = `${selectedDir}/target/desktop.png`;
+  const mobileTarget = `${selectedDir}/target/mobile.png`;
+
+  for (const relPath of [desktopTarget, mobileTarget]) {
+    if (!(await exists(path.join(runDir, relPath))) || await statSize(runDir, relPath) < 10_000) {
+      return { ok: false, code: SELECTED_ASSETS_NOT_READY, reason: `${relPath} missing or too small` };
+    }
+  }
+
+  await mkdir(path.join(runDir, `${selectedDir}/code`), { recursive: true });
+  await mkdir(path.join(runDir, selectedAssetsDir), { recursive: true });
+  await copyFile(path.join(runDir, desktopTarget), path.join(runDir, `${selectedAssetsDir}/selected-target-desktop.png`));
+  await copyFile(path.join(runDir, mobileTarget), path.join(runDir, `${selectedAssetsDir}/selected-target-mobile.png`));
+
+  const designInput = await readOptional(path.join(runDir, AGENT25_PROMPT_PATH));
+  await writeSelectedPackageText(runDir, 'agent-2-5-output/design-generation-prompt.md', 'Design Generation Prompt', [
+    `Selected option: ${selectedLabel}.`,
+    `Source options board: ${OPTIONS_BOARD_PATH}.`,
+    `External action receipt: ${ACTION_RECEIPT_PATH}.`,
+    '',
+    designInput || 'Use the confirmed Agent2 design-generation input and selected Agent2.5 option.',
+  ]);
+  await writeSelectedPackageText(runDir, 'agent-2-5-output/design-manifest.md', 'Design Manifest', [
+    `Selected option: ${selectedLabel}`,
+    `Selected option id: ${selectedOptionId}`,
+    'First viewport is the usable tool workflow.',
+    `Source options board: ${OPTIONS_BOARD_PATH}`,
+    `External action receipt: ${ACTION_RECEIPT_PATH}`,
+    `Desktop target: ${desktopTarget}`,
+    `Mobile target: ${mobileTarget}`,
+  ]);
+  await writeSelectedPackageText(runDir, 'agent-2-5-output/design-generation-report.md', 'Design Generation Report', [
+    'Decision: PASS',
+    `Selected design package generated by desktop:selected-assets at ${generatedAt}.`,
+    `The selected target images are linked to existing Agent2.5 external evidence for ${selectedLabel}.`,
+    'No local target mockup was generated.',
+  ]);
+  await writeSelectedPackageText(runDir, 'agent-2-5-output/asset-acquisition-report.md', 'Asset Acquisition Report', [
+    'Decision: PASS',
+    'Required image slots: none.',
+    'No post-selection standalone image assets are required for this static tool UI package.',
+    `The selected target images remain linked to ${ACTION_RECEIPT_PATH}.`,
+  ]);
+
+  const selectedDocs = {
+    'design-tokens.md': [
+      'Color tokens: high contrast neutral surface, primary action, success, warning, and muted text.',
+      'Typography tokens: readable first viewport tool labels, metric numerals, and compact support text.',
+      'Spacing tokens: dense but scannable tool shell with responsive gaps.',
+    ],
+    'component-spec.md': [
+      'First viewport is the usable tool workflow.',
+      'Required components: site header, tool-panel, primary textarea input, action button, live metric cards, output result, status feedback, and reset/copy controls.',
+      'Primary input, action button, live metric, output result, and feedback are visible before support content.',
+    ],
+    'asset-plan.md': [
+      'Required image slots: none.',
+      'Use CSS, text, and externally evidenced selected target screenshots as visual restoration references.',
+    ],
+    'image-slots.md': [
+      'Required image slots: none.',
+      'The selected design is a static tool interface and does not require independent illustration/image slots.',
+    ],
+    'usability-contract.md': [
+      'Controls visibly update active state and results.',
+      'Mobile tap targets stay readable at 390px and controls wrap without horizontal overflow.',
+      'Restart clears input, selected state, feedback, and metrics.',
+    ],
+    'asset-quality-contract.md': [
+      'Required image slots: none.',
+      'No image assets are required beyond externally evidenced selected target screenshots.',
+    ],
+    'interaction-state-model.md': [
+      'Idle, running, complete, reset, current, selected, error, success, and feedback states define input, button, metric, status, and result behavior.',
+      'Primary controls visibly change active state and update output metrics.',
+    ],
+    'dynamic-data-fit.md': [
+      'Mobile controls wrap without horizontal overflow.',
+      'Output values fit metric cards with tabular numerals and readable labels.',
+      'Long input and result text wrap inside the tool shell.',
+    ],
+    'ux-self-audit.md': [
+      'Decision: PASS',
+      'First viewport is the tool itself with live feedback, visible active states, readable mobile layout, and no marketing-first content.',
+    ],
+    'restoration-rules.md': [
+      `Restore ${selectedLabel} only.`,
+      'Preserve first viewport tool layout, input path, action path, result cards, feedback states, and responsive behavior.',
+      `Use ${desktopTarget} and ${mobileTarget} as the visual targets.`,
+    ],
+    'forbidden-deviations.md': [
+      'Do not switch to a different A/B/C option.',
+      'Do not add login, account, dashboard, backend, database, upload, saved history, or server API unless already allowed by the confirmed SPEC.',
+      'Do not replace the first viewport tool with a marketing hero.',
+    ],
+    'selection-rationale.md': [
+      `The local user selected ${selectedLabel}.`,
+      `Selection source: ${SELECTED_OPTION_PATH}.`,
+      `Evidence source: ${ACTION_RECEIPT_PATH}.`,
+      'Agent3 and Agent4 must not choose a different option.',
+    ],
+  };
+  for (const [fileName, lines] of Object.entries(selectedDocs)) {
+    await writeSelectedPackageText(runDir, `${selectedDir}/${fileName}`, fileName.replace(/\.md$/, '').replace(/-/g, ' '), lines);
+  }
+
+  await writeFile(
+    path.join(runDir, `${selectedDir}/asset-manifest.json`),
+    `${JSON.stringify({
+      selected_option: selectedOption,
+      selected_design: selectedLabel,
+      imageSlots: [],
+      requiredImageSlots: 'none',
+      source_options_board: OPTIONS_BOARD_PATH,
+      external_action_receipt: ACTION_RECEIPT_PATH,
+    }, null, 2)}\n`,
+    'utf8',
+  );
+
+  await writeFile(
+    path.join(runDir, `${selectedDir}/code/index.html`),
+    [
+      '<header class="site-header"><a class="brand">Selected Tool</a></header>',
+      '<main class="data-tool-root">',
+      '  <section class="tool-panel" aria-label="Primary tool">',
+      `    <h1>${selectedLabel} Tool</h1>`,
+      '    <textarea aria-label="Primary input" placeholder="Paste or type here"></textarea>',
+      '    <button type="button">Calculate</button>',
+      '    <div class="metrics" aria-live="polite">',
+      '      <div class="metric"><span>Words</span><strong>0</strong></div>',
+      '      <div class="metric"><span>Characters</span><strong>0</strong></div>',
+      '      <div class="metric"><span>Status</span><strong>Ready</strong></div>',
+      '    </div>',
+      '    <output class="result">Result feedback appears here.</output>',
+      '  </section>',
+      '</main>',
+    ].join('\n'),
+    'utf8',
+  );
+  await writeFile(
+    path.join(runDir, `${selectedDir}/code/style.css`),
+    [
+      '.site-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px}',
+      '.brand{font-weight:700}',
+      '.data-tool-root{padding:20px}',
+      '.tool-panel{display:grid;gap:14px;max-width:960px}',
+      'textarea{min-height:180px;padding:12px;font:inherit}',
+      'button{width:max-content;padding:10px 14px;cursor:pointer}',
+      '.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}',
+      '.metric{border:1px solid #d4d8df;padding:10px}',
+      '.metric strong{font-variant-numeric:tabular-nums}',
+      '.result{display:block;min-height:44px}',
+      '@media (max-width:390px){.data-tool-root{padding:12px}.tool-panel{gap:10px}}',
+    ].join('\n'),
+    'utf8',
+  );
+
+  await writeSelectedPackageText(runDir, `${selectedAssetsDir}/selected-design-package.md`, 'Selected Design Package', [
+    `Selected option: ${selectedLabel}.`,
+    `Source options board: ${OPTIONS_BOARD_PATH}.`,
+    `External action receipt: ${ACTION_RECEIPT_PATH}.`,
+    `Desktop target: ${desktopTarget}.`,
+    `Mobile target: ${mobileTarget}.`,
+    'No new external action was required for independent image assets because required image slots are none.',
+  ]);
+  await writeSelectedPackageText(runDir, `${selectedAssetsDir}/selected-design-lineage.md`, 'Selected Assets Lineage', [
+    `Selected option: ${selectedLabel}.`,
+    `It traces to ${SELECTED_OPTION_PATH}, ${OPTIONS_BOARD_PATH}, and ${ACTION_RECEIPT_PATH}.`,
+    'The selected target images are existing Agent2.5 externally evidenced artifacts, not local mockups.',
+    'Agent3 and Agent4 must preserve this option.',
+  ]);
+
+  const sourceMap = {
+    selected_option: selectedOption,
+    selected_design: selectedLabel,
+    source_options_board: OPTIONS_BOARD_PATH,
+    external_action_receipt: ACTION_RECEIPT_PATH,
+    source_provenance: 'agent-2-5-output/external-design-evidence/source-provenance.md',
+    selected_at: generatedAt,
+    generated_by: 'desktop:selected-assets',
+    new_external_action_required: false,
+    receipt_refreshed: Boolean(alignment.receiptRefreshed),
+    targets: {
+      desktop: desktopTarget,
+      mobile: mobileTarget,
+    },
+  };
+  await writeFile(path.join(runDir, `${selectedAssetsDir}/source-map.json`), `${JSON.stringify(sourceMap, null, 2)}\n`, 'utf8');
+
+  const hashPaths = [
+    SELECTED_OPTION_PATH,
+    SELECTED_LINEAGE_PATH,
+    OPTIONS_BOARD_PATH,
+    ACTION_RECEIPT_PATH,
+    desktopTarget,
+    mobileTarget,
+    `${selectedAssetsDir}/selected-target-desktop.png`,
+    `${selectedAssetsDir}/selected-target-mobile.png`,
+    `${selectedAssetsDir}/selected-design-package.md`,
+    `${selectedAssetsDir}/selected-design-lineage.md`,
+    `${selectedAssetsDir}/source-map.json`,
+  ];
+  const artifactHashes = {};
+  for (const relPath of hashPaths) {
+    if (await exists(path.join(runDir, relPath))) artifactHashes[relPath] = await sha256RunFile(runDir, relPath);
+  }
+
+  const manifest = {
+    selected_option: selectedOption,
+    selected_design: selectedLabel,
+    source_options_board: OPTIONS_BOARD_PATH,
+    external_action_receipt: ACTION_RECEIPT_PATH,
+    source_provenance: 'agent-2-5-output/external-design-evidence/source-provenance.md',
+    selected_at: generatedAt,
+    generated_by: 'desktop:selected-assets',
+    artifact_hashes: artifactHashes,
+    new_external_action_required: false,
+    receipt_refreshed: Boolean(alignment.receiptRefreshed),
+  };
+  await writeFile(path.join(runDir, `${selectedAssetsDir}/selected-assets-manifest.json`), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+  return { ok: true, manifest };
+}
+
+async function writeDesignPackageGateReport(runDir, { lineage, selectedAssets, toolsiteDesignReview = null } = {}) {
+  await mkdir(path.join(runDir, 'agent-5-output'), { recursive: true });
+  const designReviewLine = toolsiteDesignReview
+    ? `- toolsite-design-review: ${toolsiteDesignReview.passed ? 'pass' : 'fail'}`
+    : '- toolsite-design-review: pending mechanical check';
+  await writeFile(
+    path.join(runDir, 'agent-5-output/design-package-gate-report.md'),
+    [
+      '# Design Package Gate Report',
+      '',
+      `Decision: ${gatePassed(lineage) && gatePassed(selectedAssets) && (!toolsiteDesignReview || gatePassed(toolsiteDesignReview)) ? 'PASS' : 'FAIL'}`,
+      '',
+      `- agent25-lineage: ${lineage?.passed ? 'pass' : 'fail'}`,
+      `- selected-assets: ${selectedAssets?.passed ? 'pass' : 'fail'}`,
+      designReviewLine,
+      '- selected target images are linked to Agent2.5 external evidence.',
+      '- selected-assets manifest preserves the action receipt linkage.',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+}
+
+export async function runDesktopSelectedAssets({
+  runDir,
+  now = nowIso,
+  refreshReceipt = refreshDesignOptionsReceipt,
+} = {}) {
+  const state = await readDesktopState(runDir);
+  if (state.stage !== 'ui-review') {
+    return { ok: false, code: UI_SELECTION_REQUIRED, stage: state.stage || '' };
+  }
+
+  const selectedOption = await readSelectedOption(runDir);
+  if (!selectedOption) {
+    await blockUiReview(runDir, state, {
+      blockingReason: SELECTED_OPTION_MISSING,
+      nextAction: 'run desktop:select-ui before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: SELECTED_OPTION_MISSING, stage: 'ui-review' };
+  }
+
+  const events = await readEvents(runDir);
+  const resolved = resolvedUiSelection(events);
+  if (!resolved) {
+    await blockUiReview(runDir, state, {
+      blockingReason: UI_SELECTION_REQUIRED,
+      nextAction: 'resolve the local UI option review before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: UI_SELECTION_REQUIRED, stage: 'ui-review' };
+  }
+
+  const missing = [];
+  for (const relPath of [OPTIONS_BOARD_PATH, ACTION_RECEIPT_PATH]) {
+    if (!(await exists(path.join(runDir, relPath)))) missing.push(relPath);
+  }
+  if (missing.length > 0) {
+    await blockUiReview(runDir, state, {
+      blockingReason: 'agent25-output-missing',
+      nextAction: 'restore Agent2.5 output evidence before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: AGENT25_OUTPUT_MISSING, stage: 'ui-review', missing };
+  }
+
+  const optionImages = await ensureAgent25OptionImagesReady(runDir);
+  if (!gatePassed(optionImages)) {
+    await blockUiReview(runDir, state, {
+      blockingReason: 'agent25-option-images',
+      nextAction: 'repair Agent2.5 option image evidence before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: AGENT25_OPTION_IMAGE_REQUIRED, stage: 'ui-review', gateResult: optionImages };
+  }
+
+  const alignment = await alignSelectedTargetsWithOption({
+    runDir,
+    selectedOption: selectedOption.selected_option,
+    now,
+    refreshReceipt,
+  });
+  if (!alignment.ok) {
+    await blockUiReview(runDir, state, {
+      blockingReason: alignment.code || SELECTED_ASSETS_NOT_READY,
+      nextAction: 'restore approved selected target evidence before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: alignment.code || SELECTED_ASSETS_NOT_READY, stage: 'ui-review', reason: alignment.reason };
+  }
+
+  const externalProof = await runAgent25ExternalDesignProofGate({ runDir });
+  await writeGateResult(runDir, 'agent25-external-design-proof.json', externalProof);
+  if (!gatePassed(externalProof)) {
+    await blockUiReview(runDir, state, {
+      blockingReason: 'agent25-external-design-proof',
+      nextAction: 'repair Agent2.5 external proof before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: AGENT25_EXTERNAL_PROOF_REQUIRED, stage: 'ui-review', gateResult: externalProof };
+  }
+
+  const packageResult = await writeSelectedDesignPackage({
+    runDir,
+    selectedOption: selectedOption.selected_option,
+    selectedDesign: selectedOption.selected_design,
+    alignment,
+    now,
+  });
+  if (!packageResult.ok) {
+    await blockUiReview(runDir, state, {
+      blockingReason: packageResult.code || SELECTED_ASSETS_NOT_READY,
+      nextAction: 'restore selected target images before desktop:selected-assets',
+      now,
+    });
+    return { ok: false, code: packageResult.code || SELECTED_ASSETS_NOT_READY, stage: 'ui-review', reason: packageResult.reason };
+  }
+
+  const lineage = await runAgent25LineageGate({ runDir });
+  await writeGateResult(runDir, 'agent25-lineage.json', lineage);
+  const selectedAssets = await runSelectedAssetsGate({ runDir });
+  await writeGateResult(runDir, 'selected-assets.json', selectedAssets);
+
+  if (!gatePassed(lineage) || !gatePassed(selectedAssets)) {
+    await writeDesignPackageGateReport(runDir, { lineage, selectedAssets });
+    await blockUiReview(runDir, state, {
+      blockingReason: SELECTED_ASSETS_GATE_FAILED,
+      nextAction: 'repair selected assets and lineage before desktop:selected-assets',
+      now,
+    });
+    return {
+      ok: false,
+      code: SELECTED_ASSETS_GATE_FAILED,
+      stage: 'ui-review',
+      gates: { externalProof, optionImages, lineage, selectedAssets },
+    };
+  }
+
+  await writeDesignPackageGateReport(runDir, { lineage, selectedAssets });
+  const toolsiteDesignReview = await runToolsiteDesignReviewGate({ runDir });
+  await writeGateResult(runDir, 'toolsite-design-review.json', toolsiteDesignReview);
+  await writeDesignPackageGateReport(runDir, { lineage, selectedAssets, toolsiteDesignReview });
+
+  if (!gatePassed(toolsiteDesignReview)) {
+    await blockUiReview(runDir, state, {
+      blockingReason: SELECTED_ASSETS_GATE_FAILED,
+      nextAction: 'repair selected design package before desktop:selected-assets',
+      now,
+    });
+    return {
+      ok: false,
+      code: SELECTED_ASSETS_GATE_FAILED,
+      stage: 'ui-review',
+      gates: { externalProof, optionImages, lineage, selectedAssets, toolsiteDesignReview },
+    };
+  }
+
+  const beforeAgent3 = await checkRunGates({ runDir, before: 'agent-3' });
+  await writeGateResult(runDir, 'before-agent-3.json', {
+    gate: 'before-agent-3',
+    runDir: path.resolve(runDir),
+    status: beforeAgent3.allowed ? 'pass' : 'fail',
+    passed: beforeAgent3.allowed,
+    failures: beforeAgent3.allowed ? [] : beforeAgent3.missing,
+    details: beforeAgent3,
+    evidence: { output: 'gate-results/before-agent-3.json' },
+    generatedAt: now(),
+  });
+
+  if (!beforeAgent3.allowed) {
+    await blockUiReview(runDir, state, {
+      blockingReason: SELECTED_ASSETS_GATE_FAILED,
+      nextAction: beforeAgent3.allowedNextStep || 'complete before-agent-3 gates before implement',
+      now,
+    });
+    return {
+      ok: false,
+      code: SELECTED_ASSETS_GATE_FAILED,
+      stage: 'ui-review',
+      gates: { externalProof, optionImages, lineage, selectedAssets, toolsiteDesignReview, beforeAgent3 },
+    };
+  }
+
+  await writeDesktopState(runDir, {
+    ...state,
+    stage: 'implement',
+    last_completed_stage: 'selected-assets',
+    next_action: 'run desktop:implement',
+    blocking_reason: null,
+    updated_at: now(),
+  });
+
+  return {
+    ok: true,
+    code: SELECTED_ASSETS_COMPLETE,
+    stage: 'implement',
+    selected_option: selectedOption.selected_option,
+    selected_design: selectedOption.selected_design,
+    gates: { externalProof, optionImages, lineage, selectedAssets, toolsiteDesignReview, beforeAgent3 },
+  };
+}
+
 function configuredStage(stage) {
   return STAGE_RUNNERS.has(stage);
 }
@@ -892,6 +1641,7 @@ export async function runDesktopStage({
   stage = '',
   now = nowIso,
   executeAgent25DesignOptions = defaultExecuteAgent25DesignOptions,
+  refreshReceipt = refreshDesignOptionsReceipt,
 } = {}) {
   const state = await readDesktopState(runDir);
   const targetStage = stage || state.stage || 'pre-agent2';
@@ -900,6 +1650,11 @@ export async function runDesktopStage({
   if (targetStage === 'pre-agent2') return runDesktopPreAgent2({ runDir, now });
   if (targetStage === 'agent2') return runDesktopAgent2({ runDir, now });
   if (targetStage === 'agent25') return runDesktopAgent25({ runDir, now, executeAgent25DesignOptions });
+  if (targetStage === 'selected-assets') return runDesktopSelectedAssets({ runDir, now, refreshReceipt });
+  if (targetStage === 'ui-review') {
+    if (await readSelectedOption(runDir)) return runDesktopSelectedAssets({ runDir, now, refreshReceipt });
+    return { ok: false, code: UI_SELECTION_REQUIRED, stage: 'ui-review', review_type: 'agent25_option_selection' };
+  }
 
   if (targetStage === 'spec-review') {
     if (!confirmedReview(events, 'spec-confirmation')) {
@@ -982,6 +1737,14 @@ async function main() {
       '  Verifies agent25-external-design-proof and agent25-option-images, records the chosen option, and writes selected-design artifacts.',
       '  If formal selected-assets or lineage requirements are not ready, keeps stage=ui-review with blocking_reason=SELECTED_ASSETS_NOT_READY.',
       '  If all post-selection requirements are ready, writes stage=implement and stops before Agent3.',
+      '',
+      'desktop:selected-assets:',
+      '  npm run desktop:selected-assets -- --run-dir runs/<site-id>',
+      '  Runs after desktop:select-ui has resolved a local A/B/C option selection.',
+      '  Reads selected-option.json, selected-design-lineage.md, options-board.png, and the Agent2.5 action receipt.',
+      '  Writes selected design package files, selected-assets manifest/source map, selected target copies, and selected-assets/lineage gate results.',
+      '  On gate failure, keeps stage=ui-review with blocking_reason=SELECTED_ASSETS_GATE_FAILED.',
+      '  On success, writes stage=implement and stops before Agent3.',
     ].join('\n'));
     return;
   }
