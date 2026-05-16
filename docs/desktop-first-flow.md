@@ -44,7 +44,7 @@ runs/<site-id>/
 - `npm run desktop:run -- --run-dir runs/<site-id>`
 - `npm run desktop:continue -- --run-dir runs/<site-id> --review <review-type> --reply <reply>`
 
-The current implementation is a deterministic local state machine. It can create runs, generate a Toolsite SPEC review, record local human decisions, run the Agent2 gates, and block unconfigured stages with `NO_STAGE_RUNNER_CONFIGURED`.
+The current implementation is a deterministic local state machine. It can create runs, generate a Toolsite SPEC review, record local human decisions, run Agent2, Agent2.5 option selection, selected-assets packaging, and Agent3/Agent4 implementation up to the QA boundary. Unconfigured later stages still block with `NO_STAGE_RUNNER_CONFIGURED`.
 
 ## Step 0: `desktop:intake`
 
@@ -431,6 +431,112 @@ Success behavior:
 - `gate-results/selected-assets.json`, `gate-results/agent25-lineage.json`, and `gate-results/before-agent-3.json` pass.
 - `desktop-run-state.json` is updated with `stage: "implement"`, `last_completed_stage: "selected-assets"`, `next_action: "run desktop:implement"`, and `blocking_reason: null`.
 - The flow stops before Agent3.
+- It does not deploy.
+
+## `desktop:implement`
+
+`desktop:implement` runs after `desktop:selected-assets` has passed selected-assets, lineage, design-review, and before-Agent3 gates. It connects the Agent3 handoff and Agent4 Astro implementation steps, then stops before Agent5 QA.
+
+Run it with:
+
+```bash
+npm run desktop:implement -- --run-dir runs/<site-id>
+```
+
+`desktop:run` also calls this runner automatically when `desktop-run-state.json` is at `stage: "implement"`.
+
+Purpose:
+
+- Read the confirmed SPEC, Agent2 brief/tool/page/design input, and selected-assets package.
+- Preserve the user-selected A/B/C design without reselecting or redesigning it.
+- Generate the Agent3 implementation handoff artifacts.
+- Generate an Astro static site under `site/`.
+- Run the local site build.
+- Stop at `stage: "qa"` before Agent5 QA.
+
+Required preconditions:
+
+- `desktop-run-state.json` has `stage: "implement"` and `last_completed_stage: "selected-assets"`.
+- `toolsite-spec.md` exists.
+- `agent-2-output/site-brief.md` exists.
+- `agent-2-output/tool-spec.md` exists.
+- `agent-2-output/page-plan.md` exists.
+- `agent-2-output/design-generation-input.md` exists.
+- `agent-2-5-output/selected-assets/selected-assets-manifest.json` exists.
+- `agent-2-5-output/selected-assets/selected-design-package.md` exists.
+- `agent-2-5-output/selected-assets/selected-design-lineage.md` exists.
+- `agent-2-5-output/selected-assets/selected-target-desktop.png` exists.
+- `agent-2-5-output/selected-assets/selected-target-mobile.png` exists.
+- `check-gates --before agent-3` passes or can be rerun to pass.
+
+Inputs read:
+
+- `toolsite-spec.md`
+- `agent-2-output/site-brief.md`
+- `agent-2-output/tool-spec.md`
+- `agent-2-output/page-plan.md`
+- `agent-2-output/design-generation-input.md`
+- `agent-2-5-output/selected-assets/selected-assets-manifest.json`
+- `agent-2-5-output/selected-assets/selected-design-package.md`
+- `agent-2-5-output/selected-assets/selected-design-lineage.md`
+- `agent-2-5-output/selected-assets/selected-target-desktop.png`
+- `agent-2-5-output/selected-assets/selected-target-mobile.png`
+
+Agent3 outputs written:
+
+- `agent-3-output/ui-direction.md`
+- `agent-3-output/implementation-handoff.md`
+- `agent-3-output/selected-design-summary.md`
+- `agent-3-output/visual-targets.md`
+
+These Agent3 files must reference the selected-assets manifest, selected design lineage, and desktop/mobile target image paths. They must not switch the selected A/B/C option or create a new UI direction.
+
+Agent4 and site outputs written:
+
+- `site/package.json`
+- `site/astro.config.mjs`
+- `site/tsconfig.json`
+- `site/src/pages/index.astro`
+- `site/src/pages/privacy.astro`
+- `site/src/pages/terms.astro`
+- `site/src/pages/sitemap.xml.ts`
+- `site/src/styles/global.css`
+- `site/public/robots.txt`
+- `site/public/favicon.svg`
+- `agent-4-output/implementation-report.md`
+- `agent-4-output/changed-files.md`
+- `agent-4-output/build-report.md`
+
+Implementation requirements:
+
+- The first viewport is the actual working tool, not a marketing hero.
+- The implementation follows `toolsite-spec.md`, Agent2 `tool-spec.md`, Agent2 `page-plan.md`, and the selected design package.
+- The site remains static Astro with browser-local behavior.
+- It does not add backend, database, login, accounts, server APIs, upload, saved history, or unapproved pages.
+- It includes the page-plan required pages and crawler files: `/`, `/privacy`, `/terms`, `/robots.txt`, and `/sitemap.xml`.
+
+Checks run:
+
+- `check-gates --before agent-3`
+- `npm run build` in `site/`
+
+Failure behavior:
+
+- Outside the implementation state, it returns `IMPLEMENT_STAGE_REQUIRED`.
+- Missing SPEC returns `SPEC_MISSING`.
+- Missing Agent2 files returns `AGENT2_OUTPUT_MISSING`.
+- Missing selected-assets package files returns `SELECTED_ASSETS_MISSING`.
+- Missing selected target images returns `SELECTED_TARGET_MISSING`.
+- Failing `check-gates --before agent-3` returns `AGENT3_GATE_BLOCKED`, keeps `stage: "implement"`, and does not generate the site.
+- If the build fails, it writes `agent-4-output/build-report.md`, keeps `stage: "implement"`, and writes `blocking_reason: "BUILD_FAILED"`.
+
+Success behavior:
+
+- Agent3 output, Agent4 reports, and the Astro site are written.
+- The site build passes.
+- `desktop-run-state.json` is updated with `stage: "qa"`, `last_completed_stage: "implement"`, `next_action: "run desktop:qa"`, and `blocking_reason: null`.
+- The flow stops before Agent5 QA.
+- It does not run full QA.
 - It does not deploy.
 
 ## Human Review Points
