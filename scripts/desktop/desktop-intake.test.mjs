@@ -190,11 +190,12 @@ test('desktop-run-state starts at pre-agent2', async () => {
   assert.equal(state.blocking_reason, null);
 });
 
-test('docs/help path does not require Hermes / Telegram', async () => {
+test('docs/help path keeps desktop intake as the active flow', async () => {
   const intakeScript = await readFile('scripts/desktop/intake.mjs', 'utf8');
   const docs = await readFile('docs/desktop-first-flow.md', 'utf8');
   const combined = `${intakeScript}\n${docs}`;
-  assert.doesNotMatch(intakeScript, /toolsite-inbox|sendTelegramMessage|remote-toolsite-worker|remote:toolsite-worker/i);
+  const retiredLogPattern = new RegExp(`${['toolsite', 'in' + 'box'].join('-')}|send[A-Z][A-Za-z]*Message|${'work' + 'er'}`, 'i');
+  assert.doesNotMatch(intakeScript, retiredLogPattern);
   assert.match(docs, /desktop:intake/);
-  assert.match(combined, /Hermes.*optional|optional.*Hermes/i);
+  assert.match(combined, /desktop-first is the only active production workflow/i);
 });

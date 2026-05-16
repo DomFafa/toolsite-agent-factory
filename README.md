@@ -67,7 +67,7 @@ npm run check:pre-agent2-spec -- --run-dir runs/keyword-density-checker --write
 
 Use the relevant agent prompt files in order only after the required gates pass.
 
-Human review points are recorded in `runs/<site-id>/human-review-events.jsonl`. Codex appends an open `human_review` event and pauses whenever the workflow requires user confirmation; Hermes may later forward the event `message` exactly as written, without explaining, summarizing, or rewriting it. The confirmed Toolsite SPEC is the main user review artifact before Agent 2. Agent2 brief files are machine working documents by default; only an Agent2 Brief Compliance Check failure or uncertainty should trigger an `agent2_brief_exception` human review.
+Human review points are recorded locally in `runs/<site-id>/human-review-events.jsonl`. Codex appends an open `human_review` event and pauses whenever the desktop-first workflow requires user confirmation. The confirmed Toolsite SPEC is the main user review artifact before Agent 2. Agent2 brief files are machine working documents by default; only an Agent2 Brief Compliance Check failure or uncertainty should trigger an `agent2_brief_exception` human review.
 
 ## Important safety rule
 

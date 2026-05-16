@@ -2,7 +2,7 @@
 
 Production run behavior is governed by `docs/production-run-master-contract.md`. If this document conflicts with the contract, the contract wins.
 
-Desktop-first is the current primary production workflow. Telegram, Hermes, and the remote worker remain available as optional later enhancements, but the desktop flow must not depend on Hermes inbox, Telegram delivery, `toolsite-inbox.jsonl`, or `remote:toolsite-worker`.
+desktop-first is the only active production workflow in this repository. New production runs start from local desktop intake, local SPEC confirmation, local UI A/B/C selection, local pre-deploy approval, and machine-readable gates.
 
 ## Run Layout
 
@@ -29,21 +29,22 @@ runs/<site-id>/
 
 `run-meta.json` must record `run_type: "production"`, `deployable: true`, `mode: "desktop"`, `site_id`, `target_domain`, `created_at`, and `status`.
 
-## Scripts
+## Active Scripts
 
 - `npm run desktop:intake -- --input <intake.md>`
 - `npm run desktop:intake -- --site-id <site-id> --keyword <keyword> --domain <domain> --ui-ref <url-or-note> --ux-ref <url-or-note> --notes <text> --assets <file-or-dir>`
 - `npm run desktop:create-run -- --site-id <site-id> --input <input.md> --assets <asset-dir>`
-- `npm run desktop:run -- --run-dir runs/<site-id>`
-- `npm run desktop:continue -- --run-dir runs/<site-id> --review spec-confirmation --reply "确认 SPEC"`
-- `npm run desktop:select-ui -- --run-dir runs/<site-id> --option A`
+- `npm run desktop:pre-agent2 -- --run-dir runs/<site-id>`
 - `npm run desktop:agent2 -- --run-dir runs/<site-id>`
 - `npm run desktop:agent25 -- --run-dir runs/<site-id>`
+- `npm run desktop:select-ui -- --run-dir runs/<site-id> --option A`
 - `npm run desktop:implement -- --run-dir runs/<site-id>`
 - `npm run desktop:qa -- --run-dir runs/<site-id>`
 - `npm run desktop:deploy -- --run-dir runs/<site-id>`
+- `npm run desktop:run -- --run-dir runs/<site-id>`
+- `npm run desktop:continue -- --run-dir runs/<site-id> --review <review-type> --reply <reply>`
 
-The first implementation is a deterministic state-machine skeleton. It can create runs, generate a Toolsite SPEC review, record local human decisions, and block unconfigured stages with `NO_STAGE_RUNNER_CONFIGURED`.
+The current implementation is a deterministic local state machine. It can create runs, generate a Toolsite SPEC review, record local human decisions, run the Agent2 gates, and block unconfigured stages with `NO_STAGE_RUNNER_CONFIGURED`.
 
 ## Step 0: `desktop:intake`
 
@@ -62,25 +63,6 @@ Markdown input:
 - 截图 / 参考图: ./reference.png
 ```
 
-Run from a Markdown intake file:
-
-```bash
-npm run desktop:intake -- --input path/to/intake.md
-```
-
-Run from command arguments:
-
-```bash
-npm run desktop:intake -- \
-  --site-id <site-id> \
-  --keyword <keyword> \
-  --domain <domain> \
-  --ui-ref <url-or-note> \
-  --ux-ref <url-or-note> \
-  --notes <text> \
-  --assets <file-or-dir>
-```
-
 Behavior:
 
 - Missing five elements fail with `INCOMPLETE_INTAKE`.
@@ -91,15 +73,28 @@ Behavior:
 - Asset usage is recorded in `input.md` and `run-meta.json` as `design_reference`, `illustration_reference`, or `screenshot_reference`.
 - `desktop-run-state.json` starts at `stage: "pre-agent2"` with `last_completed_stage: "intake"`.
 
-Next step:
+## Pre-Agent2 SPEC Confirmation
+
+`desktop:pre-agent2` reads `input.md`, writes `toolsite-spec.md`, and appends an open local review event to `human-review-events.jsonl`.
+
+The SPEC review event uses:
+
+- `review_type: "spec-confirmation"`
+- `status: "open"`
+- `blocking: true`
+- `expected_reply: "确认 SPEC / 修改：..."`
+
+The user resolves it with:
 
 ```bash
-npm run desktop:pre-agent2 -- --run-dir runs/<site-id>
+npm run desktop:continue -- --run-dir runs/<site-id> --review spec-confirmation --reply "确认 SPEC"
 ```
+
+If the user replies with `修改：...`, Codex must apply the requested change and regenerate the SPEC before Agent2.
 
 ## `desktop:agent2`
 
-`desktop:agent2` is the desktop-first stage after SPEC confirmation and before Agent2.5 UI generation.
+`desktop:agent2` runs after SPEC confirmation and before Agent2.5 UI generation.
 
 Purpose:
 
@@ -114,27 +109,7 @@ It does not:
 - Generate UI option images.
 - Implement the site.
 - Deploy.
-- Use Telegram, Hermes, `toolsite-inbox.jsonl`, or the remote worker.
-
-Run it directly:
-
-```bash
-npm run desktop:agent2 -- --run-dir runs/<site-id>
-```
-
-Or let the desktop state machine continue from the current stage:
-
-```bash
-npm run desktop:run -- --run-dir runs/<site-id>
-```
-
-Preconditions:
-
-- `toolsite-spec.md` exists.
-- The SPEC has been confirmed.
-- `human-review-events.jsonl` contains a resolved `spec-confirmation` event with `resolution_text: "确认 SPEC"`.
-- `run-meta.json` describes a desktop production run.
-- `desktop-run-state.json` is normally at `stage: "agent2"` after `desktop:continue` resolves SPEC confirmation.
+- Use any off-machine operation channel.
 
 Inputs read:
 
@@ -180,15 +155,35 @@ Success behavior:
 - `desktop-run-state.json` is updated to `stage: "agent25"`.
 - The flow stops before Agent2.5.
 
+## Agent2.5 UI Selection
+
+Agent2.5 must preserve the external action evidence runner split:
+
+- `scripts/run/execute-agent25-design-options.mjs` owns the real browser/CDP/web-access execution for design-options.
+- `scripts/run/run-agent25-external-action.mjs` signs captured evidence, writes `action-receipt.json`, and computes hashes.
+- `scripts/run/check-agent25-external-design-proof.mjs` validates receipts, artifacts, hashes, lineage, and proof.
+
+The desktop UI decision is local:
+
+- The option board is written under `agent-2-5-output/chat-delivery/`.
+- The open `ui-option-selection` review event is appended to `human-review-events.jsonl`.
+- The user chooses `A`, `B`, `C`, or `重做：...` through `desktop:continue` or `desktop:select-ui`.
+
 ## Human Review Points
 
-Desktop mode uses local files and terminal output, not Telegram:
+Desktop mode uses local files and terminal output:
 
 - `spec-confirmation`: user replies `确认 SPEC` or `修改：...`
 - `ui-option-selection`: user chooses `A`, `B`, `C`, or replies `重做：...`
 - `pre-deploy-approval`: user replies `确认部署` or `修改：...`
 
-All review state is appended to `human-review-events.jsonl`.
+All review state is appended to `human-review-events.jsonl`. Existing events are immutable; resolution is recorded by appending a new event.
+
+## Pre-Deploy Approval
+
+`desktop:deploy` must block unless a resolved `pre-deploy-approval` event exists with `resolution_text: "确认部署"`.
+
+This repository must not deploy from unapproved desktop state. A production launch also requires the project approval artifact described by `docs/production-run-master-contract.md`.
 
 ## Gate Repair Loop
 
@@ -196,11 +191,12 @@ Ordinary gate failures should enter a repair loop before asking the user. The lo
 
 If the repair limit is exceeded, the desktop flow must block with `NEEDS_HUMAN_DECISION` and report the gate name, failure reason, attempts, and the decision needed.
 
-## Optional Remote Flow
+## Deprecated / Removed Remote Extension
 
-Remote Telegram/Hermes operation is secondary. Desktop scripts must not call:
+The old Telegram / Hermes / remote worker flow is not an active feature in this repository.
 
-- `read:hermes-intake`
-- `continue:human-review`
-- `run:toolsite --remote`
-- `remote:toolsite-worker`
+Removed active commands include `remote:toolsite-worker`, `run:toolsite`, `continue:human-review`, `send:agent25-option-review`, `pre-agent2:telegram-loop`, and `read:hermes-intake`.
+
+Removed active runtime files include `scripts/run/remote-toolsite-worker.mjs`, `scripts/run/run-toolsite-orchestrator.mjs`, `scripts/run/continue-human-review.mjs`, `scripts/run/read-hermes-intake.mjs`, `scripts/run/send-agent25-option-review.mjs`, and `scripts/run/pre-agent2-telegram-loop.mjs`.
+
+Future remote operation must be redesigned outside the current desktop-first main flow before it can return as an active feature.

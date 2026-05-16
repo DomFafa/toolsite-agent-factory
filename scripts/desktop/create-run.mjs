@@ -4,7 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { parseRunInput } from '../run/pre-agent2-telegram-loop.mjs';
+import { parseRunInput } from '../run/pre-agent2-local-spec.mjs';
 import { writeDesktopState } from './run.mjs';
 
 export const RUN_ALREADY_EXISTS = 'RUN_ALREADY_EXISTS';
@@ -178,4 +178,3 @@ if (isCli) {
     process.exitCode = 2;
   });
 }
-

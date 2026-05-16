@@ -8,8 +8,8 @@ import {
   parseRunInput,
   renderSpecReviewCard,
   renderToolsiteSpec,
-  splitTelegramMessages,
-} from '../run/pre-agent2-telegram-loop.mjs';
+  splitLocalReviewMessages,
+} from '../run/pre-agent2-local-spec.mjs';
 import { runAgent2BriefComplianceCheck, renderComplianceSummary } from '../run/check-agent2-brief-compliance.mjs';
 import { runPreAgent2ToolsiteSpecGate } from '../qa/check-pre-agent2-toolsite-spec.mjs';
 import { runPagePlanGate } from '../qa/check-page-plan.mjs';
@@ -379,7 +379,7 @@ export async function runDesktopPreAgent2({ runDir, now = nowIso } = {}) {
       blocks: 'agent-2',
       title: 'Toolsite SPEC confirmation',
       message,
-      message_chunks: splitTelegramMessages(message),
+      message_chunks: splitLocalReviewMessages(message),
       expected_reply: '确认 SPEC / 修改：...',
       attachments: [specPath],
       created_at: now(),
