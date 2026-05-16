@@ -67,6 +67,67 @@ function normalize(text) {
   return text.toLowerCase().replace(/[^a-z0-9%]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function splitInlineItems(value) {
+  return String(value || '')
+    .replace(/[。.;；]\s*$/g, '')
+    .split(/、|,|，|\s+and\s+/i)
+    .map((item) => item.replace(/`/g, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function findInlineList(source, labels) {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = source.match(new RegExp(`${escaped}\\s*[:：]\\s*([^\\n。]+)`, 'i'));
+    if (match?.[1]) return splitInlineItems(match[1]);
+  }
+  return [];
+}
+
+function currentRunInputItems(toolsiteSpec) {
+  return findInlineList(toolsiteSpec, [
+    '必填输入项',
+    'required input items',
+    'required inputs',
+    'input fields',
+    'inputs',
+  ]);
+}
+
+function currentRunOutputItems(toolsiteSpec) {
+  return findInlineList(toolsiteSpec, [
+    '输出项',
+    'required output items',
+    'required outputs',
+    'output fields',
+    'outputs',
+  ]);
+}
+
+function looseItemMatch(sourceNormalized, item) {
+  if (sourceContains(sourceNormalized, item)) return true;
+  const normalized = normalize(item);
+  const aliases = [
+    [/estimated 401 k balance at retirement|401 k balance at retirement/, ['projected', 'balance', 'retirement']],
+    [/total employee contributions|employee contributions/, ['contributions']],
+    [/employer match total|employer match/, ['employer', 'match']],
+    [/investment growth|estimated growth/, ['growth']],
+    [/current 401 k balance|current balance/, ['current', 'balance']],
+    [/employee contribution|contribution rate/, ['contribution']],
+    [/expected annual return|annual return/, ['return']],
+    [/salary increase|annual salary increase/, ['salary', 'increase']],
+  ];
+  for (const [pattern, tokens] of aliases) {
+    if (pattern.test(normalized) && tokens.every((token) => sourceNormalized.includes(token))) return true;
+  }
+  const importantTokens = normalized
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !['estimated', 'required', 'total', 'field', 'fields'].includes(token));
+  if (importantTokens.length <= 2) return importantTokens.every((token) => sourceNormalized.includes(token));
+  const matches = importantTokens.filter((token) => sourceNormalized.includes(token)).length;
+  return matches >= Math.max(2, Math.ceil(importantTokens.length * 0.6));
+}
+
 function sourceContains(sourceNormalized, item) {
   const normalized = normalize(item);
   if (!normalized) return true;
@@ -102,9 +163,40 @@ function sourceContains(sourceNormalized, item) {
     .some((candidate) => sourceNormalized.includes(candidate));
 }
 
+function isTypingTestSpec({ toolsiteSpec, toolSpec, pagePlan }) {
+  const combined = normalize([toolsiteSpec, toolSpec, pagePlan].join('\n'));
+  return (
+    /\btyping test\b|\btyping speed\b|\bwpm\b/.test(combined) &&
+    /\bpassage\b|\bduration\b|\brestart\b/.test(combined)
+  );
+}
+
+function runSpecificBehaviorChecks({ toolsiteSpec, toolSpec, pagePlan }) {
+  if (isTypingTestSpec({ toolsiteSpec, toolSpec, pagePlan })) {
+    return [
+      ['timer starts on first valid typed character', /startTimer|started/i],
+      ['paste prevention handled in code', /paste|insertFromPaste|drop|bulk/i],
+      ['backspace updates metrics through input handling', /input\.addEventListener\("input"|addEventListener\('input'|addEventListener\("input"/i],
+      ['restart behavior implemented', /restart/i],
+      ['new passage behavior implemented', /newPassage|new passage/i],
+    ];
+  }
+  const combined = `${toolsiteSpec}\n${toolSpec}\n${pagePlan}`;
+  const checks = [];
+  if (/即时更新|live|as you type|adjust|updates?/i.test(combined)) {
+    checks.push(['input changes update results', /addEventListener\(["']input["']|oninput|input\s*=>/i]);
+  }
+  if (/浏览器本地|browser[-\s]*local|local in the browser|all calculations/i.test(combined)) {
+    checks.push(['local browser calculation implemented', /function\s+calculate|const\s+calculate|=>\s*{[\s\S]*return|addEventListener\(["']input["']/i]);
+  }
+  return checks;
+}
+
 export async function runToolSpecGate({ runDir }) {
   const absoluteRunDir = path.resolve(runDir);
+  const toolsiteSpec = await readOptional(path.join(absoluteRunDir, 'toolsite-spec.md'));
   const toolSpec = await readOptional(path.join(absoluteRunDir, 'agent-2-output/tool-spec.md'));
+  const pagePlan = await readOptional(path.join(absoluteRunDir, 'agent-2-output/page-plan.md'));
   const source = [
     await readOptional(path.join(absoluteRunDir, 'site/src/pages/index.astro')),
     await readOptional(path.join(absoluteRunDir, 'site/src/styles/global.css')),
@@ -128,15 +220,18 @@ export async function runToolSpecGate({ runDir }) {
     }
   }
 
-  const edgeCases = [
-    ['timer starts on first valid typed character', /startTimer|started/i],
-    ['paste prevention handled in code', /paste|insertFromPaste|drop|bulk/i],
-    ['backspace updates metrics through input handling', /input\.addEventListener\("input"|addEventListener\('input'/i],
-    ['restart behavior implemented', /restart/i],
-    ['new passage behavior implemented', /newPassage|new passage/i],
+  const runSpecificItems = [
+    ['Toolsite SPEC required input', currentRunInputItems(toolsiteSpec)],
+    ['Toolsite SPEC required output', currentRunOutputItems(toolsiteSpec)],
   ];
 
-  for (const [label, pattern] of edgeCases) {
+  for (const [section, items] of runSpecificItems) {
+    for (const item of items) {
+      if (!looseItemMatch(normalizedSource, item)) failures.push(`${section} item not found in implementation: ${item}`);
+    }
+  }
+
+  for (const [label, pattern] of runSpecificBehaviorChecks({ toolsiteSpec, toolSpec, pagePlan })) {
     if (!pattern.test(source)) failures.push(`missing behavior evidence: ${label}`);
   }
 
@@ -148,7 +243,9 @@ export async function runToolSpecGate({ runDir }) {
       checkedSections: requiredSections.map(([section, items]) => ({ section, itemCount: items.length })),
     },
     evidence: {
+      toolsiteSpec: 'toolsite-spec.md',
       toolSpec: 'agent-2-output/tool-spec.md',
+      pagePlan: 'agent-2-output/page-plan.md',
       implementation: 'site/src/pages/index.astro',
     },
   });
