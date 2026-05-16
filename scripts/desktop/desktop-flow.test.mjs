@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { deflateSync } from 'node:zlib';
 
 import { createDesktopRun, DESKTOP_RUN_CREATED } from './create-run.mjs';
 import {
@@ -114,11 +115,121 @@ function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
+let crcTable = null;
+
+function crc32(buffer) {
+  if (!crcTable) {
+    crcTable = Array.from({ length: 256 }, (_, index) => {
+      let value = index;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+      }
+      return value >>> 0;
+    });
+  }
+  let crc = 0xffffffff;
+  for (const byte of buffer) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data = Buffer.alloc(0)) {
+  const typeBuffer = Buffer.from(type, 'ascii');
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
+  return Buffer.concat([length, typeBuffer, data, crc]);
+}
+
+function validPngBuffer(width, height) {
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const rows = [];
+  for (let y = 0; y < height; y += 1) {
+    const row = Buffer.alloc(1 + width * 4);
+    row[0] = 0;
+    for (let x = 0; x < width; x += 1) {
+      const offset = 1 + x * 4;
+      const zone = Math.floor((x / width) * 3);
+      row[offset] = (zone === 0 ? 180 : zone === 1 ? 40 : 80) + ((x * 13 + y * 7) % 50);
+      row[offset + 1] = (zone === 0 ? 45 : zone === 1 ? 110 : 80) + ((x * 5 + y * 17) % 70);
+      row[offset + 2] = (zone === 0 ? 60 : zone === 1 ? 170 : 40) + ((x * 11 + y * 3) % 80);
+      row[offset + 3] = 255;
+    }
+    rows.push(row);
+  }
+  return Buffer.concat([
+    signature,
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(Buffer.concat(rows))),
+    pngChunk('IEND'),
+  ]);
+}
+
 async function writePng(runDir, relPath, seed) {
   const buffer = pngBuffer(seed);
   await mkdir(path.dirname(path.join(runDir, relPath)), { recursive: true });
   await writeFile(path.join(runDir, relPath), buffer);
   return sha256(buffer);
+}
+
+async function replaceAgent25ImagesWithFullBoard(runDir) {
+  const image = validPngBuffer(900, 360);
+  const imageSha = sha256(image);
+  const relPaths = [
+    'agent-2-5-output/chat-delivery/options-board.png',
+    'agent-2-5-output/generated-designs/option-a/target/desktop.png',
+    'agent-2-5-output/generated-designs/option-b/target/desktop.png',
+    'agent-2-5-output/generated-designs/option-c/target/desktop.png',
+    'agent-2-5-output/selected-design/target/desktop.png',
+    'agent-2-5-output/selected-design/target/mobile.png',
+  ];
+  for (const relPath of relPaths) await writeFile(path.join(runDir, relPath), image);
+
+  const proofPath = path.join(runDir, 'agent-2-5-output/external-design-evidence/external-design-proof.json');
+  const proof = JSON.parse(await readFile(proofPath, 'utf8'));
+  proof.options = proof.options.map((option) => ({ ...option, sha256: imageSha }));
+  proof.optionsBoard.sha256 = imageSha;
+  proof.optionsBoard.containsOptionImageHashes = [imageSha, imageSha, imageSha];
+  proof.targets.desktop.sha256 = imageSha;
+  proof.targets.mobile.sha256 = imageSha;
+  await writeFile(proofPath, `${JSON.stringify(proof, null, 2)}\n`);
+
+  const receiptPath = path.join(runDir, 'agent-2-5-output/external-design-evidence/action-receipt.json');
+  const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+  for (const relPath of relPaths) receipt.artifact_hashes[relPath] = imageSha;
+  await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+}
+
+async function refreshReceiptForCurrentArtifacts({ runDir, proof, receipt }) {
+  const relPaths = [
+    'agent-2-5-output/chat-delivery/options-board.png',
+    'agent-2-5-output/generated-designs/option-a/target/desktop.png',
+    'agent-2-5-output/generated-designs/option-b/target/desktop.png',
+    'agent-2-5-output/generated-designs/option-c/target/desktop.png',
+    'agent-2-5-output/selected-design/target/desktop.png',
+    'agent-2-5-output/selected-design/target/mobile.png',
+  ];
+  const nextReceipt = {
+    ...receipt,
+    artifact_hashes: {
+      ...(receipt.artifact_hashes || {}),
+    },
+  };
+  for (const relPath of relPaths) nextReceipt.artifact_hashes[relPath] = sha256(await readFile(path.join(runDir, relPath)));
+  await writeFile(
+    path.join(runDir, 'agent-2-5-output/external-design-evidence/action-receipt.json'),
+    `${JSON.stringify(nextReceipt, null, 2)}\n`,
+  );
+  await writeFile(
+    path.join(runDir, 'agent-2-5-output/external-design-evidence/external-design-proof.json'),
+    `${JSON.stringify(proof, null, 2)}\n`,
+  );
+  return { status: 0, stdout: '', stderr: '' };
 }
 
 function optionLabel(optionId) {
@@ -131,6 +242,7 @@ function optionLabel(optionId) {
 async function writeAgent25ExecutorFixture(runDir, { selectedOptionId = 'option-a' } = {}) {
   const externalResponsePath = 'agent-2-5-output/external-design-evidence/external-response.md';
   const conversationPath = 'agent-2-5-output/external-design-evidence/conversation-screenshot.png';
+  const generatedImagePath = 'agent-2-5-output/external-design-evidence/downloads/generated-image-1.png';
   const sourceProvenancePath = 'agent-2-5-output/external-design-evidence/source-provenance.md';
   const selectedLineagePath = 'agent-2-5-output/external-design-evidence/selected-design-lineage.md';
   const optionsBoardPath = 'agent-2-5-output/chat-delivery/options-board.png';
@@ -149,6 +261,7 @@ async function writeAgent25ExecutorFixture(runDir, { selectedOptionId = 'option-
   const optionBSha = await writePng(runDir, optionPaths['option-b'], 'b');
   const optionCSha = await writePng(runDir, optionPaths['option-c'], 'c');
   const conversationSha = await writePng(runDir, conversationPath, 'conversation');
+  await writePng(runDir, generatedImagePath, 'generated');
   const boardSha = await writePng(runDir, optionsBoardPath, 'board');
   const desktopSha = await writePng(runDir, desktopPath, selectedSeed);
   const mobileSha = await writePng(runDir, mobilePath, `mobile-${selectedSeed}`);
@@ -160,7 +273,13 @@ async function writeAgent25ExecutorFixture(runDir, { selectedOptionId = 'option-
 
   const externalResponse = [
     'ChatGPT raw external response export',
-    'Design Generation Prompt for typing-test-online.com and wordcounter-desktop.test.',
+    '',
+    '## Submitted Prompt',
+    '',
+    await readFile(path.join(runDir, 'agent-2-output/design-generation-input.md'), 'utf8'),
+    '',
+    '## Captured Conversation Text',
+    '',
     'Assistant:',
     'Option A: Dense word counter workbench with live metrics, desktop target, mobile target, and practical states.',
     'Option B: Friendly word counter with clear text input, live words, characters, sentences, paragraphs, and timers.',
@@ -267,6 +386,7 @@ async function writeAgent25ExecutorFixture(runDir, { selectedOptionId = 'option-
   const artifactPaths = [
     externalResponsePath,
     conversationPath,
+    generatedImagePath,
     optionsBoardPath,
     ...Object.values(optionPaths),
     desktopPath,
@@ -294,7 +414,7 @@ async function writeAgent25ExecutorFixture(runDir, { selectedOptionId = 'option-
         uploaded_assets: [],
         screenshots: [{ path: conversationPath, sha256: artifact_hashes[conversationPath], kind: 'conversation' }],
         raw_response: { path: externalResponsePath, sha256: artifact_hashes[externalResponsePath], kind: 'raw exported model response' },
-        downloads: [],
+        downloads: [{ path: generatedImagePath, sha256: artifact_hashes[generatedImagePath], kind: 'generated design image' }],
         artifact_hashes,
         status: 'pass',
         error: null,
@@ -1128,6 +1248,7 @@ test('desktop:selected-assets writes selected package, runs gates, and advances 
     runDir: created.runDir,
     stage: 'selected-assets',
     now: () => '2026-05-16T09:00:00.000Z',
+    refreshReceipt: refreshReceiptForCurrentArtifacts,
   });
   const state = await readDesktopState(created.runDir);
   const manifest = JSON.parse(await readFile(
@@ -1139,7 +1260,9 @@ test('desktop:selected-assets writes selected package, runs gates, and advances 
     'utf8',
   ));
 
-  assert.equal(result.code, SELECTED_ASSETS_COMPLETE);
+  if (result.code !== SELECTED_ASSETS_COMPLETE) {
+    assert.fail(`expected ${SELECTED_ASSETS_COMPLETE}, got ${result.code}: ${JSON.stringify(result.gateResult?.failures || result.gates || result, null, 2)}`);
+  }
   assert.equal(state.stage, 'implement');
   assert.equal(state.last_completed_stage, 'selected-assets');
   assert.equal(state.next_action, 'run desktop:implement');
@@ -1183,6 +1306,47 @@ test('desktop:selected-assets writes selected package, runs gates, and advances 
 
   assert.deepEqual(await readdir(path.join(created.runDir, 'agent-3-output')), []);
   assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
+test('desktop:selected-assets crops selected option target instead of copying the full options board', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-selected-assets-crop-board-'));
+  const created = await makeUiReviewReadyRun(root, { selectedOptionId: 'option-b' });
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'B',
+    now: () => '2026-05-16T08:00:00.000Z',
+  });
+  await replaceAgent25ImagesWithFullBoard(created.runDir);
+  await writeBeforeAgent3DesktopPrereqs(created.runDir);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'selected-assets',
+    now: () => '2026-05-16T09:00:00.000Z',
+    refreshReceipt: refreshReceiptForCurrentArtifacts,
+  });
+  if (result.code !== SELECTED_ASSETS_COMPLETE) {
+    assert.fail(`expected ${SELECTED_ASSETS_COMPLETE}, got ${result.code}: ${JSON.stringify(result.gateResult?.failures || result.gates || result, null, 2)}`);
+  }
+  const boardSha = sha256(await readFile(path.join(created.runDir, 'agent-2-5-output/chat-delivery/options-board.png')));
+  const desktopSha = sha256(await readFile(path.join(created.runDir, 'agent-2-5-output/selected-assets/selected-target-desktop.png')));
+  const mobileSha = sha256(await readFile(path.join(created.runDir, 'agent-2-5-output/selected-assets/selected-target-mobile.png')));
+  const sourceMap = JSON.parse(await readFile(path.join(created.runDir, 'agent-2-5-output/selected-assets/source-map.json'), 'utf8'));
+  const selectedAssetsGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/selected-assets.json'), 'utf8'));
+
+  assert.notEqual(desktopSha, boardSha);
+  assert.notEqual(mobileSha, boardSha);
+  assert.equal(sourceMap.selected_option, 'B');
+  assert.equal(sourceMap.derivation.method, 'options-board-crop');
+  assert.equal(sourceMap.derivation.selected_option, 'B');
+  assert.deepEqual(sourceMap.output_targets, {
+    desktop: 'agent-2-5-output/selected-assets/selected-target-desktop.png',
+    mobile: 'agent-2-5-output/selected-assets/selected-target-mobile.png',
+  });
+  assert.equal(sourceMap.target_hashes['agent-2-5-output/selected-assets/selected-target-desktop.png'], desktopSha);
+  assert.equal(sourceMap.target_hashes['agent-2-5-output/selected-assets/selected-target-mobile.png'], mobileSha);
+  assert.equal(selectedAssetsGate.passed, true);
 });
 
 test('desktop:selected-assets blocks when before-agent-3 gates are not ready', async () => {

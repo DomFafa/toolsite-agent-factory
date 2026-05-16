@@ -244,6 +244,34 @@ function artifactHashFor(receipt, relPath) {
   return '';
 }
 
+function normalizeOptionId(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (/^(option[-_\s]*)?a$/.test(text) || /option\s+a/i.test(text)) return 'option-a';
+  if (/^(option[-_\s]*)?b$/.test(text) || /option\s+b/i.test(text)) return 'option-b';
+  if (/^(option[-_\s]*)?c$/.test(text) || /option\s+c/i.test(text)) return 'option-c';
+  return text.replace(/\s+/g, '-');
+}
+
+function sourceMapTargetPath(sourceMap, name, canonicalPath) {
+  return String(
+    sourceMap?.derivation?.output_targets?.[name] ||
+      sourceMap?.selected_design_output_targets?.[name] ||
+      sourceMap?.selectedDesignOutputTargets?.[name] ||
+      (sourceMap?.derivation?.target_hashes?.[canonicalPath] ? canonicalPath : '') ||
+      '',
+  ).trim();
+}
+
+function sourceMapTargetHash(sourceMap, relPath) {
+  return String(
+    sourceMap?.derivation?.target_hashes?.[relPath] ||
+      sourceMap?.derivation?.targetHashes?.[relPath] ||
+      sourceMap?.selected_design_target_hashes?.[relPath] ||
+      sourceMap?.selectedDesignTargetHashes?.[relPath] ||
+      '',
+  ).trim();
+}
+
 async function checkReceiptFileHash(runDir, relPath, expectedSha, sourceLabel, { minBytes = 1, receiptStat = null } = {}) {
   const missing = [];
   if (!relPath) {
@@ -280,10 +308,67 @@ async function checkReceiptFileHash(runDir, relPath, expectedSha, sourceLabel, {
   return missing;
 }
 
+async function checkSelectedTargetReceiptOrDerivation(runDir, relPath, name, receipt, receiptStat, sourceMap) {
+  const missing = [];
+  const buffer = await readBufferOptional(path.join(runDir, relPath));
+  const actualSha = buffer ? sha256(buffer) : '';
+  const receiptSha = artifactHashFor(receipt, relPath);
+  const receiptMatches = /^[a-f0-9]{64}$/i.test(String(receiptSha || '')) && actualSha === receiptSha;
+  if (receiptMatches) {
+    const targetStat = await stat(path.join(runDir, relPath));
+    if (!receiptStat || targetStat.mtimeMs <= receiptStat.mtimeMs + 10) return missing;
+  }
+
+  if (receiptMatches && !sourceMap) {
+    missing.push(
+      ...(await checkReceiptFileHash(runDir, relPath, receiptSha, `action-receipt artifact_hashes ${relPath}`, {
+        minBytes: 10_000,
+        receiptStat,
+      })),
+    );
+    return missing;
+  }
+
+  const sourceMapPath = 'agent-2-5-output/selected-assets/source-map.json';
+  const method = String(sourceMap?.derivation?.method || '').trim();
+  const selectedOption = normalizeOptionId(sourceMap?.selected_option || sourceMap?.selectedOption);
+  const sourceMapOption = normalizeOptionId(sourceMap?.derivation?.selected_option || sourceMap?.derivation?.selectedOption);
+  const sourceBoard = String(sourceMap?.source_options_board || sourceMap?.derivation?.source_options_board || '').trim();
+  const sourceBoardSha = String(sourceMap?.source_options_board_sha256 || sourceMap?.derivation?.source_options_board_sha256 || '').trim();
+  const boardRelPath = 'agent-2-5-output/chat-delivery/options-board.png';
+  const boardBuffer = await readBufferOptional(path.join(runDir, boardRelPath));
+  const boardSha = boardBuffer ? sha256(boardBuffer) : '';
+  const mappedPath = sourceMapTargetPath(sourceMap, name, relPath);
+  const mappedSha = sourceMapTargetHash(sourceMap, relPath);
+  const sourceMapMissing = [];
+
+  if (!sourceMap) sourceMapMissing.push(sourceMapPath);
+  if (!method) sourceMapMissing.push(`${sourceMapPath} derivation.method`);
+  if (/crop/i.test(method) && !sourceMap?.derivation?.crop_region && !sourceMap?.crop_region) {
+    sourceMapMissing.push(`${sourceMapPath} derivation.crop_region`);
+  }
+  if (!selectedOption || selectedOption !== sourceMapOption) sourceMapMissing.push(`${sourceMapPath} selected option lineage`);
+  if (sourceBoard !== boardRelPath) sourceMapMissing.push(`${sourceMapPath} source_options_board`);
+  if (!/^[a-f0-9]{64}$/i.test(sourceBoardSha) || sourceBoardSha !== boardSha) sourceMapMissing.push(`${sourceMapPath} source_options_board_sha256`);
+  if (mappedPath !== relPath) sourceMapMissing.push(`${sourceMapPath} derivation output target ${name}`);
+  if (!/^[a-f0-9]{64}$/i.test(mappedSha) || mappedSha !== actualSha) sourceMapMissing.push(`${sourceMapPath} derivation target hash ${relPath}`);
+  if (boardSha && actualSha && boardSha === actualSha) sourceMapMissing.push(`${relPath} not equal full options-board.png`);
+
+  if (sourceMapMissing.length === 0) return missing;
+  if (/^[a-f0-9]{64}$/i.test(String(receiptSha || ''))) {
+    missing.push(`action-receipt artifact_hashes ${relPath} matches current file or valid selected-assets source-map derivation`);
+  } else {
+    missing.push(`action-receipt artifact_hashes ${relPath} or valid selected-assets source-map derivation`);
+  }
+  missing.push(...sourceMapMissing);
+  return missing;
+}
+
 async function checkAgent25RunSpecificEvidence(runDir, externalResponse, identity) {
   const missing = [];
   const receiptPath = path.join(runDir, 'agent-2-5-output/external-design-evidence/action-receipt.json');
   const receipt = await readJsonOptional(receiptPath);
+  const sourceMap = await readJsonOptional(path.join(runDir, 'agent-2-5-output/selected-assets/source-map.json'));
   let receiptStat = null;
   try {
     receiptStat = await stat(receiptPath);
@@ -368,8 +453,6 @@ async function checkAgent25RunSpecificEvidence(runDir, externalResponse, identit
     'agent-2-5-output/generated-designs/option-a/target/desktop.png',
     'agent-2-5-output/generated-designs/option-b/target/desktop.png',
     'agent-2-5-output/generated-designs/option-c/target/desktop.png',
-    'agent-2-5-output/selected-design/target/desktop.png',
-    'agent-2-5-output/selected-design/target/mobile.png',
   ]) {
     missing.push(
       ...(await checkReceiptFileHash(runDir, relPath, artifactHashFor(receipt, relPath), `action-receipt artifact_hashes ${relPath}`, {
@@ -377,6 +460,12 @@ async function checkAgent25RunSpecificEvidence(runDir, externalResponse, identit
         receiptStat,
       })),
     );
+  }
+  for (const [name, relPath] of [
+    ['desktop', 'agent-2-5-output/selected-design/target/desktop.png'],
+    ['mobile', 'agent-2-5-output/selected-design/target/mobile.png'],
+  ]) {
+    missing.push(...(await checkSelectedTargetReceiptOrDerivation(runDir, relPath, name, receipt, receiptStat, sourceMap)));
   }
 
   return missing;
