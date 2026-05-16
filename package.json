@@ -36,6 +36,7 @@
     "desktop:agent2": "node scripts/desktop/run.mjs --stage agent2",
     "desktop:agent25": "node scripts/desktop/run.mjs --stage agent25",
     "desktop:select-ui": "node scripts/desktop/continue.mjs --review ui-option-selection",
+    "desktop:selected-assets": "node scripts/desktop/run.mjs --stage selected-assets",
     "desktop:implement": "node scripts/desktop/run.mjs --stage implement",
     "desktop:qa": "node scripts/desktop/run.mjs --stage qa",
     "desktop:deploy": "node scripts/desktop/run.mjs --stage deploy",

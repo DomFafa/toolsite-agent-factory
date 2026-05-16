@@ -20,7 +20,11 @@ import {
   NO_STAGE_RUNNER_CONFIGURED,
   readDesktopState,
   runDesktopStage,
+  SELECTED_ASSETS_COMPLETE,
+  SELECTED_ASSETS_GATE_FAILED,
+  SELECTED_OPTION_MISSING,
   SPEC_REVIEW_OPEN,
+  UI_SELECTION_REQUIRED,
 } from './run.mjs';
 import {
   continueDesktopRun,
@@ -94,7 +98,14 @@ async function writePng(runDir, relPath, seed) {
   return sha256(buffer);
 }
 
-async function writeAgent25ExecutorFixture(runDir) {
+function optionLabel(optionId) {
+  if (optionId === 'option-a') return 'Option A';
+  if (optionId === 'option-b') return 'Option B';
+  if (optionId === 'option-c') return 'Option C';
+  return optionId;
+}
+
+async function writeAgent25ExecutorFixture(runDir, { selectedOptionId = 'option-a' } = {}) {
   const externalResponsePath = 'agent-2-5-output/external-design-evidence/external-response.md';
   const conversationPath = 'agent-2-5-output/external-design-evidence/conversation-screenshot.png';
   const sourceProvenancePath = 'agent-2-5-output/external-design-evidence/source-provenance.md';
@@ -108,17 +119,25 @@ async function writeAgent25ExecutorFixture(runDir) {
     'option-b': 'agent-2-5-output/generated-designs/option-b/target/desktop.png',
     'option-c': 'agent-2-5-output/generated-designs/option-c/target/desktop.png',
   };
+  const selectedLabel = optionLabel(selectedOptionId);
+  const selectedSeed = { 'option-a': 'a', 'option-b': 'b', 'option-c': 'c' }[selectedOptionId] || 'a';
 
   const optionASha = await writePng(runDir, optionPaths['option-a'], 'a');
   const optionBSha = await writePng(runDir, optionPaths['option-b'], 'b');
   const optionCSha = await writePng(runDir, optionPaths['option-c'], 'c');
   const conversationSha = await writePng(runDir, conversationPath, 'conversation');
   const boardSha = await writePng(runDir, optionsBoardPath, 'board');
-  const desktopSha = await writePng(runDir, desktopPath, 'b');
-  const mobileSha = await writePng(runDir, mobilePath, 'mobile-b');
+  const desktopSha = await writePng(runDir, desktopPath, selectedSeed);
+  const mobileSha = await writePng(runDir, mobilePath, `mobile-${selectedSeed}`);
+  const selectedOptionSha = {
+    'option-a': optionASha,
+    'option-b': optionBSha,
+    'option-c': optionCSha,
+  }[selectedOptionId];
 
   const externalResponse = [
     'ChatGPT raw external response export',
+    'Design Generation Prompt for typing-test-online.com and wordcounter-desktop.test.',
     'Assistant:',
     'Option A: Dense word counter workbench with live metrics, desktop target, mobile target, and practical states.',
     'Option B: Friendly word counter with clear text input, live words, characters, sentences, paragraphs, and timers.',
@@ -138,9 +157,9 @@ async function writeAgent25ExecutorFixture(runDir) {
       `Option A: GPT response Option A mapped to source image ${optionPaths['option-a']} sha ${optionASha}.`,
       `Option B: GPT response Option B mapped to source image ${optionPaths['option-b']} sha ${optionBSha}.`,
       `Option C: GPT response Option C mapped to source image ${optionPaths['option-c']} sha ${optionCSha}.`,
-      'Selected option: Option B from GPT response Option B.',
-      `Desktop target: ${desktopPath} maps to GPT response Option B and source image sha ${optionBSha}.`,
-      `Mobile target: ${mobilePath} maps to GPT response Option B mobile target and source image sha ${optionBSha}.`,
+      `Selected option: ${selectedLabel} from GPT response ${selectedLabel}.`,
+      `Desktop target: ${desktopPath} maps to GPT response ${selectedLabel} and source image sha ${selectedOptionSha}.`,
+      `Mobile target: ${mobilePath} maps to GPT response ${selectedLabel} mobile target and source image sha ${selectedOptionSha}.`,
     ].join('\n'),
   );
   await writeFile(
@@ -149,7 +168,7 @@ async function writeAgent25ExecutorFixture(runDir) {
       '# Selected Design Lineage',
       '',
       'Decision: PASS',
-      'Selected Option B came from the ChatGPT approved external option response and its source image.',
+      `Selected ${selectedLabel} came from the ChatGPT approved external option response and its source image.`,
     ].join('\n'),
   );
   await mkdir(path.dirname(path.join(runDir, optionSelectionPath)), { recursive: true });
@@ -160,7 +179,7 @@ async function writeAgent25ExecutorFixture(runDir) {
       '',
       'Decision: PASS',
       'Option A, Option B, and Option C were shown in chat as a dry-run option board.',
-      'Defaulted after 3 minutes to Option B for this dry-run only.',
+      `${selectedLabel} was selected by dry-run executor default for this dry-run only.`,
     ].join('\n'),
   );
 
@@ -194,25 +213,25 @@ async function writeAgent25ExecutorFixture(runDir) {
         },
         selection: {
           source: 'dry-run executor default after generated board capture',
-          selectedOption: 'option-b',
+          selectedOption: selectedOptionId,
         },
         targets: {
           desktop: {
             path: desktopPath,
             source: 'derived from GPT external option source',
-            sourceOption: 'option-b',
+            sourceOption: selectedOptionId,
             sha256: desktopSha,
           },
           mobile: {
             path: mobilePath,
             source: 'derived from GPT external option source',
-            sourceOption: 'option-b',
+            sourceOption: selectedOptionId,
             sha256: mobileSha,
           },
         },
         selectedDesignPackage: {
           source: 'GPT external option package',
-          sourceOption: 'option-b',
+          sourceOption: selectedOptionId,
           codexLocalCreation: false,
         },
       },
@@ -285,18 +304,46 @@ async function makeAgent25ReadyRun(root, { withAssets = false } = {}) {
   return created;
 }
 
-async function makeUiReviewReadyRun(root, { withAssets = false } = {}) {
+async function makeUiReviewReadyRun(root, { withAssets = false, selectedOptionId = 'option-a' } = {}) {
   const created = await makeAgent25ReadyRun(root, { withAssets });
   const result = await runDesktopStage({
     runDir: created.runDir,
     stage: 'agent25',
     executeAgent25DesignOptions: async ({ runDir }) => {
-      await writeAgent25ExecutorFixture(runDir);
+      await writeAgent25ExecutorFixture(runDir, { selectedOptionId });
       return { status: 0, stdout: 'PASS Agent2.5 design-options executor' };
     },
   });
   assert.equal(result.code, AGENT25_COMPLETE);
   return created;
+}
+
+async function writeBeforeAgent3DesktopPrereqs(runDir) {
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    [
+      '# Gate Ledger',
+      '',
+      '- [waived] Agent 1 Keyword Research - Desktop intake supplied the keyword directly.',
+    ].join('\n'),
+  );
+  await writeFile(
+    path.join(runDir, 'gate-results/web-access-preflight.json'),
+    JSON.stringify(
+      {
+        gate: 'web-access-preflight',
+        runDir,
+        status: 'pass',
+        passed: true,
+        failures: [],
+        details: {},
+        evidence: {},
+        generatedAt: '2026-05-16T08:00:00.000Z',
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 test('desktop create-run creates expected run structure', async () => {
@@ -829,6 +876,162 @@ test('desktop:select-ui resolves review append-only, writes selected artifacts, 
   assert.equal(optionImages.passed, true);
   assert.equal(selectedAssets.passed, false);
 
+  assert.deepEqual(await readdir(path.join(created.runDir, 'agent-3-output')), []);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
+test('desktop:selected-assets refuses outside ui-review stage', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-selected-assets-stage-'));
+  const created = await makeAgent25ReadyRun(root);
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'selected-assets' });
+
+  assert.equal(result.code, UI_SELECTION_REQUIRED);
+  assert.equal((await readDesktopState(created.runDir)).stage, 'agent25');
+});
+
+test('desktop:selected-assets refuses without selected option', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-selected-assets-no-option-'));
+  const created = await makeUiReviewReadyRun(root);
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'selected-assets' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, SELECTED_OPTION_MISSING);
+  assert.equal(state.stage, 'ui-review');
+  assert.equal(state.blocking_reason, 'SELECTED_OPTION_MISSING');
+});
+
+test('desktop:selected-assets requires external action receipt', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-selected-assets-receipt-'));
+  const created = await makeUiReviewReadyRun(root);
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'A',
+  });
+  await rm(path.join(created.runDir, 'agent-2-5-output/external-design-evidence/action-receipt.json'));
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'selected-assets' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, AGENT25_OUTPUT_MISSING);
+  assert.deepEqual(result.missing, ['agent-2-5-output/external-design-evidence/action-receipt.json']);
+  assert.equal(state.stage, 'ui-review');
+  assert.equal(state.blocking_reason, 'agent25-output-missing');
+});
+
+test('desktop:selected-assets blocks when selected target evidence is incomplete', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-selected-assets-incomplete-'));
+  const created = await makeUiReviewReadyRun(root);
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'A',
+  });
+  await rm(path.join(created.runDir, 'agent-2-5-output/selected-design/target/desktop.png'));
+  await rm(path.join(created.runDir, 'agent-2-5-output/generated-designs/option-a/target/desktop.png'));
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'selected-assets' });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, SELECTED_ASSETS_NOT_READY);
+  assert.equal(state.stage, 'ui-review');
+  assert.equal(state.blocking_reason, SELECTED_ASSETS_NOT_READY);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'agent-3-output')), []);
+});
+
+test('desktop:selected-assets writes selected package, runs gates, and advances to implement only after before-agent-3 passes', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-selected-assets-success-'));
+  const created = await makeUiReviewReadyRun(root, { selectedOptionId: 'option-a' });
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'A',
+    now: () => '2026-05-16T08:00:00.000Z',
+  });
+  await writeBeforeAgent3DesktopPrereqs(created.runDir);
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'selected-assets',
+    now: () => '2026-05-16T09:00:00.000Z',
+  });
+  const state = await readDesktopState(created.runDir);
+  const manifest = JSON.parse(await readFile(
+    path.join(created.runDir, 'agent-2-5-output/selected-assets/selected-assets-manifest.json'),
+    'utf8',
+  ));
+  const sourceMap = JSON.parse(await readFile(
+    path.join(created.runDir, 'agent-2-5-output/selected-assets/source-map.json'),
+    'utf8',
+  ));
+
+  assert.equal(result.code, SELECTED_ASSETS_COMPLETE);
+  assert.equal(state.stage, 'implement');
+  assert.equal(state.last_completed_stage, 'selected-assets');
+  assert.equal(state.next_action, 'run desktop:implement');
+  assert.equal(state.blocking_reason, null);
+  assert.equal(manifest.selected_option, 'A');
+  assert.equal(manifest.selected_design, 'Option A');
+  assert.equal(manifest.generated_by, 'desktop:selected-assets');
+  assert.equal(manifest.external_action_receipt, 'agent-2-5-output/external-design-evidence/action-receipt.json');
+  assert.equal(manifest.new_external_action_required, false);
+  assert.equal(Boolean(manifest.artifact_hashes['agent-2-5-output/chat-delivery/options-board.png']), true);
+  assert.equal(sourceMap.selected_option, 'A');
+  assert.equal(sourceMap.external_action_receipt, 'agent-2-5-output/external-design-evidence/action-receipt.json');
+
+  for (const filePath of [
+    'agent-2-5-output/selected-assets/selected-design-package.md',
+    'agent-2-5-output/selected-assets/selected-design-lineage.md',
+    'agent-2-5-output/selected-assets/selected-target-desktop.png',
+    'agent-2-5-output/selected-assets/selected-target-mobile.png',
+    'agent-2-5-output/design-manifest.md',
+    'agent-2-5-output/design-generation-report.md',
+    'agent-2-5-output/asset-acquisition-report.md',
+    'agent-2-5-output/selected-design/asset-manifest.json',
+    'agent-2-5-output/selected-design/image-slots.md',
+    'agent-2-5-output/selected-design/component-spec.md',
+    'agent-2-5-output/selected-design/code/index.html',
+    'agent-2-5-output/selected-design/code/style.css',
+    'gate-results/agent25-lineage.json',
+    'gate-results/selected-assets.json',
+    'gate-results/toolsite-design-review.json',
+    'gate-results/before-agent-3.json',
+  ]) {
+    assert.equal(await exists(path.join(created.runDir, filePath)), true, `${filePath} should exist`);
+  }
+
+  const selectedAssetsGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/selected-assets.json'), 'utf8'));
+  const lineageGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent25-lineage.json'), 'utf8'));
+  const beforeAgent3 = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/before-agent-3.json'), 'utf8'));
+  assert.equal(selectedAssetsGate.passed, true);
+  assert.equal(lineageGate.passed, true);
+  assert.equal(beforeAgent3.passed, true);
+
+  assert.deepEqual(await readdir(path.join(created.runDir, 'agent-3-output')), []);
+  assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
+});
+
+test('desktop:selected-assets blocks when before-agent-3 gates are not ready', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-selected-assets-before-agent3-'));
+  const created = await makeUiReviewReadyRun(root);
+  await continueDesktopRun({
+    runDir: created.runDir,
+    review: 'ui-option-selection',
+    reply: 'A',
+  });
+
+  const result = await runDesktopStage({ runDir: created.runDir, stage: 'selected-assets' });
+  const state = await readDesktopState(created.runDir);
+  const selectedAssetsGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/selected-assets.json'), 'utf8'));
+  const lineageGate = JSON.parse(await readFile(path.join(created.runDir, 'gate-results/agent25-lineage.json'), 'utf8'));
+
+  assert.equal(result.code, SELECTED_ASSETS_GATE_FAILED);
+  assert.equal(state.stage, 'ui-review');
+  assert.equal(state.blocking_reason, SELECTED_ASSETS_GATE_FAILED);
+  assert.equal(selectedAssetsGate.passed, true);
+  assert.equal(lineageGate.passed, true);
   assert.deepEqual(await readdir(path.join(created.runDir, 'agent-3-output')), []);
   assert.deepEqual(await readdir(path.join(created.runDir, 'deployment-output')), []);
 });

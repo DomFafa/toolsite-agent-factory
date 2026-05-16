@@ -326,6 +326,113 @@ Success behavior:
 - It does not create selected-assets through a new external action.
 - It does not deploy.
 
+## `desktop:selected-assets`
+
+`desktop:selected-assets` runs after `desktop:select-ui` has recorded the user's A/B/C choice. It turns the selected option into the local selected design package required before implementation may begin.
+
+Run it with:
+
+```bash
+npm run desktop:selected-assets -- --run-dir runs/<site-id>
+```
+
+`desktop:run` also calls this runner automatically when `desktop-run-state.json` is at `stage: "ui-review"` and `agent-2-5-output/selected-design/selected-option.json` already exists.
+
+Purpose:
+
+- Read the selected option written by `desktop:select-ui`.
+- Preserve the link to `agent-2-5-output/chat-delivery/options-board.png`.
+- Preserve the link to `agent-2-5-output/external-design-evidence/action-receipt.json`.
+- Generate the selected design package and selected-assets manifest required by the existing gates.
+- Run the selected-assets, lineage, design-review subset, and before-Agent3 gates.
+- Stop before Agent3.
+
+Required preconditions:
+
+- `desktop-run-state.json` has `stage: "ui-review"`.
+- `agent-2-5-output/selected-design/selected-option.json` exists and contains `selected_option: "A"`, `"B"`, or `"C"`.
+- `human-review-events.jsonl` contains a resolved `agent25_option_selection` event.
+- `agent-2-5-output/chat-delivery/options-board.png` exists.
+- `agent-2-5-output/external-design-evidence/action-receipt.json` exists.
+- `agent25-external-design-proof` passes.
+- `agent25-option-images` has a passing gate result, or can still be rerun to pass.
+
+Inputs read:
+
+- `agent-2-5-output/selected-design/selected-option.json`
+- `agent-2-5-output/selected-design/selected-design-lineage.md`
+- `agent-2-5-output/chat-delivery/options-board.png`
+- `agent-2-5-output/external-design-evidence/action-receipt.json`
+- Agent2.5 external proof, source provenance, option image paths, and selected target paths
+- existing Agent2 output and gate results needed by `check-gates --before agent-3`
+
+Outputs written:
+
+- `agent-2-5-output/selected-assets/selected-assets-manifest.json`
+- `agent-2-5-output/selected-assets/selected-design-package.md`
+- `agent-2-5-output/selected-assets/selected-design-lineage.md`
+- `agent-2-5-output/selected-assets/source-map.json`
+- `agent-2-5-output/selected-assets/selected-target-desktop.png`
+- `agent-2-5-output/selected-assets/selected-target-mobile.png`
+- `agent-2-5-output/design-manifest.md`
+- `agent-2-5-output/design-generation-prompt.md`
+- `agent-2-5-output/design-generation-report.md`
+- `agent-2-5-output/asset-acquisition-report.md`
+- `agent-2-5-output/selected-design/asset-manifest.json`
+- `agent-2-5-output/selected-design/image-slots.md`
+- `agent-2-5-output/selected-design/design-tokens.md`
+- `agent-2-5-output/selected-design/component-spec.md`
+- `agent-2-5-output/selected-design/asset-plan.md`
+- `agent-2-5-output/selected-design/usability-contract.md`
+- `agent-2-5-output/selected-design/asset-quality-contract.md`
+- `agent-2-5-output/selected-design/interaction-state-model.md`
+- `agent-2-5-output/selected-design/dynamic-data-fit.md`
+- `agent-2-5-output/selected-design/ux-self-audit.md`
+- `agent-2-5-output/selected-design/restoration-rules.md`
+- `agent-2-5-output/selected-design/forbidden-deviations.md`
+- `agent-2-5-output/selected-design/selection-rationale.md`
+- `agent-2-5-output/selected-design/code/index.html`
+- `agent-2-5-output/selected-design/code/style.css`
+- `agent-5-output/design-package-gate-report.md`
+- `gate-results/agent25-external-design-proof.json`
+- `gate-results/agent25-lineage.json`
+- `gate-results/selected-assets.json`
+- `gate-results/toolsite-design-review.json`
+- `gate-results/before-agent-3.json`
+
+`selected-assets-manifest.json` records the selected option, selected design label, source options board, external action receipt, source provenance path, selected timestamp, `generated_by: "desktop:selected-assets"`, artifact hashes, and whether a new external action was required.
+
+Target image handling:
+
+- If the selected target images already match the selected option's externally evidenced proof, the runner reuses them.
+- If the selected option can be traced to an existing externally evidenced option image, the runner may align the selected target files to that option and refresh the evidence receipt through the existing Agent2.5 evidence runner.
+- If the selected target cannot be traced to existing external evidence, it returns `SELECTED_ASSETS_NOT_READY` or `NO_APPROVED_UI_GENERATION_AVAILABLE`.
+- It does not generate local HTML/CSS/SVG/markdown images as a substitute for selected target images.
+
+Gates run:
+
+- `agent25-external-design-proof`
+- `agent25-lineage`
+- `selected-assets`
+- `toolsite-design-review`
+- `check-gates --before agent-3`
+
+Failure behavior:
+
+- Outside `ui-review`, it returns `UI_SELECTION_REQUIRED`.
+- Missing or invalid selected option returns `SELECTED_OPTION_MISSING`.
+- Missing options board or action receipt returns `AGENT25_OUTPUT_MISSING`.
+- Failing external proof returns `AGENT25_EXTERNAL_PROOF_REQUIRED`.
+- Missing or failing option image evidence returns `AGENT25_OPTION_IMAGE_REQUIRED`.
+- Failing selected-assets, lineage, design-review, or before-Agent3 gates keeps `stage: "ui-review"` and writes `blocking_reason: "SELECTED_ASSETS_GATE_FAILED"`.
+
+Success behavior:
+
+- `gate-results/selected-assets.json`, `gate-results/agent25-lineage.json`, and `gate-results/before-agent-3.json` pass.
+- `desktop-run-state.json` is updated with `stage: "implement"`, `last_completed_stage: "selected-assets"`, `next_action: "run desktop:implement"`, and `blocking_reason: null`.
+- The flow stops before Agent3.
+- It does not deploy.
+
 ## Human Review Points
 
 Desktop mode uses local files and terminal output:
