@@ -16,6 +16,7 @@ import { runAgent2BriefComplianceCheck, renderComplianceSummary } from '../run/c
 import { runAgent25ExternalDesignProofGate } from '../run/check-agent25-external-design-proof.mjs';
 import { runAgent25LineageGate } from '../run/check-agent25-lineage.mjs';
 import { runAgent25OptionImagesGate } from '../run/check-agent25-option-images.mjs';
+import { runAgent6CompletionGate } from '../run/check-agent6-completion.mjs';
 import { checkRunGates } from '../run/check-gates.mjs';
 import { runGateEvidenceIntegrityCheck } from '../run/check-gate-evidence-integrity.mjs';
 import { runVisualRestorationSimilarityGate } from '../qa/check-visual-restoration-similarity.mjs';
@@ -65,13 +66,28 @@ export const SITE_MISSING = 'SITE_MISSING';
 export const IMPLEMENT_OUTPUT_MISSING = 'IMPLEMENT_OUTPUT_MISSING';
 export const QA_REPAIR_LIMIT_REACHED = 'QA_REPAIR_LIMIT_REACHED';
 export const QA_COMPLETE = 'QA_COMPLETE';
+export const DEPLOY_REVIEW_REQUIRED = 'DEPLOY_REVIEW_REQUIRED';
+export const DEPLOY_APPROVAL_REQUIRED = 'DEPLOY_APPROVAL_REQUIRED';
+export const INVALID_DEPLOY_APPROVAL = 'INVALID_DEPLOY_APPROVAL';
+export const NOT_PRODUCTION_RUN = 'NOT_PRODUCTION_RUN';
+export const RUN_NOT_DEPLOYABLE = 'RUN_NOT_DEPLOYABLE';
+export const QA_NOT_PASSED = 'QA_NOT_PASSED';
+export const GATE_EVIDENCE_INTEGRITY_REQUIRED = 'GATE_EVIDENCE_INTEGRITY_REQUIRED';
+export const AGENT6_GATE_BLOCKED = 'AGENT6_GATE_BLOCKED';
+export const NEEDS_CLOUDFLARE_CREDENTIALS = 'NEEDS_CLOUDFLARE_CREDENTIALS';
+export const NEEDS_SEARCH_CONSOLE_CREDENTIALS = 'NEEDS_SEARCH_CONSOLE_CREDENTIALS';
+export const NEEDS_BING_CREDENTIALS = 'NEEDS_BING_CREDENTIALS';
+export const NO_DEPLOY_RUNNER_CONFIGURED = 'NO_DEPLOY_RUNNER_CONFIGURED';
+export const DEPLOY_FAILED = 'DEPLOY_FAILED';
+export const INDEXING_CREDENTIALS_REQUIRED = 'INDEXING_CREDENTIALS_REQUIRED';
+export const DEPLOY_COMPLETE = 'DEPLOY_COMPLETE';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const STATE_FILE = 'desktop-run-state.json';
 const EVENT_FILE = 'human-review-events.jsonl';
 
-const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25', 'selected-assets', 'implement', 'qa']);
+const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25', 'selected-assets', 'implement', 'qa', 'deploy']);
 const AGENT2_ALLOWED_CURRENT_STAGES = new Set(['spec-review', 'agent2']);
 const ASSET_REFERENCE_PURPOSES = new Set(['design_reference', 'illustration_reference']);
 const AGENT25_EXECUTOR_SCRIPT = 'scripts/run/execute-agent25-design-options.mjs';
@@ -114,6 +130,12 @@ const QA_SELECTED_ASSETS_FILES = [
   SELECTED_ASSETS_MANIFEST_PATH,
 ];
 const QA_REPAIR_LIMIT = 5;
+const DEPLOY_IMPLEMENT_FILES = [
+  'agent-5-output/launch-readiness.md',
+];
+const DEPLOY_GATE_FILES = [
+  'gate-results/final-qa-evidence.json',
+];
 
 function nowIso() {
   return new Date().toISOString();
@@ -381,6 +403,17 @@ async function blockQa(runDir, state, { blockingReason, nextAction, repairAttemp
     next_action: nextAction || 'repair QA gates before rerunning desktop:qa',
     blocking_reason: blockingReason,
     repair_attempts: repairAttempts || state.repair_attempts || {},
+    updated_at: now(),
+  });
+}
+
+async function blockDeployReview(runDir, state, { blockingReason, nextAction, stage = 'deploy-review', now = nowIso } = {}) {
+  await writeDesktopState(runDir, {
+    ...state,
+    stage,
+    last_completed_stage: state.last_completed_stage || 'qa',
+    next_action: nextAction || 'repair deployment prerequisites before rerunning desktop:deploy',
+    blocking_reason: blockingReason,
     updated_at: now(),
   });
 }
@@ -2913,6 +2946,464 @@ async function writePreDeployApprovalReview({ runDir, launchReadinessText, now =
   return event;
 }
 
+function latestPreDeployApproval(events) {
+  return [...events].reverse().find((event) =>
+    event.type === 'human_review' &&
+    ['pre_deploy_approval', 'pre-deploy-approval'].includes(event.review_type));
+}
+
+function isResolvedDeployApproval(event) {
+  return Boolean(event && event.status === 'resolved' && event.resolution_text === '确认部署');
+}
+
+function gateResultIsPassing(result) {
+  return Boolean(
+    (result?.passed === true && (result.status === 'pass' || result.status === undefined)) ||
+    result?.allowed === true,
+  );
+}
+
+function hasEnv(env, keys) {
+  return keys.some((key) => String(env?.[key] || '').trim());
+}
+
+function deploymentCredentialStatus(env = process.env) {
+  const hasCloudflareToken = hasEnv(env, ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_GLOBAL_API_KEY']);
+  const hasCloudflareAccount = hasEnv(env, ['CLOUDFLARE_ACCOUNT_ID', 'CF_ACCOUNT_ID']);
+  if (!hasCloudflareToken || !hasCloudflareAccount) return NEEDS_CLOUDFLARE_CREDENTIALS;
+  if (!hasEnv(env, ['GOOGLE_SEARCH_CONSOLE_CREDENTIALS', 'GOOGLE_APPLICATION_CREDENTIALS', 'GSC_SERVICE_ACCOUNT_JSON', 'GSC_OAUTH_TOKEN'])) {
+    return NEEDS_SEARCH_CONSOLE_CREDENTIALS;
+  }
+  if (!hasEnv(env, ['BING_WEBMASTER_API_KEY', 'BING_API_KEY', 'BING_WEBMASTER_TOKEN'])) return NEEDS_BING_CREDENTIALS;
+  return '';
+}
+
+function targetDomainFromMeta(meta) {
+  return String(meta?.target_domain || meta?.domain || meta?.site_id || '').trim();
+}
+
+function sitemapUrlFor(meta) {
+  const domain = targetDomainFromMeta(meta);
+  if (!domain) return '';
+  const host = domain.includes('://') ? new URL(domain).hostname : domain;
+  return `https://${host}/sitemap.xml`;
+}
+
+async function writeDeploymentApprovalChecklist(runDir, { approval, now = nowIso } = {}) {
+  await writeRunText(
+    runDir,
+    'approval.md',
+    [
+      '# Deployment Approval',
+      '',
+      '- [x] Production run reviewed.',
+      '- [x] Agent5 local QA reviewed.',
+      '- [x] Gate evidence integrity reviewed.',
+      '- [x] User explicitly approved deployment with 确认部署.',
+      '',
+      `Approved at: ${approval?.resolved_at || approval?.created_at || now()}`,
+      `Approval event: ${approval?.id || 'pre-deploy-approval'}`,
+      '',
+    ].join('\n'),
+  );
+}
+
+async function writeDeployGateEvidenceIntegrity(runDir, result, now = nowIso) {
+  await writeGateResult(runDir, 'gate-evidence-integrity.json', aggregateGateResult({
+    runDir,
+    gate: 'gate-evidence-integrity',
+    passed: Boolean(result?.passed),
+    failures: result?.failures || [],
+    details: result || {},
+    evidence: { output: 'gate-results/gate-evidence-integrity.json' },
+    now,
+  }));
+}
+
+async function writeBeforeAgent6GateResult(runDir, result, now = nowIso) {
+  await writeGateResult(runDir, 'before-agent-6.json', aggregateGateResult({
+    runDir,
+    gate: 'before-agent-6',
+    passed: Boolean(result?.allowed || result?.passed),
+    failures: result?.allowed || result?.passed ? [] : (result?.missing || result?.failures || []),
+    details: result || {},
+    evidence: { output: 'gate-results/before-agent-6.json' },
+    now,
+  }));
+}
+
+async function defaultRunDeployGateEvidenceIntegrity({ runDir }) {
+  return runGateEvidenceIntegrityCheck({ runDir, before: 'agent-6' });
+}
+
+async function defaultRunDeployBeforeAgent6Gate({ runDir }) {
+  return checkRunGates({ runDir, before: 'agent-6' });
+}
+
+async function defaultDeployCloudflarePages() {
+  return {
+    ok: false,
+    code: NO_DEPLOY_RUNNER_CONFIGURED,
+    error: 'No real Cloudflare Pages deployment runner is configured for desktop:deploy.',
+  };
+}
+
+async function defaultSubmitSearchConsole() {
+  return {
+    ok: false,
+    code: NO_DEPLOY_RUNNER_CONFIGURED,
+    error: 'No Google Search Console submission runner is configured for desktop:deploy.',
+  };
+}
+
+async function defaultSubmitBingWebmaster() {
+  return {
+    ok: false,
+    code: NO_DEPLOY_RUNNER_CONFIGURED,
+    error: 'No Bing Webmaster submission runner is configured for desktop:deploy.',
+  };
+}
+
+function completedRow(label, evidence) {
+  return `| ${label} | Completed | ${evidence || 'Completed by desktop:deploy.'} | N/A | N/A |`;
+}
+
+function blockedRow(label, evidence, blocker, nextAction) {
+  return `| ${label} | Hard blocker | ${evidence || blocker} | ${blocker} | ${nextAction} |`;
+}
+
+function cloudflareLaunchGate(cloudflareResult, key, label) {
+  const gate = cloudflareResult?.launch_gates?.[key];
+  if (gate?.completed || gate?.status === 'completed' || gate?.status === 'pass') {
+    return {
+      complete: true,
+      row: completedRow(label, gate.evidence || gate.url || `${label} completed by Cloudflare deployment runner.`),
+    };
+  }
+  return {
+    complete: false,
+    row: blockedRow(
+      label,
+      `Cloudflare deployment succeeded, but desktop:deploy did not receive completion evidence for ${label}.`,
+      `${label} completion evidence missing`,
+      'Complete the Cloudflare launch step with an approved Agent6 runner and rerun desktop:deploy.',
+    ),
+  };
+}
+
+function buildLaunchRows({ cloudflareResult, gscResult, bingResult }) {
+  const rows = [];
+  const blockers = [];
+  const add = (result) => {
+    rows.push(result.row);
+    if (!result.complete) blockers.push(result.row);
+  };
+
+  add(cloudflareResult?.ok
+    ? { complete: true, row: completedRow('Pages deployment', cloudflareResult.deployment_url || cloudflareResult.deployment_id || 'Cloudflare Pages deployment completed.') }
+    : { complete: false, row: blockedRow('Pages deployment', 'Cloudflare Pages deployment did not complete.', 'Cloudflare deployment failed', 'Fix deployment failure and rerun desktop:deploy.') });
+  add(cloudflareLaunchGate(cloudflareResult, 'apex_custom_domain', 'apex custom domain'));
+  add(cloudflareLaunchGate(cloudflareResult, 'www_custom_domain', 'www custom domain'));
+  add(cloudflareLaunchGate(cloudflareResult, 'dns_switched_to_pages', 'DNS switched to Cloudflare Pages'));
+  add(cloudflareLaunchGate(cloudflareResult, 'email_routing_catch_all', 'Email Routing catch-all'));
+  add(cloudflareLaunchGate(cloudflareResult, 'speed_settings', 'Cloudflare Speed Settings'));
+  add(cloudflareLaunchGate(cloudflareResult, 'image_transformations', 'Cloudflare Images Transformations'));
+  add(cloudflareLaunchGate(cloudflareResult, 'web_analytics', 'Cloudflare Web Analytics'));
+
+  add(bingResult?.ok
+    ? { complete: true, row: completedRow('IndexNow', bingResult.indexnow_evidence || bingResult.evidence || 'IndexNow sitemap submission completed.') }
+    : { complete: false, row: blockedRow('IndexNow', bingResult?.error || 'IndexNow was not completed.', bingResult?.code || 'IndexNow incomplete', 'Provide Bing/IndexNow credentials or complete indexing manually.') });
+  add(gscResult?.ok
+    ? { complete: true, row: completedRow('Google Search Console', gscResult.evidence || 'Google Search Console sitemap submission completed.') }
+    : { complete: false, row: blockedRow('Google Search Console', gscResult?.error || 'GSC submission was not completed.', gscResult?.code || 'GSC incomplete', 'Provide Search Console credentials or complete GSC manually.') });
+  add(bingResult?.ok
+    ? { complete: true, row: completedRow('Bing Webmaster Tools', bingResult.evidence || 'Bing Webmaster Tools sitemap and URL submission completed.') }
+    : { complete: false, row: blockedRow('Bing Webmaster Tools', bingResult?.error || 'Bing submission was not completed.', bingResult?.code || 'Bing incomplete', 'Provide Bing credentials or complete Bing Webmaster Tools manually.') });
+  add({ complete: true, row: completedRow('API-first fallback', 'No Cloudflare API permission failure was recorded, so fallback was not required.') });
+
+  return { rows, blockers };
+}
+
+async function writeDeploymentOutputs(runDir, {
+  meta,
+  approval,
+  cloudflareResult,
+  gscResult,
+  bingResult,
+  finalStatus,
+  now = nowIso,
+} = {}) {
+  const generatedAt = now();
+  const domain = targetDomainFromMeta(meta);
+  const sitemapUrl = sitemapUrlFor(meta);
+  const launchRows = buildLaunchRows({ cloudflareResult, gscResult, bingResult });
+  const launchReport = [
+    '# Agent6 Launch Report',
+    '',
+    `Generated at: ${generatedAt}`,
+    '',
+    '## Launch gates',
+    '',
+    '| Gate | Status | Evidence | Hard blocker | Next action |',
+    '| --- | --- | --- | --- | --- |',
+    ...launchRows.rows,
+    '',
+    '## Final status',
+    '',
+    `Status: ${finalStatus}`,
+    '',
+  ].join('\n');
+
+  await mkdir(path.join(runDir, 'deployment-output'), { recursive: true });
+  await mkdir(path.join(runDir, 'agent-6-output'), { recursive: true });
+  await writeRunText(runDir, 'agent-6-output/launch-report.md', launchReport);
+  await writeRunText(
+    runDir,
+    'deployment-output/deployment-report.md',
+    [
+      '# Deployment Report',
+      '',
+      `Decision: ${finalStatus === 'full_launch_completed' ? 'PASS' : 'PARTIAL'}`,
+      `Generated at: ${generatedAt}`,
+      `Target domain: ${domain}`,
+      `Sitemap: ${sitemapUrl}`,
+      `Approval: ${approval?.resolution_text || ''}`,
+      '',
+      '## Result',
+      '',
+      `- Final status: ${finalStatus}`,
+      `- Cloudflare Pages: ${cloudflareResult?.ok ? 'completed' : 'not completed'}`,
+      `- Google Search Console: ${gscResult?.ok ? 'completed' : 'not completed'}`,
+      `- Bing Webmaster Tools: ${bingResult?.ok ? 'completed' : 'not completed'}`,
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
+    path.join(runDir, 'deployment-output/cloudflare-pages.json'),
+    `${JSON.stringify(cloudflareResult || {}, null, 2)}\n`,
+    'utf8',
+  );
+  await writeFile(
+    path.join(runDir, 'deployment-output/indexing-status.json'),
+    `${JSON.stringify({
+      generated_at: generatedAt,
+      sitemap_url: sitemapUrl,
+      google_search_console: gscResult || null,
+      bing_webmaster_tools: bingResult || null,
+    }, null, 2)}\n`,
+    'utf8',
+  );
+  await writeFile(
+    path.join(runDir, 'deployment-output/launch-status.json'),
+    `${JSON.stringify({
+      generated_at: generatedAt,
+      final_status: finalStatus,
+      blocking_reason: finalStatus === 'full_launch_completed' ? null : 'PARTIAL_LAUNCH_BLOCKED',
+      cloudflare_pages_completed: Boolean(cloudflareResult?.ok),
+      indexing_completed: Boolean(gscResult?.ok && bingResult?.ok),
+      agent6_launch_report: 'agent-6-output/launch-report.md',
+    }, null, 2)}\n`,
+    'utf8',
+  );
+  await writeRunText(
+    runDir,
+    'deployment-output/deployment-log.md',
+    [
+      '# Deployment Log',
+      '',
+      `Generated at: ${generatedAt}`,
+      '',
+      `- Cloudflare deploy result: ${cloudflareResult?.ok ? 'ok' : 'failed'} ${cloudflareResult?.error || ''}`,
+      `- GSC result: ${gscResult?.ok ? 'ok' : 'not completed'} ${gscResult?.error || ''}`,
+      `- Bing result: ${bingResult?.ok ? 'ok' : 'not completed'} ${bingResult?.error || ''}`,
+      '',
+    ].join('\n'),
+  );
+  return { launchRows, finalStatus };
+}
+
+async function updateLaunchState(runDir, { finalStatus, now = nowIso } = {}) {
+  const statePath = path.join(runDir, 'state.json');
+  const current = await readJsonOptional(statePath) || {};
+  await writeFile(
+    statePath,
+    `${JSON.stringify({
+      ...current,
+      launch: {
+        ...(current.launch || {}),
+        status: finalStatus,
+        completed_at: finalStatus === 'full_launch_completed' ? now() : null,
+        runner: 'desktop:deploy',
+      },
+    }, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+export async function runDesktopDeploy({
+  runDir,
+  now = nowIso,
+  env = process.env,
+  runDeployGateEvidenceIntegrity = defaultRunDeployGateEvidenceIntegrity,
+  runDeployBeforeAgent6Gate = defaultRunDeployBeforeAgent6Gate,
+  deployCloudflarePages = defaultDeployCloudflarePages,
+  submitSearchConsole = defaultSubmitSearchConsole,
+  submitBingWebmaster = defaultSubmitBingWebmaster,
+  runAgent6Completion = runAgent6CompletionGate,
+} = {}) {
+  const state = await readDesktopState(runDir);
+  if (state.stage !== 'deploy-review' || state.last_completed_stage !== 'qa') {
+    return {
+      ok: false,
+      code: DEPLOY_REVIEW_REQUIRED,
+      stage: state.stage || '',
+      last_completed_stage: state.last_completed_stage || null,
+    };
+  }
+
+  const meta = await readJsonOptional(path.join(runDir, 'run-meta.json'));
+  if (!meta || meta.mode !== 'desktop' || meta.run_type !== 'production') {
+    await blockDeployReview(runDir, state, { blockingReason: NOT_PRODUCTION_RUN, nextAction: 'start a desktop production run before deployment', now });
+    return { ok: false, code: NOT_PRODUCTION_RUN, stage: 'deploy-review' };
+  }
+  if (meta.deployable !== true) {
+    await blockDeployReview(runDir, state, { blockingReason: RUN_NOT_DEPLOYABLE, nextAction: 'mark only production desktop runs deployable before deployment', now });
+    return { ok: false, code: RUN_NOT_DEPLOYABLE, stage: 'deploy-review' };
+  }
+
+  if (!(await isDirectory(path.join(runDir, 'site')))) {
+    await blockDeployReview(runDir, state, { blockingReason: SITE_MISSING, nextAction: 'restore site/ before desktop:deploy', now });
+    return { ok: false, code: SITE_MISSING, stage: 'deploy-review', missing: ['site/'] };
+  }
+  const missingQa = await missingRunFiles(runDir, DEPLOY_IMPLEMENT_FILES);
+  if (missingQa.length > 0) {
+    await blockDeployReview(runDir, state, { blockingReason: QA_NOT_PASSED, nextAction: 'run desktop:qa before deployment', now });
+    return { ok: false, code: QA_NOT_PASSED, stage: 'deploy-review', missing: missingQa };
+  }
+  const missingGateFiles = await missingRunFiles(runDir, DEPLOY_GATE_FILES);
+  const finalQaEvidence = await readJsonOptional(path.join(runDir, 'gate-results/final-qa-evidence.json'));
+  if (missingGateFiles.length > 0 || !gatePassed(finalQaEvidence)) {
+    await blockDeployReview(runDir, state, { blockingReason: QA_NOT_PASSED, nextAction: 'rerun desktop:qa until final QA evidence passes', now });
+    return { ok: false, code: QA_NOT_PASSED, stage: 'deploy-review', missing: missingGateFiles };
+  }
+
+  const events = await readEvents(runDir);
+  const approval = latestPreDeployApproval(events);
+  if (!approval || approval.status === 'open') {
+    await blockDeployReview(runDir, state, { blockingReason: 'pre-deploy-approval', nextAction: 'resolve pre_deploy_approval with 确认部署 before desktop:deploy', now });
+    return { ok: false, code: DEPLOY_APPROVAL_REQUIRED, stage: 'deploy-review' };
+  }
+  if (!isResolvedDeployApproval(approval)) {
+    await blockDeployReview(runDir, state, { blockingReason: INVALID_DEPLOY_APPROVAL, nextAction: 'resolve pre_deploy_approval exactly with 确认部署', now });
+    return { ok: false, code: INVALID_DEPLOY_APPROVAL, stage: 'deploy-review', resolution_text: approval.resolution_text || null };
+  }
+
+  const integrity = await runDeployGateEvidenceIntegrity({ runDir, now });
+  await writeDeployGateEvidenceIntegrity(runDir, integrity, now);
+  if (!gateResultIsPassing(integrity)) {
+    await blockDeployReview(runDir, state, { blockingReason: GATE_EVIDENCE_INTEGRITY_REQUIRED, nextAction: 'repair gate evidence integrity before deployment', now });
+    return { ok: false, code: GATE_EVIDENCE_INTEGRITY_REQUIRED, stage: 'deploy-review', failures: integrity?.failures || [] };
+  }
+
+  await writeDeploymentApprovalChecklist(runDir, { approval, now });
+  const beforeAgent6 = await runDeployBeforeAgent6Gate({ runDir, now });
+  await writeBeforeAgent6GateResult(runDir, beforeAgent6, now);
+  if (!gateResultIsPassing(beforeAgent6)) {
+    await blockDeployReview(runDir, state, { blockingReason: AGENT6_GATE_BLOCKED, nextAction: 'repair before-agent-6 gate failures before deployment', now });
+    return { ok: false, code: AGENT6_GATE_BLOCKED, stage: 'deploy-review', failures: beforeAgent6?.missing || beforeAgent6?.failures || [] };
+  }
+
+  const credentialStatus = deploymentCredentialStatus(env);
+  if (credentialStatus) {
+    await blockDeployReview(runDir, state, { blockingReason: credentialStatus, nextAction: 'provide missing deployment credentials before rerunning desktop:deploy', now });
+    return { ok: false, code: credentialStatus, stage: 'deploy-review' };
+  }
+
+  const siteDir = path.join(runDir, 'site');
+  const domain = targetDomainFromMeta(meta);
+  const sitemapUrl = sitemapUrlFor(meta);
+  const cloudflareResult = await deployCloudflarePages({ runDir, siteDir, meta, env, now });
+  if (!cloudflareResult?.ok) {
+    await mkdir(path.join(runDir, 'deployment-output'), { recursive: true });
+    await writeRunText(
+      runDir,
+      'deployment-output/deployment-log.md',
+      [
+        '# Deployment Log',
+        '',
+        `Generated at: ${now()}`,
+        '',
+        `Cloudflare deployment failed: ${cloudflareResult?.error || cloudflareResult?.code || 'unknown failure'}`,
+        '',
+      ].join('\n'),
+    );
+    await blockDeployReview(runDir, state, { blockingReason: cloudflareResult?.code === NO_DEPLOY_RUNNER_CONFIGURED ? NO_DEPLOY_RUNNER_CONFIGURED : DEPLOY_FAILED, nextAction: 'fix deployment runner or Cloudflare failure before rerunning desktop:deploy', now });
+    return {
+      ok: false,
+      code: cloudflareResult?.code === NO_DEPLOY_RUNNER_CONFIGURED ? NO_DEPLOY_RUNNER_CONFIGURED : DEPLOY_FAILED,
+      stage: 'deploy-review',
+      deploy: cloudflareResult,
+    };
+  }
+
+  const gscResult = await submitSearchConsole({ runDir, siteDir, meta, env, domain, sitemapUrl, cloudflareResult, now });
+  const bingResult = await submitBingWebmaster({ runDir, siteDir, meta, env, domain, sitemapUrl, cloudflareResult, now });
+  const finalStatus = gscResult?.ok && bingResult?.ok ? 'full_launch_completed' : 'partial_launch_blocked';
+  await writeDeploymentOutputs(runDir, { meta, approval, cloudflareResult, gscResult, bingResult, finalStatus, now });
+  await updateLaunchState(runDir, { finalStatus, now });
+  const agent6Completion = await runAgent6Completion({ runDir });
+  await writeGateResult(runDir, 'agent6-completion.json', agent6Completion);
+
+  if (!gateResultIsPassing(agent6Completion)) {
+    await blockDeployReview(runDir, state, { blockingReason: AGENT6_GATE_BLOCKED, nextAction: 'repair Agent6 completion evidence before marking launch done', now });
+    return { ok: false, code: AGENT6_GATE_BLOCKED, stage: 'deploy-review', failures: agent6Completion.failures || [] };
+  }
+
+  if (finalStatus !== 'full_launch_completed') {
+    const partialBlockingReason = !gscResult?.ok || !bingResult?.ok
+      ? INDEXING_CREDENTIALS_REQUIRED
+      : AGENT6_GATE_BLOCKED;
+    await writeDesktopState(runDir, {
+      mode: 'desktop',
+      stage: 'blocked',
+      last_completed_stage: 'deploy',
+      next_action: partialBlockingReason === INDEXING_CREDENTIALS_REQUIRED
+        ? 'provide missing indexing credentials or complete indexing manually'
+        : 'complete missing Agent6 launch gates before marking launch done',
+      blocking_reason: partialBlockingReason,
+      repair_attempts: {},
+      updated_at: now(),
+    });
+    return {
+      ok: false,
+      code: partialBlockingReason,
+      stage: 'blocked',
+      cloudflare: cloudflareResult,
+      indexing: { google_search_console: gscResult, bing_webmaster_tools: bingResult },
+      agent6Completion,
+    };
+  }
+
+  await writeDesktopState(runDir, {
+    mode: 'desktop',
+    stage: 'done',
+    last_completed_stage: 'deploy',
+    next_action: 'launch completed',
+    blocking_reason: null,
+    repair_attempts: {},
+    updated_at: now(),
+  });
+
+  return {
+    ok: true,
+    code: DEPLOY_COMPLETE,
+    stage: 'done',
+    cloudflare: cloudflareResult,
+    indexing: { google_search_console: gscResult, bing_webmaster_tools: bingResult },
+    agent6Completion,
+  };
+}
+
 const QA_GATES = [
   'site-build',
   'page-plan',
@@ -3111,12 +3602,19 @@ export async function runDesktopStage({
   runDir,
   stage = '',
   now = nowIso,
+  env = process.env,
   executeAgent25DesignOptions = defaultExecuteAgent25DesignOptions,
   refreshReceipt = refreshDesignOptionsReceipt,
   runSiteBuild = defaultRunSiteBuild,
   runQaGate = defaultRunQaGate,
   repairQaGate = defaultRepairQaGate,
   maxQaRepairAttempts = QA_REPAIR_LIMIT,
+  runDeployGateEvidenceIntegrity = defaultRunDeployGateEvidenceIntegrity,
+  runDeployBeforeAgent6Gate = defaultRunDeployBeforeAgent6Gate,
+  deployCloudflarePages = defaultDeployCloudflarePages,
+  submitSearchConsole = defaultSubmitSearchConsole,
+  submitBingWebmaster = defaultSubmitBingWebmaster,
+  runAgent6Completion = runAgent6CompletionGate,
 } = {}) {
   const state = await readDesktopState(runDir);
   const targetStage = stage || state.stage || 'pre-agent2';
@@ -3137,6 +3635,36 @@ export async function runDesktopStage({
       maxQaRepairAttempts,
     });
   }
+  if (targetStage === 'deploy') {
+    return runDesktopDeploy({
+      runDir,
+      now,
+      env,
+      runDeployGateEvidenceIntegrity,
+      runDeployBeforeAgent6Gate,
+      deployCloudflarePages,
+      submitSearchConsole,
+      submitBingWebmaster,
+      runAgent6Completion,
+    });
+  }
+  if (targetStage === 'deploy-review') {
+    const approval = latestPreDeployApproval(events);
+    if (isResolvedDeployApproval(approval)) {
+      return runDesktopDeploy({
+        runDir,
+        now,
+        env,
+        runDeployGateEvidenceIntegrity,
+        runDeployBeforeAgent6Gate,
+        deployCloudflarePages,
+        submitSearchConsole,
+        submitBingWebmaster,
+        runAgent6Completion,
+      });
+    }
+    return { ok: false, code: DEPLOY_APPROVAL_REQUIRED, stage: 'deploy-review' };
+  }
   if (targetStage === 'ui-review') {
     if (await readSelectedOption(runDir)) return runDesktopSelectedAssets({ runDir, now, refreshReceipt });
     return { ok: false, code: UI_SELECTION_REQUIRED, stage: 'ui-review', review_type: 'agent25_option_selection' };
@@ -3154,22 +3682,6 @@ export async function runDesktopStage({
       blocking_reason: null,
     });
     return { ok: true, code: DESKTOP_STAGE_DONE, stage: 'agent2' };
-  }
-
-  if (targetStage === 'deploy') {
-    const approval = [...events].reverse().find((event) =>
-      ['pre-deploy-approval', 'pre_deploy_approval'].includes(event.review_type) &&
-      event.status === 'resolved' &&
-      event.resolution_text === '确认部署');
-    if (!approval) {
-      await writeDesktopState(runDir, {
-        ...state,
-        stage: 'deploy-review',
-        next_action: 'Confirm deployment before desktop:deploy.',
-        blocking_reason: 'pre-deploy-approval',
-      });
-      return { ok: false, code: DEPLOY_REQUIRES_APPROVAL, stage: 'deploy-review' };
-    }
   }
 
   if (!configuredStage(targetStage)) {
@@ -3198,7 +3710,7 @@ async function main() {
       '  agent25      Require Agent2 compliance, call Agent2.5 design-options executor, run option image and external proof gates, then stop at ui-review.',
       '  implement    Require selected-assets, generate Agent3 handoff, implement Astro site, run build, then stop at qa.',
       '  qa           Run Agent5 local QA gates with repair loop, then stop at deploy-review.',
-      '  deploy       Requires pre_deploy_approval before deployment; real deployment runner is not wired in this skeleton.',
+      '  deploy       Require QA, gate evidence integrity, explicit 确认部署, credentials, and Agent6 deploy runners.',
       '',
       'desktop:agent2:',
       '  npm run desktop:agent2 -- --run-dir runs/<site-id>',
@@ -3249,6 +3761,16 @@ async function main() {
       '  Runs site build, page-plan, tool-spec, rendered-assets, final visual lock/similarity, selected-assets, lineage, design-review, final QA evidence, gate evidence integrity, and check-gates --before agent-6.',
       '  Failed gates enter a repair loop with up to five real repair attempts before blocking with QA_REPAIR_LIMIT_REACHED.',
       '  On success, writes agent-5-output QA reports, opens pre_deploy_approval, writes stage=deploy-review, and stops before deployment.',
+      '',
+      'desktop:deploy:',
+      '  npm run desktop:deploy -- --run-dir runs/<site-id>',
+      '  Runs only from stage=deploy-review after last_completed_stage=qa.',
+      '  Requires a desktop production run, deployable=true, site/, passing final QA evidence, gate evidence integrity, check-gates --before agent-6, and pre_deploy_approval resolved exactly as "确认部署".',
+      '  Checks Cloudflare, Google Search Console, and Bing Webmaster credentials before calling the configured Agent6 deploy/indexing runners.',
+      `  Missing credentials return ${NEEDS_CLOUDFLARE_CREDENTIALS}, ${NEEDS_SEARCH_CONSOLE_CREDENTIALS}, or ${NEEDS_BING_CREDENTIALS}.`,
+      `  If no real deployment runner is configured, returns ${NO_DEPLOY_RUNNER_CONFIGURED} rather than pretending success.`,
+      '  Writes deployment-output/*, agent-6-output/launch-report.md, and gate-results/agent6-completion.json.',
+      '  On full launch success, writes stage=done. On deploy failure, keeps stage=deploy-review with blocking_reason=DEPLOY_FAILED.',
     ].join('\n'));
     return;
   }

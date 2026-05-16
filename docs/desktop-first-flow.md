@@ -44,7 +44,7 @@ runs/<site-id>/
 - `npm run desktop:run -- --run-dir runs/<site-id>`
 - `npm run desktop:continue -- --run-dir runs/<site-id> --review <review-type> --reply <reply>`
 
-The current implementation is a deterministic local state machine. It can create runs, generate a Toolsite SPEC review, record local human decisions, run Agent2, Agent2.5 option selection, selected-assets packaging, and Agent3/Agent4 implementation up to the QA boundary. Unconfigured later stages still block with `NO_STAGE_RUNNER_CONFIGURED`.
+The current implementation is a deterministic local state machine. It can create runs, generate a Toolsite SPEC review, record local human decisions, run Agent2, Agent2.5 option selection, selected-assets packaging, Agent3/Agent4 implementation, Agent5 local QA, and the Agent6 deployment boundary.
 
 ## Step 0: `desktop:intake`
 
@@ -653,6 +653,82 @@ Success behavior:
 - It does not submit sitemap.
 - It does not run GSC or Bing.
 - It does not deploy.
+
+## desktop:deploy
+
+`desktop:deploy` runs only after `desktop:qa` has advanced the local state to `stage: "deploy-review"` and the local pre-deploy review has been resolved with the exact text `确认部署`.
+
+Run it with:
+
+```bash
+npm run desktop:deploy -- --run-dir runs/<site-id>
+```
+
+`desktop:run` may also dispatch to the deploy runner when the current state is `deploy-review` and a resolved `pre_deploy_approval` / `pre-deploy-approval` event exists.
+
+Inputs:
+
+- `run-meta.json`
+- `desktop-run-state.json`
+- `human-review-events.jsonl`
+- `site/`
+- `agent-5-output/launch-readiness.md`
+- `gate-results/final-qa-evidence.json`
+- existing gate evidence required by `check-gates --before agent-6`
+
+Preconditions:
+
+- `run-meta.json` must be a desktop production run: `mode: "desktop"`, `run_type: "production"`, and `deployable: true`.
+- `desktop-run-state.json` must have `stage: "deploy-review"` and `last_completed_stage: "qa"`.
+- `site/` must exist.
+- Agent5 QA must have passed.
+- gate evidence integrity must pass.
+- `check-gates --before agent-6` must pass after local deployment approval is materialized into the deployment approval checklist.
+- `human-review-events.jsonl` must contain a resolved `pre_deploy_approval` / `pre-deploy-approval` event with `resolution_text: "确认部署"`.
+
+Failure behavior:
+
+- Outside deploy review, it returns `DEPLOY_REVIEW_REQUIRED`.
+- Missing or unresolved deploy approval returns `DEPLOY_APPROVAL_REQUIRED`.
+- A resolved approval with any text other than `确认部署` returns `INVALID_DEPLOY_APPROVAL`.
+- Smoke or non-production runs return `NOT_PRODUCTION_RUN`.
+- `deployable: false` returns `RUN_NOT_DEPLOYABLE`.
+- Missing `site/` returns `SITE_MISSING`.
+- Missing or failing QA evidence returns `QA_NOT_PASSED`.
+- Failing gate evidence integrity returns `GATE_EVIDENCE_INTEGRITY_REQUIRED`.
+- Failing `check-gates --before agent-6` returns `AGENT6_GATE_BLOCKED`.
+
+Credential checks:
+
+- Missing Cloudflare credentials return `NEEDS_CLOUDFLARE_CREDENTIALS`.
+- Missing Google Search Console credentials return `NEEDS_SEARCH_CONSOLE_CREDENTIALS`.
+- Missing Bing Webmaster credentials return `NEEDS_BING_CREDENTIALS`.
+
+The runner must not claim a launch completed if a required deploy or indexing credential is missing. If Cloudflare succeeds but indexing is blocked, it writes `partial_launch_blocked` evidence and keeps the desktop state blocked until indexing credentials or manual indexing evidence are supplied.
+
+Deployment behavior:
+
+- Cloudflare Pages deployment is delegated to the configured Agent6 deployment runner.
+- If no real Cloudflare deployment runner is configured, the command returns `NO_DEPLOY_RUNNER_CONFIGURED`.
+- GSC and Bing submission are delegated to configured submission runners.
+- Unit tests use mocked deploy and indexing runners; they must not perform a real deployment.
+
+Successful deployment writes:
+
+- `deployment-output/deployment-report.md`
+- `deployment-output/cloudflare-pages.json`
+- `deployment-output/launch-status.json`
+- `deployment-output/indexing-status.json`
+- `deployment-output/deployment-log.md`
+- `agent-6-output/launch-report.md`
+- `gate-results/agent6-completion.json`
+
+Success behavior:
+
+- When Cloudflare, indexing, and Agent6 completion gates all pass, `desktop-run-state.json` is updated to `stage: "done"`, `last_completed_stage: "deploy"`, `next_action: "launch completed"`, and `blocking_reason: null`.
+- If deployment fails, it keeps `stage: "deploy-review"` and writes `blocking_reason: "DEPLOY_FAILED"`.
+- If launch evidence is incomplete, it does not write `full_launch_completed`.
+- Smoke runs and unapproved runs cannot deploy.
 
 ## Human Review Points
 
