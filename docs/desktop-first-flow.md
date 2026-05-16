@@ -171,7 +171,40 @@ Success behavior:
 - `desktop-run-state.json` is updated with `stage: "agent25"`, `last_completed_stage: "agent2"`, `next_action: "run desktop:agent25"`, and `blocking_reason: null`.
 - The flow stops before Agent2.5.
 
-## Agent2.5 UI Selection
+## `desktop:agent25`
+
+`desktop:agent25` runs after `desktop:agent2` has passed compliance and set `desktop-run-state.json` to `stage: "agent25"`.
+
+Run it with:
+
+```bash
+npm run desktop:agent25 -- --run-dir runs/<site-id>
+```
+
+`desktop:run` also calls this runner automatically when the current desktop state is `agent25`.
+
+Purpose:
+
+- Read `agent-2-output/design-generation-input.md` and referenced `input-assets/`.
+- Call the approved Agent2.5 design-options executor.
+- Generate reviewable high-fidelity A/B/C UI option evidence.
+- Write a local blocking UI option review and stop before Agent3.
+
+Required preconditions:
+
+- `desktop-run-state.json` has `stage: "agent25"` and `last_completed_stage: "agent2"`.
+- `agent-2-output/design-generation-input.md` exists.
+- `agent-2-output/site-brief.md` exists.
+- `gate-results/agent2-brief-compliance.json` is passing.
+- `input-assets/` is readable when the run references image assets.
+
+Executor called:
+
+```bash
+node scripts/run/execute-agent25-design-options.mjs \
+  --run-dir runs/<site-id> \
+  --prompt runs/<site-id>/agent-2-output/design-generation-input.md
+```
 
 Agent2.5 must preserve the external action evidence runner split:
 
@@ -179,18 +212,56 @@ Agent2.5 must preserve the external action evidence runner split:
 - `scripts/run/run-agent25-external-action.mjs` signs captured evidence, writes `action-receipt.json`, and computes hashes.
 - `scripts/run/check-agent25-external-design-proof.mjs` validates receipts, artifacts, hashes, lineage, and proof.
 
+Outputs written by a successful executor run include:
+
+- `agent-2-5-output/external-design-evidence/action-receipt.json`
+- `agent-2-5-output/external-design-evidence/conversation-screenshot.png`
+- `agent-2-5-output/external-design-evidence/external-response.md`
+- `agent-2-5-output/chat-delivery/options-board.png`
+- `gate-results/agent25-external-design-proof.json`
+- `gate-results/agent25-option-images.json`
+- an open local `agent25_option_selection` review event in `human-review-events.jsonl`
+
+Gates run:
+
+- `agent25-external-design-proof`
+- `agent25-option-images`
+
+Failure behavior:
+
+- If Agent2 has not completed, it returns `INVALID_DESKTOP_STAGE`.
+- If Agent2 outputs are missing, it returns `AGENT2_OUTPUT_MISSING` and keeps `stage: "agent25"`.
+- If Agent2 compliance is missing or failing, it returns `AGENT2_COMPLIANCE_REQUIRED` and keeps `stage: "agent25"`.
+- If referenced image assets cannot be read, it returns `INPUT_ASSETS_UNREADABLE` and keeps `stage: "agent25"`.
+- If the executor returns `NO_APPROVED_UI_GENERATION_AVAILABLE` or `EXTERNAL_ACTION_FAILED`, it records that value in `blocking_reason`, keeps `stage: "agent25"`, and does not create local fallback images.
+- If either Agent2.5 gate fails, it writes the failing gate result, keeps `stage: "agent25"`, and does not enter UI review.
+
+Provider unavailable behavior:
+
+- A missing or unavailable approved design surface is a hard block.
+- The desktop runner does not fabricate option images with local HTML, CSS, SVG, markdown, or screenshots.
+- Re-run `desktop:agent25` only after the approved design surface and evidence runner are available.
+
 The desktop UI decision is local:
 
 - The option board is written under `agent-2-5-output/chat-delivery/`.
-- The open `ui-option-selection` review event is appended to `human-review-events.jsonl`.
+- The open `agent25_option_selection` review event is appended to `human-review-events.jsonl`.
 - The user chooses `A`, `B`, `C`, or `重做：...` through `desktop:continue` or `desktop:select-ui`.
+
+Success behavior:
+
+- `desktop-run-state.json` is updated with `stage: "ui-review"`, `last_completed_stage: "agent25"`, `next_action: "review Agent2.5 options and run desktop:select-ui"`, and `blocking_reason: "ui-option-selection"`.
+- The flow stops at UI review.
+- It does not enter Agent3.
+- It does not implement selected assets.
+- It does not deploy.
 
 ## Human Review Points
 
 Desktop mode uses local files and terminal output:
 
 - `spec-confirmation`: user replies `确认 SPEC` or `修改：...`
-- `ui-option-selection`: user chooses `A`, `B`, `C`, or replies `重做：...`
+- `agent25_option_selection`: user chooses `A`, `B`, `C`, or replies `重做：...`
 - `pre-deploy-approval`: user replies `确认部署` or `修改：...`
 
 All review state is appended to `human-review-events.jsonl`. Existing events are immutable; resolution is recorded by appending a new event.

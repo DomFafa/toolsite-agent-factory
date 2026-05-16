@@ -11,6 +11,12 @@ export const SPEC_NOT_CONFIRMED = 'SPEC_NOT_CONFIRMED';
 export const INVALID_REPLY = 'INVALID_REPLY';
 export const NO_OPEN_REVIEW = 'NO_OPEN_REVIEW';
 
+const UI_OPTION_REVIEW_TYPES = new Set([
+  'ui-option-selection',
+  'agent25_option_selection',
+  'desktop_ui_option_selection',
+]);
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -51,14 +57,25 @@ async function readEvents(runDir) {
     : [];
 }
 
+function reviewTypeMatches(event, reviewType) {
+  if (event.review_type === reviewType) return true;
+  if (UI_OPTION_REVIEW_TYPES.has(reviewType)) {
+    return UI_OPTION_REVIEW_TYPES.has(event.review_type) || event.id === 'agent25-option-selection';
+  }
+  return false;
+}
+
 function latestOpenReview(events, reviewType) {
-  return [...events].reverse().find((event) => event.type === 'human_review' && event.review_type === reviewType && event.status === 'open');
+  return [...events].reverse().find((event) =>
+    event.type === 'human_review' &&
+    reviewTypeMatches(event, reviewType) &&
+    event.status === 'open');
 }
 
 function validateReply(reviewType, reply) {
   const value = String(reply || '').trim();
   if (reviewType === 'spec-confirmation') return value === '确认 SPEC' || /^修改[:：]/.test(value);
-  if (reviewType === 'ui-option-selection') return /^[ABC]$/i.test(value) || /^重做[:：]/.test(value);
+  if (UI_OPTION_REVIEW_TYPES.has(reviewType)) return /^[ABC]$/i.test(value) || /^重做[:：]/.test(value);
   if (reviewType === 'pre-deploy-approval') return value === '确认部署' || /^修改[:：]/.test(value);
   return false;
 }
@@ -81,7 +98,7 @@ function nextStateFor(reviewType, reply, state) {
       blocking_reason: 'spec-change-requested',
     };
   }
-  if (reviewType === 'ui-option-selection') {
+  if (UI_OPTION_REVIEW_TYPES.has(reviewType)) {
     if (/^[ABC]$/i.test(reply)) {
       return {
         ...state,
