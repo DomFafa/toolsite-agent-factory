@@ -2,6 +2,7 @@
 // If this entrypoint conflicts with the contract, the contract wins.
 // Gate checks must block smoke deployment, require Agent6 preconditions, and fail rather than trust incomplete or stale evidence.
 import { access, readFile, readdir, stat } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -116,6 +117,14 @@ async function readJsonOptional(filePath) {
   }
 }
 
+async function readBufferOptional(filePath) {
+  try {
+    return await readFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
 async function isDirectory(filePath) {
   try {
     return (await stat(filePath)).isDirectory();
@@ -153,6 +162,224 @@ function parseLedgerStatuses(ledgerText) {
 
 function ledgerHasWaiver(statuses, gateName) {
   return statuses.get(gateName.toLowerCase()) === 'waived';
+}
+
+function sha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeIdentityValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/g, '');
+}
+
+function findLabeledValue(text, labels) {
+  for (const label of labels) {
+    const pattern = new RegExp(`^\\s*(?:[-*]\\s*)?${escapeRegExp(label)}\\s*[:：]\\s*(.+?)\\s*$`, 'im');
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].trim();
+  }
+  return '';
+}
+
+async function currentRunIdentity(runDir) {
+  const meta = await readJsonOptional(path.join(runDir, 'run-meta.json'));
+  const state = await readJsonOptional(path.join(runDir, 'state.json'));
+  const input = await readOptional(path.join(runDir, 'input.md'));
+  const spec = await readOptional(path.join(runDir, 'toolsite-spec.md'));
+  const agent2DesignInput = await readOptional(path.join(runDir, 'agent-2-output/design-generation-input.md'));
+  const combinedText = [agent2DesignInput, input, spec].filter(Boolean).join('\n');
+
+  const targetDomain = normalizeIdentityValue(
+    meta?.target_domain ||
+      meta?.targetDomain ||
+      meta?.domain ||
+      state?.domain ||
+      findLabeledValue(combinedText, ['Target Domain', 'target_domain', 'domain', '目标域名']),
+  );
+  const keyword = String(
+    meta?.keyword ||
+      meta?.primary_keyword ||
+      meta?.primaryKeyword ||
+      findLabeledValue(combinedText, ['Keyword', 'primary keyword', '关键词']),
+  ).trim();
+
+  return { targetDomain, keyword };
+}
+
+function matchesCurrentRunIdentity(text, identity) {
+  const haystack = String(text || '');
+  const domain = normalizeIdentityValue(identity?.targetDomain || '');
+  if (domain) return new RegExp(escapeRegExp(domain), 'i').test(haystack);
+  const keyword = String(identity?.keyword || '').trim();
+  if (keyword && new RegExp(escapeRegExp(keyword), 'i').test(haystack)) return true;
+  return false;
+}
+
+function pathValue(record, keys) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function artifactHashFor(receipt, relPath) {
+  const hashes = receipt?.artifact_hashes || receipt?.artifactHashes;
+  if (hashes && typeof hashes === 'object' && !Array.isArray(hashes)) {
+    const value = hashes[relPath];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  if (Array.isArray(hashes)) {
+    const match = hashes.find((entry) => entry?.path === relPath || entry?.relPath === relPath);
+    if (typeof match?.sha256 === 'string' && match.sha256.trim()) return match.sha256.trim();
+  }
+  return '';
+}
+
+async function checkReceiptFileHash(runDir, relPath, expectedSha, sourceLabel, { minBytes = 1, receiptStat = null } = {}) {
+  const missing = [];
+  if (!relPath) {
+    missing.push(`${sourceLabel} path`);
+    return missing;
+  }
+  if (path.isAbsolute(relPath) || relPath.includes('..')) {
+    missing.push(`${sourceLabel} run-relative path`);
+    return missing;
+  }
+  if (!/^[a-f0-9]{64}$/i.test(String(expectedSha || ''))) {
+    missing.push(`${sourceLabel} sha256`);
+    return missing;
+  }
+  const absolutePath = path.join(runDir, relPath);
+  const buffer = await readBufferOptional(absolutePath);
+  if (!buffer) {
+    missing.push(relPath);
+    return missing;
+  }
+  if (buffer.length < minBytes) {
+    missing.push(`${relPath} non-empty artifact`);
+  }
+  const actualSha = sha256(buffer);
+  if (actualSha !== expectedSha) {
+    missing.push(`${sourceLabel} sha256 matches ${relPath}`);
+  }
+  if (receiptStat) {
+    const artifactStat = await stat(absolutePath);
+    if (artifactStat.mtimeMs > receiptStat.mtimeMs + 10) {
+      missing.push(`${relPath} not newer than action-receipt.json`);
+    }
+  }
+  return missing;
+}
+
+async function checkAgent25RunSpecificEvidence(runDir, externalResponse, identity) {
+  const missing = [];
+  const receiptPath = path.join(runDir, 'agent-2-5-output/external-design-evidence/action-receipt.json');
+  const receipt = await readJsonOptional(receiptPath);
+  let receiptStat = null;
+  try {
+    receiptStat = await stat(receiptPath);
+  } catch {
+    receiptStat = null;
+  }
+
+  if (!receipt) {
+    missing.push('agent-2-5-output/external-design-evidence/action-receipt.json');
+    return missing;
+  }
+
+  const promptPath = pathValue(receipt, ['prompt_path', 'promptPath']);
+  const promptText = await readOptional(path.join(runDir, promptPath));
+  missing.push(
+    ...(await checkReceiptFileHash(
+      runDir,
+      promptPath,
+      receipt.prompt_sha256,
+      'agent-2-5-output/external-design-evidence/action-receipt.json prompt_sha256',
+      { minBytes: 20 },
+    )),
+  );
+  if (promptText && !matchesCurrentRunIdentity(promptText, identity)) {
+    missing.push('agent-2-5-output/external-design-evidence/submitted-prompt.md matches current run target domain or keyword');
+  }
+
+  if (!matchesCurrentRunIdentity(externalResponse, identity)) {
+    missing.push('agent-2-5-output/external-design-evidence/external-response.md matches current run target domain or keyword');
+  }
+
+  const hasSubmittedPromptCapture =
+    /##\s*Submitted Prompt\b/i.test(externalResponse) ||
+    (promptText.trim().length > 0 && externalResponse.includes(promptText.trim().slice(0, 120))) ||
+    /#\s*Design Generation Prompt\b/i.test(externalResponse);
+  if (!hasSubmittedPromptCapture) {
+    missing.push('agent-2-5-output/external-design-evidence/external-response.md contains submitted prompt capture');
+  }
+
+  const rawResponse = receipt?.raw_response || receipt?.rawResponse || {};
+  const rawResponsePath = pathValue(rawResponse, ['path']) || 'agent-2-5-output/external-design-evidence/external-response.md';
+  const rawResponseSha = rawResponse.sha256 || artifactHashFor(receipt, rawResponsePath);
+  missing.push(
+    ...(await checkReceiptFileHash(runDir, rawResponsePath, rawResponseSha, 'action-receipt raw_response', {
+      minBytes: 200,
+      receiptStat,
+    })),
+  );
+
+  const screenshot = (Array.isArray(receipt?.screenshots) ? receipt.screenshots : []).find(
+    (entry) => pathValue(entry, ['path']) === 'agent-2-5-output/external-design-evidence/conversation-screenshot.png',
+  );
+  if (!screenshot) {
+    missing.push('action-receipt screenshots include agent-2-5-output/external-design-evidence/conversation-screenshot.png');
+  } else {
+    missing.push(
+      ...(await checkReceiptFileHash(
+        runDir,
+        'agent-2-5-output/external-design-evidence/conversation-screenshot.png',
+        screenshot.sha256 || artifactHashFor(receipt, 'agent-2-5-output/external-design-evidence/conversation-screenshot.png'),
+        'action-receipt conversation screenshot',
+        { minBytes: 10_000, receiptStat },
+      )),
+    );
+  }
+
+  const downloads = Array.isArray(receipt?.downloads) ? receipt.downloads : [];
+  if (downloads.length === 0) {
+    missing.push('action-receipt downloads include generated design image');
+  }
+  for (const download of downloads) {
+    missing.push(
+      ...(await checkReceiptFileHash(runDir, pathValue(download, ['path']), download.sha256, 'action-receipt generated design download', {
+        minBytes: 10_000,
+        receiptStat,
+      })),
+    );
+  }
+
+  for (const relPath of [
+    'agent-2-5-output/chat-delivery/options-board.png',
+    'agent-2-5-output/generated-designs/option-a/target/desktop.png',
+    'agent-2-5-output/generated-designs/option-b/target/desktop.png',
+    'agent-2-5-output/generated-designs/option-c/target/desktop.png',
+    'agent-2-5-output/selected-design/target/desktop.png',
+    'agent-2-5-output/selected-design/target/mobile.png',
+  ]) {
+    missing.push(
+      ...(await checkReceiptFileHash(runDir, relPath, artifactHashFor(receipt, relPath), `action-receipt artifact_hashes ${relPath}`, {
+        minBytes: 10_000,
+        receiptStat,
+      })),
+    );
+  }
+
+  return missing;
 }
 
 export function reportHasPassDecision(reportText) {
@@ -207,6 +434,7 @@ async function checkAgent2(runDir) {
 
 async function checkAgent25(runDir) {
   const missing = await missingFiles(runDir, AGENT_2_5_FILES);
+  const identity = await currentRunIdentity(runDir);
   missing.push(...(await missingFiles(runDir, AGENT_2_5_EXTERNAL_PROVENANCE_FILES)));
   missing.push(...(await missingFiles(runDir, AGENT_2_5_CHAT_DELIVERY_FILES)));
   missing.push(
@@ -246,12 +474,7 @@ async function checkAgent25(runDir) {
     missing.push('agent-2-5-output/external-design-evidence/source-provenance.md with Decision: PASS');
   }
   if (await exists(externalResponsePath)) {
-    if (!/typing-test-online\.com/i.test(externalResponse)) {
-      missing.push('agent-2-5-output/external-design-evidence/external-response.md mentions typing-test-online.com');
-    }
-    if (!/design generation prompt/i.test(externalResponse)) {
-      missing.push('agent-2-5-output/external-design-evidence/external-response.md contains the submitted design prompt');
-    }
+    missing.push(...(await checkAgent25RunSpecificEvidence(runDir, externalResponse, identity)));
     if (!/option\s+[abc]|benchmark console|design target|design tokens/i.test(externalResponse)) {
       missing.push('agent-2-5-output/external-design-evidence/external-response.md contains generated design directions');
     }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -123,7 +124,34 @@ async function writeRunMeta(runDir, meta) {
   await writeFile(path.join(runDir, 'run-meta.json'), JSON.stringify(meta, null, 2));
 }
 
-async function writeAgent25Outputs(runDir, { externalEvidence = false, optionImagesGate = true } = {}) {
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+async function writeRunFile(runDir, relPath, content) {
+  const absolutePath = path.join(runDir, relPath);
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, content);
+  return {
+    relPath,
+    content,
+    sha256: sha256(content),
+    size: Buffer.byteLength(content),
+  };
+}
+
+async function writeAgent25Outputs(
+  runDir,
+  {
+    externalEvidence = false,
+    optionImagesGate = true,
+    targetDomain = 'example.com',
+    keyword = 'sample tool',
+    promptShaOverride = null,
+    evidenceTargetDomain = null,
+    omitReceiptArtifacts = false,
+  } = {},
+) {
   const root = path.join(runDir, 'agent-2-5-output');
   const selected = path.join(root, 'selected-design');
   await mkdir(path.join(selected, 'target'), { recursive: true });
@@ -136,8 +164,6 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false, optionIma
     await writeFile(path.join(root, file), `# ${file}\n`);
   }
   for (const file of [
-    'target/desktop.png',
-    'target/mobile.png',
     'design-tokens.md',
     'component-spec.md',
     'asset-plan.md',
@@ -152,13 +178,16 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false, optionIma
     'selection-rationale.md',
   ]) {
     await mkdir(path.dirname(path.join(selected, file)), { recursive: true });
-    await writeFile(path.join(selected, file), file.endsWith('.png') ? 'png' : `# ${file}\n`);
+    await writeFile(path.join(selected, file), `# ${file}\n`);
   }
-  for (const option of ['option-a', 'option-b', 'option-c']) {
-    await mkdir(path.join(root, 'generated-designs', option), { recursive: true });
-  }
+  const image = 'x'.repeat(10_001);
+  const selectedDesktop = await writeRunFile(runDir, 'agent-2-5-output/selected-design/target/desktop.png', image);
+  const selectedMobile = await writeRunFile(runDir, 'agent-2-5-output/selected-design/target/mobile.png', image);
+  const optionA = await writeRunFile(runDir, 'agent-2-5-output/generated-designs/option-a/target/desktop.png', image);
+  const optionB = await writeRunFile(runDir, 'agent-2-5-output/generated-designs/option-b/target/desktop.png', image);
+  const optionC = await writeRunFile(runDir, 'agent-2-5-output/generated-designs/option-c/target/desktop.png', image);
   await mkdir(path.join(root, 'chat-delivery'), { recursive: true });
-  await writeFile(path.join(root, 'chat-delivery/options-board.png'), 'x'.repeat(10_001));
+  const optionsBoard = await writeRunFile(runDir, 'agent-2-5-output/chat-delivery/options-board.png', image);
   await writeFile(
     path.join(root, 'chat-delivery/option-selection.md'),
     [
@@ -175,21 +204,73 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false, optionIma
   if (externalEvidence) {
     const evidence = path.join(root, 'external-design-evidence');
     await mkdir(evidence, { recursive: true });
-    await writeFile(
-      path.join(evidence, 'external-response.md'),
+    const receiptIdentity = evidenceTargetDomain || targetDomain;
+    const submittedPrompt = [
+      'Agent2.5 design-options external execution request.',
+      '',
+      'User prompt:',
+      `# ${keyword} Design Generation Input`,
+      '',
+      `Keyword: ${keyword}`,
+      `Target Domain: ${targetDomain}`,
+    ].join('\n');
+    const prompt = await writeRunFile(runDir, 'agent-2-5-output/external-design-evidence/submitted-prompt.md', submittedPrompt);
+    const externalResponse = await writeRunFile(
+      runDir,
+      'agent-2-5-output/external-design-evidence/external-response.md',
       [
         '# Raw external response',
         '',
-        '# Design Generation Prompt',
+        '## Submitted Prompt',
         '',
-        'Generate design directions for typing-test-online.com.',
+        submittedPrompt,
+        '',
+        '## Captured Conversation Text',
+        '',
+        `Generate design directions for ${receiptIdentity}.`,
         '',
         'Option A - Benchmark Console includes design target and design tokens.',
+        'Option B - Accessible calculator direction includes design target and design tokens.',
+        'Option C - Warm public-service direction includes design target and design tokens.',
       ].join('\n'),
     );
-    await writeFile(path.join(evidence, 'conversation-screenshot.png'), 'x'.repeat(10_001));
-    await writeFile(path.join(evidence, 'source-provenance.md'), '# Source provenance\n\nDecision: PASS\n');
-    await writeFile(path.join(evidence, 'selected-design-lineage.md'), '# Selected design lineage\n\nDecision: PASS\n');
+    const screenshot = await writeRunFile(runDir, 'agent-2-5-output/external-design-evidence/conversation-screenshot.png', image);
+    const generatedImage = await writeRunFile(
+      runDir,
+      'agent-2-5-output/external-design-evidence/downloads/generated-image-1.png',
+      image,
+    );
+    await writeFile(
+      path.join(evidence, 'source-provenance.md'),
+      [
+        '# Source provenance',
+        '',
+        'Decision: PASS',
+        `Option A maps to GPT external source ${optionA.relPath} sha ${optionA.sha256}.`,
+        `Option B maps to GPT external source ${optionB.relPath} sha ${optionB.sha256}.`,
+        `Option C maps to GPT external source ${optionC.relPath} sha ${optionC.sha256}.`,
+        'Selected option: Option A from GPT approved external generated image evidence.',
+        `Desktop target: ${selectedDesktop.relPath}.`,
+        `Mobile target: ${selectedMobile.relPath}.`,
+      ].join('\n'),
+    );
+    await writeFile(
+      path.join(evidence, 'selected-design-lineage.md'),
+      '# Selected design lineage\n\nDecision: PASS\n\nOption A came from GPT approved external option evidence.\n',
+    );
+    const artifactHashes = omitReceiptArtifacts
+      ? {}
+      : {
+          [externalResponse.relPath]: externalResponse.sha256,
+          [screenshot.relPath]: screenshot.sha256,
+          [generatedImage.relPath]: generatedImage.sha256,
+          [optionA.relPath]: optionA.sha256,
+          [optionB.relPath]: optionB.sha256,
+          [optionC.relPath]: optionC.sha256,
+          [optionsBoard.relPath]: optionsBoard.sha256,
+          [selectedDesktop.relPath]: selectedDesktop.sha256,
+          [selectedMobile.relPath]: selectedMobile.sha256,
+        };
     await writeFile(
       path.join(evidence, 'action-receipt.json'),
       JSON.stringify(
@@ -200,13 +281,13 @@ async function writeAgent25Outputs(runDir, { externalEvidence = false, optionIma
           started_at: '2026-05-08T00:00:00.000Z',
           completed_at: '2026-05-08T00:00:05.000Z',
           tool: { name: 'web-access', command: 'web-access/scripts/check-deps.sh' },
-          prompt_path: 'agent-2-5-output/design-generation-prompt.md',
-          prompt_sha256: '0'.repeat(64),
+          prompt_path: prompt.relPath,
+          prompt_sha256: promptShaOverride || prompt.sha256,
           uploaded_assets: [],
-          screenshots: [],
-          raw_response: null,
-          downloads: [],
-          artifact_hashes: {},
+          screenshots: omitReceiptArtifacts ? [] : [{ path: screenshot.relPath, sha256: screenshot.sha256, size: screenshot.size }],
+          raw_response: omitReceiptArtifacts ? null : { path: externalResponse.relPath, sha256: externalResponse.sha256, size: externalResponse.size },
+          downloads: omitReceiptArtifacts ? [] : [{ path: generatedImage.relPath, sha256: generatedImage.sha256, size: generatedImage.size }],
+          artifact_hashes: artifactHashes,
           status: 'pass',
           error: null,
           runner_version: 'agent25-external-action-evidence/1',
@@ -410,6 +491,156 @@ test('blocks Agent 3 when Agent 2.5 option image gate is missing', async () => {
   assert.equal(result.allowedNextStep, 'Run Agent 2.5 UI Design Generation');
 });
 
+test('allows Agent 3 for current run target domain without typing-test hardcoding', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    run_type: 'production',
+    deployable: true,
+    mode: 'desktop',
+    target_domain: '401k-calculator.net',
+    keyword: '401k calculator',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, {
+    externalEvidence: true,
+    targetDomain: '401k-calculator.net',
+    keyword: '401k calculator',
+  });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, true);
+  assert.deepEqual(result.missing, []);
+  assert.doesNotMatch(JSON.stringify(result), /typing-test-online\.com/);
+});
+
+test('allows Agent 3 when external response uses Submitted Prompt and prompt hash linkage', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    target_domain: '401k-calculator.net',
+    keyword: '401k calculator',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, {
+    externalEvidence: true,
+    targetDomain: '401k-calculator.net',
+    keyword: '401k calculator',
+  });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, true);
+});
+
+test('blocks Agent 3 when prompt echo lacks receipt screenshot image artifacts', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    target_domain: '401k-calculator.net',
+    keyword: '401k calculator',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, {
+    externalEvidence: true,
+    targetDomain: '401k-calculator.net',
+    keyword: '401k calculator',
+    omitReceiptArtifacts: true,
+  });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /action-receipt downloads include generated design image/);
+  assert.match(result.missing.join('\n'), /action-receipt screenshots include/);
+  assert.match(result.missing.join('\n'), /action-receipt artifact_hashes/);
+});
+
+test('blocks Agent 3 when action receipt prompt sha does not match submitted prompt', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    target_domain: '401k-calculator.net',
+    keyword: '401k calculator',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, {
+    externalEvidence: true,
+    targetDomain: '401k-calculator.net',
+    keyword: '401k calculator',
+    promptShaOverride: '0'.repeat(64),
+  });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /prompt_sha256 sha256 matches/);
+});
+
+test('blocks Agent 3 when evidence target does not match current run target', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    target_domain: '401k-calculator.net',
+    keyword: '401k calculator',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, {
+    externalEvidence: true,
+    targetDomain: 'unrelated-example.net',
+    keyword: '401k calculator',
+  });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, false);
+  assert.match(result.missing.join('\n'), /matches current run target domain or keyword/);
+});
+
+test('keeps existing typing-test run-specific evidence passing', async () => {
+  const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    target_domain: 'typing-test-online.com',
+    keyword: 'typing test online',
+  });
+  await writeWebAccessGate(runDir);
+  await writeAgent2Outputs(runDir);
+  await writeAgent25Outputs(runDir, {
+    externalEvidence: true,
+    targetDomain: 'typing-test-online.com',
+    keyword: 'typing test online',
+  });
+  await writeDesignPackageGateOutputs(runDir);
+  await writeFile(
+    path.join(runDir, 'gate-ledger.md'),
+    '- [waived] Agent 1 Keyword Research - User supplied keyword directly.\n',
+  );
+
+  const result = await checkRunGates({ runDir, before: 'agent-3' });
+  assert.equal(result.allowed, true);
+});
+
 test('blocks Agent 3 when selected asset generation gate is failing', async () => {
   const runDir = await makeRun();
   await writeWebAccessGate(runDir);
@@ -483,6 +714,10 @@ test('blocks Agent 4 when visual restoration similarity gate is missing', async 
 
 test('blocks Agent 6 when gate evidence integrity fails', async () => {
   const runDir = await makeRun();
+  await writeRunMeta(runDir, {
+    target_domain: 'example.com',
+    keyword: 'sample tool',
+  });
   await writeWebAccessGate(runDir);
   await writeAgent2Outputs(runDir);
   await writeAgent25Outputs(runDir, { externalEvidence: true });
