@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   parseRunInput,
@@ -17,9 +17,16 @@ import { runAgent25ExternalDesignProofGate } from '../run/check-agent25-external
 import { runAgent25LineageGate } from '../run/check-agent25-lineage.mjs';
 import { runAgent25OptionImagesGate } from '../run/check-agent25-option-images.mjs';
 import { checkRunGates } from '../run/check-gates.mjs';
+import { runGateEvidenceIntegrityCheck } from '../run/check-gate-evidence-integrity.mjs';
+import { runVisualRestorationSimilarityGate } from '../qa/check-visual-restoration-similarity.mjs';
+import { runFinalQaEvidenceGate } from '../qa/check-final-qa-evidence.mjs';
+import { runFinalVisualLockGate } from '../qa/check-final-visual-lock.mjs';
+import { runFinalVisualSimilarityGate } from '../qa/check-final-visual-similarity.mjs';
 import { runPreAgent2ToolsiteSpecGate } from '../qa/check-pre-agent2-toolsite-spec.mjs';
 import { runPagePlanGate } from '../qa/check-page-plan.mjs';
+import { runRenderedAssetsGate } from '../qa/check-rendered-assets.mjs';
 import { runSelectedAssetsGate } from '../qa/check-selected-assets.mjs';
+import { runToolSpecGate } from '../qa/check-tool-spec.mjs';
 import { runToolsiteDesignReviewGate } from '../qa/check-toolsite-design-review.mjs';
 
 export const NO_STAGE_RUNNER_CONFIGURED = 'NO_STAGE_RUNNER_CONFIGURED';
@@ -53,13 +60,18 @@ export const SELECTED_TARGET_MISSING = 'SELECTED_TARGET_MISSING';
 export const AGENT3_GATE_BLOCKED = 'AGENT3_GATE_BLOCKED';
 export const BUILD_FAILED = 'BUILD_FAILED';
 export const IMPLEMENT_COMPLETE = 'IMPLEMENT_COMPLETE';
+export const QA_STAGE_REQUIRED = 'QA_STAGE_REQUIRED';
+export const SITE_MISSING = 'SITE_MISSING';
+export const IMPLEMENT_OUTPUT_MISSING = 'IMPLEMENT_OUTPUT_MISSING';
+export const QA_REPAIR_LIMIT_REACHED = 'QA_REPAIR_LIMIT_REACHED';
+export const QA_COMPLETE = 'QA_COMPLETE';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const STATE_FILE = 'desktop-run-state.json';
 const EVENT_FILE = 'human-review-events.jsonl';
 
-const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25', 'selected-assets', 'implement']);
+const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25', 'selected-assets', 'implement', 'qa']);
 const AGENT2_ALLOWED_CURRENT_STAGES = new Set(['spec-review', 'agent2']);
 const ASSET_REFERENCE_PURPOSES = new Set(['design_reference', 'illustration_reference']);
 const AGENT25_EXECUTOR_SCRIPT = 'scripts/run/execute-agent25-design-options.mjs';
@@ -90,6 +102,18 @@ const IMPLEMENT_SELECTED_TARGET_FILES = [
   SELECTED_TARGET_DESKTOP_PATH,
   SELECTED_TARGET_MOBILE_PATH,
 ];
+const QA_IMPLEMENT_FILES = [
+  'agent-4-output/build-report.md',
+  'agent-3-output/implementation-handoff.md',
+];
+const QA_AGENT2_FILES = [
+  'agent-2-output/tool-spec.md',
+  'agent-2-output/page-plan.md',
+];
+const QA_SELECTED_ASSETS_FILES = [
+  SELECTED_ASSETS_MANIFEST_PATH,
+];
+const QA_REPAIR_LIMIT = 5;
 
 function nowIso() {
   return new Date().toISOString();
@@ -122,6 +146,14 @@ async function exists(filePath) {
   try {
     await access(filePath);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isDirectory(filePath) {
+  try {
+    return (await stat(filePath)).isDirectory();
   } catch {
     return false;
   }
@@ -337,6 +369,18 @@ async function blockImplement(runDir, state, { blockingReason, nextAction, now =
     last_completed_stage: state.last_completed_stage || 'selected-assets',
     next_action: nextAction || 'repair implementation inputs before rerunning desktop:implement',
     blocking_reason: blockingReason,
+    updated_at: now(),
+  });
+}
+
+async function blockQa(runDir, state, { blockingReason, nextAction, repairAttempts = null, now = nowIso } = {}) {
+  await writeDesktopState(runDir, {
+    ...state,
+    stage: 'qa',
+    last_completed_stage: state.last_completed_stage || 'implement',
+    next_action: nextAction || 'repair QA gates before rerunning desktop:qa',
+    blocking_reason: blockingReason,
+    repair_attempts: repairAttempts || state.repair_attempts || {},
     updated_at: now(),
   });
 }
@@ -2518,6 +2562,547 @@ export async function runDesktopImplement({
   };
 }
 
+function siteBuildGateResult({ runDir, buildResult, now = nowIso }) {
+  const passed = buildResult.status === 0;
+  return {
+    gate: 'site-build',
+    runDir: path.resolve(runDir),
+    status: passed ? 'pass' : 'fail',
+    passed,
+    failures: passed ? [] : [
+      `${buildResult.command || 'npm run build'} exited ${buildResult.status ?? 1}`,
+      String(buildResult.stderr || '').trim(),
+      String(buildResult.stdout || '').trim(),
+    ].filter(Boolean),
+    details: {
+      command: buildResult.command || 'npm run build',
+      exitStatus: buildResult.status ?? 1,
+    },
+    evidence: {
+      site: 'site/',
+      buildReport: 'agent-4-output/build-report.md',
+    },
+    generatedAt: now(),
+  };
+}
+
+function aggregateGateResult({ runDir, gate, passed, failures = [], details = {}, evidence = {}, now = nowIso }) {
+  return {
+    gate,
+    runDir: path.resolve(runDir),
+    status: passed ? 'pass' : 'fail',
+    passed,
+    failures,
+    details,
+    evidence,
+    generatedAt: now(),
+  };
+}
+
+function qaUrl(runDir) {
+  return pathToFileURL(path.join(runDir, 'site/dist/index.html')).href;
+}
+
+async function defaultRunQaGate({ runDir, gate, url, runSiteBuild = defaultRunSiteBuild, now = nowIso }) {
+  if (gate === 'site-build') {
+    const buildResult = await runSiteBuild({ runDir, siteDir: path.join(runDir, 'site') });
+    return siteBuildGateResult({ runDir, buildResult, now });
+  }
+  if (gate === 'page-plan') return runPagePlanGate({ runDir });
+  if (gate === 'tool-spec') return runToolSpecGate({ runDir });
+  if (gate === 'selected-assets') return runSelectedAssetsGate({ runDir });
+  if (gate === 'agent25-lineage') return runAgent25LineageGate({ runDir });
+  if (gate === 'toolsite-design-review') return runToolsiteDesignReviewGate({ runDir });
+  if (gate === 'rendered-assets') return runRenderedAssetsGate({ runDir, url });
+  if (gate === 'final-visual-lock') return runFinalVisualLockGate({ runDir, url });
+  if (gate === 'visual-restoration-similarity') return runVisualRestorationSimilarityGate({ runDir });
+  if (gate === 'final-visual-similarity') return runFinalVisualSimilarityGate({ runDir });
+  if (gate === 'final-qa-evidence') return runFinalQaEvidenceGate({ runDir });
+  if (gate === 'gate-evidence-integrity') {
+    const result = await runGateEvidenceIntegrityCheck({ runDir, before: 'agent-6' });
+    return aggregateGateResult({
+      runDir,
+      gate: 'gate-evidence-integrity',
+      passed: result.passed,
+      failures: result.failures || [],
+      details: result,
+      evidence: { output: 'gate-results/gate-evidence-integrity.json' },
+      now,
+    });
+  }
+  if (gate === 'before-agent-6') {
+    const result = await checkRunGates({ runDir, before: 'agent-6' });
+    return aggregateGateResult({
+      runDir,
+      gate: 'before-agent-6',
+      passed: result.allowed,
+      failures: result.allowed ? [] : result.missing,
+      details: result,
+      evidence: { output: 'gate-results/before-agent-6.json' },
+      now,
+    });
+  }
+  return aggregateGateResult({
+    runDir,
+    gate,
+    passed: false,
+    failures: [`No QA gate runner configured for ${gate}`],
+    now,
+  });
+}
+
+async function defaultRepairQaGate({ gate, attempt, failure }) {
+  return {
+    repaired: false,
+    note: 'NO_AUTOMATED_REPAIR_CONFIGURED',
+    gate,
+    attempt,
+    failures: failure?.failures || [],
+  };
+}
+
+async function appendRepairLog(runDir, lines) {
+  const outputPath = path.join(runDir, 'agent-5-output/repair-log.md');
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  const existing = await readOptional(outputPath);
+  const prefix = existing.trim() ? '' : '# QA Repair Log\n\n';
+  await appendFile(outputPath, `${prefix}${lines.join('\n')}\n\n`);
+}
+
+function gateResultFilename(gate) {
+  return `${gate}.json`;
+}
+
+function resultFailures(result) {
+  return Array.isArray(result?.failures) ? result.failures : [];
+}
+
+async function runQaGateWithRepair({
+  runDir,
+  gate,
+  url,
+  runQaGate = defaultRunQaGate,
+  repairQaGate = defaultRepairQaGate,
+  runSiteBuild = defaultRunSiteBuild,
+  maxAttempts = QA_REPAIR_LIMIT,
+  now = nowIso,
+} = {}) {
+  let result = await runQaGate({ runDir, gate, url, runSiteBuild, now, attempt: 0 });
+  await writeGateResult(runDir, gateResultFilename(gate), result);
+  if (gatePassed(result)) return { ok: true, gate, result, attempts: [] };
+
+  const attempts = [];
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const failures = resultFailures(result);
+    await appendRepairLog(runDir, [
+      `## ${gate} repair attempt ${attempt}`,
+      '',
+      `Generated at: ${now()}`,
+      '',
+      '### Failure reasons',
+      ...((failures.length ? failures : ['unknown failure']).map((failure) => `- ${failure}`)),
+      '',
+      '### Repair task',
+      `- Repair real artifacts for ${gate}; do not edit gate-results manually, lower gate standards, or skip the gate.`,
+    ]);
+    const repair = await repairQaGate({ runDir, gate, attempt, failure: result, now });
+    attempts.push({ attempt, failure: failures, repair });
+    result = await runQaGate({ runDir, gate, url, runSiteBuild, now, attempt });
+    await writeGateResult(runDir, gateResultFilename(gate), result);
+    if (gatePassed(result)) return { ok: true, gate, result, attempts };
+  }
+
+  return { ok: false, gate, result, attempts };
+}
+
+function onlyPreDeployApprovalMissing(result) {
+  const failures = resultFailures(result);
+  return failures.length > 0 && failures.every((failure) =>
+    /approval\.md|pre[-_ ]?deploy|deployment approval|approval checklist/i.test(String(failure)));
+}
+
+function summarizeGateStatuses(gateResults) {
+  return Object.fromEntries(
+    Object.entries(gateResults).map(([gate, result]) => [
+      gate,
+      {
+        status: result?.status || 'unknown',
+        passed: Boolean(result?.passed),
+        failures: resultFailures(result),
+      },
+    ]),
+  );
+}
+
+async function writeFinalScreenshotDelivery(runDir, finalVisualLock) {
+  await mkdir(path.join(runDir, 'agent-5-output/chat-delivery'), { recursive: true });
+  const screenshots = finalVisualLock?.evidence?.screenshots || {
+    desktop: 'agent-5-output/final-visual-lock/desktop.png',
+    mobile: 'agent-5-output/final-visual-lock/mobile.png',
+    wide: 'agent-5-output/final-visual-lock/wide.png',
+  };
+  await writeRunText(
+    runDir,
+    'agent-5-output/chat-delivery/final-screenshot-delivery.md',
+    [
+      '# Final Screenshot Delivery',
+      '',
+      'Decision: PASS',
+      '',
+      '- Agent2.5 GPT target desktop screenshot: agent-2-5-output/selected-design/target/desktop.png',
+      '- Agent2.5 GPT target mobile screenshot: agent-2-5-output/selected-design/target/mobile.png',
+      `- Final page desktop screenshot: ${screenshots.desktop || 'agent-5-output/final-visual-lock/desktop.png'}`,
+      `- Final page mobile screenshot: ${screenshots.mobile || 'agent-5-output/final-visual-lock/mobile.png'}`,
+      `- Final page wide screenshot: ${screenshots.wide || 'agent-5-output/final-visual-lock/wide.png'}`,
+      '- GPT target and final page screenshots were prepared for local chat review evidence.',
+      '',
+    ].join('\n'),
+  );
+}
+
+async function writeQaReports(runDir, { gateResults, beforeAgent6 = null, now = nowIso } = {}) {
+  await mkdir(path.join(runDir, 'agent-5-output'), { recursive: true });
+  const generatedAt = now();
+  const summary = summarizeGateStatuses(gateResults);
+  const failing = Object.entries(summary)
+    .filter(([gate]) => gate !== 'before-agent-6')
+    .filter(([, result]) => !result.passed);
+  const qaPassed = failing.length === 0;
+  const gateLines = Object.entries(summary).map(([gate, result]) =>
+    `- ${gate}: ${result.passed ? 'pass' : 'fail'}${result.failures.length ? ` (${result.failures.join('; ')})` : ''}`);
+  const beforeAgent6Failures = resultFailures(beforeAgent6);
+  const approvalPending = beforeAgent6 && !gatePassed(beforeAgent6) && onlyPreDeployApprovalMissing(beforeAgent6);
+
+  await writeRunText(
+    runDir,
+    'agent-5-output/qa-report.md',
+    [
+      '# Agent5 QA Report',
+      '',
+      `Decision: ${qaPassed ? 'PASS' : 'FAIL'}`,
+      `Generated at: ${generatedAt}`,
+      '',
+      '## Gate Summary',
+      '',
+      ...gateLines,
+      '',
+      '## Scope',
+      '',
+      '- Local Agent5 QA only.',
+      '- No deployment was run.',
+      '- Agent6 was not started.',
+      '',
+    ].join('\n'),
+  );
+  await writeRunText(
+    runDir,
+    'agent-5-output/final-qa-report.md',
+    [
+      '# Final QA Report',
+      '',
+      `Decision: ${qaPassed ? 'PASS' : 'FAIL'}`,
+      `Generated at: ${generatedAt}`,
+      '',
+      ...gateLines,
+      '',
+    ].join('\n'),
+  );
+  await writeRunText(
+    runDir,
+    'agent-5-output/launch-readiness.md',
+    [
+      '# Launch Readiness',
+      '',
+      `Decision: ${qaPassed && (approvalPending || gatePassed(beforeAgent6)) ? 'PASS' : 'FAIL'}`,
+      `Generated at: ${generatedAt}`,
+      '',
+      '## Readiness',
+      '',
+      qaPassed ? '- Agent5 local QA gates passed.' : '- Agent5 local QA gates are not fully passing.',
+      approvalPending ? '- Deployment approval is pending local human confirmation.' : '- Deployment approval gate did not block the preview.',
+      beforeAgent6Failures.length ? `- Before Agent6 preview: ${beforeAgent6Failures.join('; ')}` : '- Before Agent6 preview passed.',
+      '',
+      '## Deployment Boundary',
+      '',
+      '- This runner stops at deploy-review.',
+      '- It does not call Cloudflare, submit sitemap, or run GSC/Bing.',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
+    path.join(runDir, 'agent-5-output/gate-summary.json'),
+    `${JSON.stringify({
+      generated_at: generatedAt,
+      qa_passed: qaPassed,
+      deploy_approval_pending: approvalPending,
+      gates: summary,
+      before_agent_6: beforeAgent6 ? {
+        passed: gatePassed(beforeAgent6),
+        failures: beforeAgent6Failures,
+      } : null,
+    }, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+async function writeQaStateJson(runDir, { now = nowIso } = {}) {
+  const statePath = path.join(runDir, 'state.json');
+  const current = await readJsonOptional(statePath) || {};
+  await writeFile(
+    statePath,
+    `${JSON.stringify({
+      ...current,
+      qa: {
+        ...(current.qa || {}),
+        passed: true,
+        completed_at: now(),
+        runner: 'desktop:qa',
+      },
+    }, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+function openPreDeployReview(events) {
+  return [...events].reverse().find((event) =>
+    event.type === 'human_review' &&
+    ['pre_deploy_approval', 'pre-deploy-approval'].includes(event.review_type) &&
+    event.status === 'open');
+}
+
+async function writePreDeployApprovalReview({ runDir, launchReadinessText, now = nowIso }) {
+  const events = await readEvents(runDir);
+  const existing = openPreDeployReview(events);
+  if (existing) return existing;
+  const event = {
+    schema_version: 'human-review-event.v1',
+    type: 'human_review',
+    review_type: 'pre_deploy_approval',
+    id: 'pre-deploy-approval',
+    site_id: siteIdFromRunDir(runDir),
+    run_dir: runDir,
+    phase: 'pre-deploy',
+    agent: 'desktop-qa',
+    status: 'open',
+    blocking: true,
+    blocks: 'agent-6',
+    title: 'Pre-deploy approval',
+    message: [
+      '本地部署前确认说明',
+      '',
+      'Agent5 本地 QA 已完成，当前停在 deploy-review。',
+      '请审查 launch-readiness 摘要，确认是否允许进入部署阶段。',
+      '',
+      '## Launch Readiness Summary',
+      '',
+      launchReadinessText.trim().slice(0, 1800),
+    ].join('\n'),
+    expected_reply: '确认部署 / 修改：...',
+    attachments: [
+      {
+        label: 'Launch readiness',
+        path: 'agent-5-output/launch-readiness.md',
+        kind: 'markdown',
+        required: true,
+      },
+    ],
+    created_at: now(),
+    created_by: 'desktop:qa',
+  };
+  await appendReview(runDir, event);
+  return event;
+}
+
+const QA_GATES = [
+  'site-build',
+  'page-plan',
+  'tool-spec',
+  'selected-assets',
+  'agent25-lineage',
+  'toolsite-design-review',
+  'rendered-assets',
+  'final-visual-lock',
+  'visual-restoration-similarity',
+  'final-visual-similarity',
+];
+
+export async function runDesktopQa({
+  runDir,
+  now = nowIso,
+  runSiteBuild = defaultRunSiteBuild,
+  runQaGate = defaultRunQaGate,
+  repairQaGate = defaultRepairQaGate,
+  maxQaRepairAttempts = QA_REPAIR_LIMIT,
+} = {}) {
+  const state = await readDesktopState(runDir);
+  if (state.stage !== 'qa' || state.last_completed_stage !== 'implement') {
+    return {
+      ok: false,
+      code: QA_STAGE_REQUIRED,
+      stage: state.stage || '',
+      last_completed_stage: state.last_completed_stage || null,
+    };
+  }
+
+  if (!(await isDirectory(path.join(runDir, 'site')))) {
+    await blockQa(runDir, state, {
+      blockingReason: SITE_MISSING,
+      nextAction: 'restore site/ before desktop:qa',
+      now,
+    });
+    return { ok: false, code: SITE_MISSING, stage: 'qa', missing: ['site/'] };
+  }
+
+  const missingImplement = await missingRunFiles(runDir, QA_IMPLEMENT_FILES);
+  if (missingImplement.length > 0) {
+    await blockQa(runDir, state, {
+      blockingReason: IMPLEMENT_OUTPUT_MISSING,
+      nextAction: 'rerun desktop:implement before desktop:qa',
+      now,
+    });
+    return { ok: false, code: IMPLEMENT_OUTPUT_MISSING, stage: 'qa', missing: missingImplement };
+  }
+
+  const missingAgent2 = await missingRunFiles(runDir, QA_AGENT2_FILES);
+  if (missingAgent2.length > 0) {
+    await blockQa(runDir, state, {
+      blockingReason: AGENT2_OUTPUT_MISSING,
+      nextAction: 'restore Agent2 outputs before desktop:qa',
+      now,
+    });
+    return { ok: false, code: AGENT2_OUTPUT_MISSING, stage: 'qa', missing: missingAgent2 };
+  }
+
+  const missingSelectedAssets = await missingRunFiles(runDir, QA_SELECTED_ASSETS_FILES);
+  if (missingSelectedAssets.length > 0) {
+    await blockQa(runDir, state, {
+      blockingReason: SELECTED_ASSETS_MISSING,
+      nextAction: 'run desktop:selected-assets before desktop:qa',
+      now,
+    });
+    return { ok: false, code: SELECTED_ASSETS_MISSING, stage: 'qa', missing: missingSelectedAssets };
+  }
+
+  await mkdir(path.join(runDir, 'agent-5-output'), { recursive: true });
+  await writeRunText(runDir, 'agent-5-output/repair-log.md', '# QA Repair Log\n\nNo repair attempts recorded yet.\n');
+
+  const url = qaUrl(runDir);
+  const gateResults = {};
+  const repairAttempts = {};
+  for (const gate of QA_GATES) {
+    const gateRun = await runQaGateWithRepair({
+      runDir,
+      gate,
+      url,
+      runQaGate,
+      repairQaGate,
+      runSiteBuild,
+      maxAttempts: maxQaRepairAttempts,
+      now,
+    });
+    gateResults[gate] = gateRun.result;
+    repairAttempts[gate] = gateRun.attempts.length;
+    if (!gateRun.ok) {
+      await writeQaReports(runDir, { gateResults, now });
+      await blockQa(runDir, state, {
+        blockingReason: QA_REPAIR_LIMIT_REACHED,
+        nextAction: `QA gate ${gate} still fails after ${maxQaRepairAttempts} repair attempts`,
+        repairAttempts,
+        now,
+      });
+      return {
+        ok: false,
+        code: QA_REPAIR_LIMIT_REACHED,
+        stage: 'qa',
+        failed_gate: gate,
+        failures: resultFailures(gateRun.result),
+        attempts: gateRun.attempts,
+      };
+    }
+  }
+
+  await writeFinalScreenshotDelivery(runDir, gateResults['final-visual-lock']);
+  await writeQaReports(runDir, { gateResults, now });
+
+  for (const gate of ['final-qa-evidence', 'gate-evidence-integrity']) {
+    const gateRun = await runQaGateWithRepair({
+      runDir,
+      gate,
+      url,
+      runQaGate,
+      repairQaGate,
+      runSiteBuild,
+      maxAttempts: maxQaRepairAttempts,
+      now,
+    });
+    gateResults[gate] = gateRun.result;
+    repairAttempts[gate] = gateRun.attempts.length;
+    if (!gateRun.ok) {
+      await writeQaReports(runDir, { gateResults, now });
+      await blockQa(runDir, state, {
+        blockingReason: QA_REPAIR_LIMIT_REACHED,
+        nextAction: `QA gate ${gate} still fails after ${maxQaRepairAttempts} repair attempts`,
+        repairAttempts,
+        now,
+      });
+      return {
+        ok: false,
+        code: QA_REPAIR_LIMIT_REACHED,
+        stage: 'qa',
+        failed_gate: gate,
+        failures: resultFailures(gateRun.result),
+        attempts: gateRun.attempts,
+      };
+    }
+    if (gate === 'final-qa-evidence') await writeQaStateJson(runDir, { now });
+  }
+
+  const beforeAgent6 = await runQaGate({ runDir, gate: 'before-agent-6', url, runSiteBuild, now, attempt: 0 });
+  await writeGateResult(runDir, 'before-agent-6.json', beforeAgent6);
+  gateResults['before-agent-6'] = beforeAgent6;
+  const approvalPending = !gatePassed(beforeAgent6) && onlyPreDeployApprovalMissing(beforeAgent6);
+  if (!gatePassed(beforeAgent6) && !approvalPending) {
+    await writeQaReports(runDir, { gateResults, beforeAgent6, now });
+    await blockQa(runDir, state, {
+      blockingReason: QA_REPAIR_LIMIT_REACHED,
+      nextAction: 'repair before-agent-6 gate failures before deployment review',
+      repairAttempts,
+      now,
+    });
+    return {
+      ok: false,
+      code: QA_REPAIR_LIMIT_REACHED,
+      stage: 'qa',
+      failed_gate: 'before-agent-6',
+      failures: resultFailures(beforeAgent6),
+      attempts: [],
+    };
+  }
+
+  await writeQaReports(runDir, { gateResults, beforeAgent6, now });
+  const launchReadiness = await readOptional(path.join(runDir, 'agent-5-output/launch-readiness.md'));
+  const review = await writePreDeployApprovalReview({ runDir, launchReadinessText: launchReadiness, now });
+
+  await writeDesktopState(runDir, {
+    mode: 'desktop',
+    stage: 'deploy-review',
+    last_completed_stage: 'qa',
+    next_action: 'review launch readiness and run desktop:continue with pre-deploy approval',
+    blocking_reason: 'pre-deploy-approval',
+    repair_attempts: {},
+    updated_at: now(),
+  });
+
+  return {
+    ok: true,
+    code: QA_COMPLETE,
+    stage: 'deploy-review',
+    review,
+    gates: gateResults,
+    approval_pending: approvalPending,
+  };
+}
+
 function configuredStage(stage) {
   return STAGE_RUNNERS.has(stage);
 }
@@ -2529,6 +3114,9 @@ export async function runDesktopStage({
   executeAgent25DesignOptions = defaultExecuteAgent25DesignOptions,
   refreshReceipt = refreshDesignOptionsReceipt,
   runSiteBuild = defaultRunSiteBuild,
+  runQaGate = defaultRunQaGate,
+  repairQaGate = defaultRepairQaGate,
+  maxQaRepairAttempts = QA_REPAIR_LIMIT,
 } = {}) {
   const state = await readDesktopState(runDir);
   const targetStage = stage || state.stage || 'pre-agent2';
@@ -2539,6 +3127,16 @@ export async function runDesktopStage({
   if (targetStage === 'agent25') return runDesktopAgent25({ runDir, now, executeAgent25DesignOptions });
   if (targetStage === 'selected-assets') return runDesktopSelectedAssets({ runDir, now, refreshReceipt });
   if (targetStage === 'implement') return runDesktopImplement({ runDir, now, runSiteBuild });
+  if (targetStage === 'qa') {
+    return runDesktopQa({
+      runDir,
+      now,
+      runSiteBuild,
+      runQaGate,
+      repairQaGate,
+      maxQaRepairAttempts,
+    });
+  }
   if (targetStage === 'ui-review') {
     if (await readSelectedOption(runDir)) return runDesktopSelectedAssets({ runDir, now, refreshReceipt });
     return { ok: false, code: UI_SELECTION_REQUIRED, stage: 'ui-review', review_type: 'agent25_option_selection' };
@@ -2560,7 +3158,7 @@ export async function runDesktopStage({
 
   if (targetStage === 'deploy') {
     const approval = [...events].reverse().find((event) =>
-      event.review_type === 'pre-deploy-approval' &&
+      ['pre-deploy-approval', 'pre_deploy_approval'].includes(event.review_type) &&
       event.status === 'resolved' &&
       event.resolution_text === '确认部署');
     if (!approval) {
@@ -2599,7 +3197,7 @@ async function main() {
       '  agent2       Require confirmed SPEC, write agent-2-output/*, run pre-agent2-toolsite-spec, page-plan, and agent2-brief-compliance gates, then stop at stage=agent25.',
       '  agent25      Require Agent2 compliance, call Agent2.5 design-options executor, run option image and external proof gates, then stop at ui-review.',
       '  implement    Require selected-assets, generate Agent3 handoff, implement Astro site, run build, then stop at qa.',
-      '  qa           Not wired yet; returns NO_STAGE_RUNNER_CONFIGURED.',
+      '  qa           Run Agent5 local QA gates with repair loop, then stop at deploy-review.',
       '  deploy       Requires pre_deploy_approval before deployment; real deployment runner is not wired in this skeleton.',
       '',
       'desktop:agent2:',
@@ -2643,6 +3241,14 @@ async function main() {
       '  Writes an Astro static site in site/ plus agent-4-output/implementation-report.md, changed-files.md, and build-report.md.',
       '  Runs npm run build in site/. On build failure, keeps stage=implement with blocking_reason=BUILD_FAILED.',
       '  On success, writes stage=qa and stops before Agent5 QA. It does not deploy.',
+      '',
+      'desktop:qa:',
+      '  npm run desktop:qa -- --run-dir runs/<site-id>',
+      '  Runs only after stage=qa and last_completed_stage=implement.',
+      '  Reads site/, Agent4 build report, Agent3 handoff, Agent2 tool/page specs, and selected-assets manifest.',
+      '  Runs site build, page-plan, tool-spec, rendered-assets, final visual lock/similarity, selected-assets, lineage, design-review, final QA evidence, gate evidence integrity, and check-gates --before agent-6.',
+      '  Failed gates enter a repair loop with up to five real repair attempts before blocking with QA_REPAIR_LIMIT_REACHED.',
+      '  On success, writes agent-5-output QA reports, opens pre_deploy_approval, writes stage=deploy-review, and stops before deployment.',
     ].join('\n'));
     return;
   }

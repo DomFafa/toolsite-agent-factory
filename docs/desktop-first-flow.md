@@ -539,19 +539,134 @@ Success behavior:
 - It does not run full QA.
 - It does not deploy.
 
+## `desktop:qa`
+
+`desktop:qa` runs after `desktop:implement` has created the Astro site and advanced the desktop state to `stage: "qa"`. It performs Agent5 local QA, repairs ordinary gate failures up to the retry limit, then stops at deployment review.
+
+Run it with:
+
+```bash
+npm run desktop:qa -- --run-dir runs/<site-id>
+```
+
+`desktop:run` also calls this runner automatically when `desktop-run-state.json` is at `stage: "qa"`.
+
+Purpose:
+
+- Read the implemented `site/`.
+- Re-run build and production QA gates.
+- Use the local repair loop for ordinary gate failures.
+- Write Agent5 QA reports and launch readiness.
+- Open a local pre-deploy approval review.
+- Stop before deployment.
+
+Required preconditions:
+
+- `desktop-run-state.json` has `stage: "qa"` and `last_completed_stage: "implement"`.
+- `site/` exists.
+- `agent-4-output/build-report.md` exists.
+- `agent-3-output/implementation-handoff.md` exists.
+- `agent-2-output/tool-spec.md` exists.
+- `agent-2-output/page-plan.md` exists.
+- `agent-2-5-output/selected-assets/selected-assets-manifest.json` exists.
+
+Inputs read:
+
+- `site/`
+- `agent-4-output/build-report.md`
+- `agent-3-output/implementation-handoff.md`
+- `agent-2-output/tool-spec.md`
+- `agent-2-output/page-plan.md`
+- `agent-2-5-output/selected-assets/selected-assets-manifest.json`
+- existing gate results and Agent2.5 selected design evidence required by the QA gates
+
+QA gates run:
+
+- `site-build` by running `npm run build` in `site/`
+- `page-plan`
+- `tool-spec`
+- `rendered-assets`
+- `final-visual-lock`
+- `visual-restoration-similarity`
+- `final-visual-similarity`
+- `selected-assets`
+- `agent25-lineage`
+- `toolsite-design-review`
+- `final-qa-evidence`
+- `gate-evidence-integrity`
+- `check-gates --before agent-6`
+
+Outputs written:
+
+- `agent-5-output/qa-report.md`
+- `agent-5-output/final-qa-report.md`
+- `agent-5-output/launch-readiness.md`
+- `agent-5-output/repair-log.md`
+- `agent-5-output/gate-summary.json`
+- `agent-5-output/chat-delivery/final-screenshot-delivery.md`
+- corresponding `gate-results/*.json`
+- an open local pre-deploy approval review in `human-review-events.jsonl`
+
+Repair loop behavior:
+
+- A failing ordinary QA gate enters a repair loop before asking the user.
+- Each gate can be repaired up to five times.
+- Each attempt logs the failure reason and repair task in `agent-5-output/repair-log.md`.
+- The repair task must change real artifacts and then rerun the same gate.
+- The repair loop must not hand-edit `gate-results/*.json`, lower gate standards, write fake PASS markdown, or skip gates.
+
+Failures suitable for automatic repair:
+
+- build failures
+- missing page-plan routes
+- missing tool-spec behavior
+- rendered asset failures
+- CSS or layout issues
+- visual lock or similarity failures
+- missing final QA evidence
+
+Failures that require stopping or user input:
+
+- requested changes to the product/SPEC direction
+- requiring the user to choose a new UI option
+- approved provider unavailable
+- missing Cloudflare, GSC, or Bing credentials
+- any gate still failing after five repair attempts
+
+Failure behavior:
+
+- Outside the QA state, it returns `QA_STAGE_REQUIRED`.
+- Missing `site/` returns `SITE_MISSING`.
+- Missing Agent3/Agent4 implementation outputs returns `IMPLEMENT_OUTPUT_MISSING`.
+- Missing Agent2 outputs returns `AGENT2_OUTPUT_MISSING`.
+- Missing selected-assets manifest returns `SELECTED_ASSETS_MISSING`.
+- If a gate still fails after the repair limit, it keeps `stage: "qa"` and writes `blocking_reason: "QA_REPAIR_LIMIT_REACHED"`.
+
+Success behavior:
+
+- QA reports and gate summaries are complete.
+- QA gates pass.
+- `check-gates --before agent-6` is run as a deployment preview; a remaining deployment approval requirement is expected at this boundary.
+- `human-review-events.jsonl` receives an open `pre_deploy_approval` review with launch-readiness summary.
+- `desktop-run-state.json` is updated with `stage: "deploy-review"`, `last_completed_stage: "qa"`, `next_action: "review launch readiness and run desktop:continue with pre-deploy approval"`, and `blocking_reason: "pre-deploy-approval"`.
+- It does not call Cloudflare.
+- It does not submit sitemap.
+- It does not run GSC or Bing.
+- It does not deploy.
+
 ## Human Review Points
 
 Desktop mode uses local files and terminal output:
 
 - `spec-confirmation`: user replies `确认 SPEC` or `修改：...`
 - `agent25_option_selection`: user chooses `A`, `B`, `C`, or replies `重做：...`
-- `pre-deploy-approval`: user replies `确认部署` or `修改：...`
+- `pre_deploy_approval` / `pre-deploy-approval`: user replies `确认部署` or `修改：...`
 
 All review state is appended to `human-review-events.jsonl`. Existing events are immutable; resolution is recorded by appending a new event.
 
 ## Pre-Deploy Approval
 
-`desktop:deploy` must block unless a resolved `pre-deploy-approval` event exists with `resolution_text: "确认部署"`.
+`desktop:deploy` must block unless a resolved `pre_deploy_approval` or `pre-deploy-approval` event exists with `resolution_text: "确认部署"`.
 
 This repository must not deploy from unapproved desktop state. A production launch also requires the project approval artifact described by `docs/production-run-master-contract.md`.
 
@@ -559,7 +674,7 @@ This repository must not deploy from unapproved desktop state. A production laun
 
 Ordinary gate failures should enter a repair loop before asking the user. The loop may retry a gate up to five times. Each attempt must repair real artifacts and rerun the gate. It must not edit `gate-results/*.json`, lower gate standards, write markdown as fake PASS evidence, or skip gates.
 
-If the repair limit is exceeded, the desktop flow must block with `NEEDS_HUMAN_DECISION` and report the gate name, failure reason, attempts, and the decision needed.
+If the standalone gate repair loop limit is exceeded, it blocks with `NEEDS_HUMAN_DECISION`. If the QA runner repair limit is exceeded, it keeps `stage: "qa"`, writes `blocking_reason: "QA_REPAIR_LIMIT_REACHED"`, and reports the gate name, failure reason, attempts, and the decision needed.
 
 ## Deprecated / Removed Remote Extension
 
