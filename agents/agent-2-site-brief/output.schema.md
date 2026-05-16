@@ -16,7 +16,7 @@ Required outputs:
 
 Each output should include decisions, assumptions, and next-agent handoff notes.
 
-If the run input includes image attachments under `input-assets/`, `ui-reference-dossier.md` and `design-generation-input.md` must include the run-local image path, Telegram/source provenance when available, and the intended use as `design_reference` or `illustration_reference`. These assets are design inputs for Agent 2.5, not additional user questions.
+If the run input includes image attachments under `input-assets/`, `ui-reference-dossier.md` and `design-generation-input.md` must include the run-local image path, local source provenance when available, and the intended use as `design_reference` or `illustration_reference`. These assets are design inputs for Agent 2.5, not additional user questions.
 
 Agent2 brief outputs are machine working documents by default. Do not create a default `agent2_brief_review` human review event. Create `agent2_brief_exception` only when the Agent2 Brief Compliance Check fails or is uncertain.
 
