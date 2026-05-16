@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { access, appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,8 @@ import {
   splitLocalReviewMessages,
 } from '../run/pre-agent2-local-spec.mjs';
 import { runAgent2BriefComplianceCheck, renderComplianceSummary } from '../run/check-agent2-brief-compliance.mjs';
+import { runAgent25ExternalDesignProofGate } from '../run/check-agent25-external-design-proof.mjs';
+import { runAgent25OptionImagesGate } from '../run/check-agent25-option-images.mjs';
 import { runPreAgent2ToolsiteSpecGate } from '../qa/check-pre-agent2-toolsite-spec.mjs';
 import { runPagePlanGate } from '../qa/check-page-plan.mjs';
 
@@ -22,15 +25,26 @@ export const DEPLOY_REQUIRES_APPROVAL = 'DEPLOY_REQUIRES_APPROVAL';
 export const AGENT2_COMPLETE = 'AGENT2_COMPLETE';
 export const AGENT2_COMPLIANCE_FAILED = 'AGENT2_COMPLIANCE_FAILED';
 export const DESKTOP_PRECONDITION_FAILED = 'DESKTOP_PRECONDITION_FAILED';
+export const INVALID_DESKTOP_STAGE = 'INVALID_DESKTOP_STAGE';
+export const AGENT2_OUTPUT_MISSING = 'AGENT2_OUTPUT_MISSING';
+export const AGENT2_COMPLIANCE_REQUIRED = 'AGENT2_COMPLIANCE_REQUIRED';
+export const INPUT_ASSETS_UNREADABLE = 'INPUT_ASSETS_UNREADABLE';
+export const AGENT25_EXECUTOR_FAILED = 'AGENT25_EXECUTOR_FAILED';
+export const AGENT25_GATE_FAILED = 'AGENT25_GATE_FAILED';
+export const AGENT25_COMPLETE = 'AGENT25_COMPLETE';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const STATE_FILE = 'desktop-run-state.json';
 const EVENT_FILE = 'human-review-events.jsonl';
 
-const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2']);
+const STAGE_RUNNERS = new Set(['pre-agent2', 'agent2', 'agent25']);
 const AGENT2_ALLOWED_CURRENT_STAGES = new Set(['spec-review', 'agent2']);
 const ASSET_REFERENCE_PURPOSES = new Set(['design_reference', 'illustration_reference']);
+const AGENT25_EXECUTOR_SCRIPT = 'scripts/run/execute-agent25-design-options.mjs';
+const AGENT25_PROMPT_PATH = 'agent-2-output/design-generation-input.md';
+const AGENT25_SITE_BRIEF_PATH = 'agent-2-output/site-brief.md';
+const OPTIONS_BOARD_PATH = 'agent-2-5-output/chat-delivery/options-board.png';
 
 function nowIso() {
   return new Date().toISOString();
@@ -194,6 +208,71 @@ async function blockAgent2(runDir, state, { blockingReason, nextAction, now = no
     blocking_reason: blockingReason,
     updated_at: now(),
   });
+}
+
+async function blockAgent25(runDir, state, { blockingReason, nextAction, now = nowIso } = {}) {
+  await writeDesktopState(runDir, {
+    ...state,
+    stage: 'agent25',
+    next_action: nextAction || 'repair Agent2.5 design-options before rerunning desktop:agent25',
+    blocking_reason: blockingReason,
+    updated_at: now(),
+  });
+}
+
+function executorFailureCode(result) {
+  const text = `${result?.stdout || ''}\n${result?.stderr || ''}`;
+  if (/NO_APPROVED_UI_GENERATION_AVAILABLE/.test(text)) return 'NO_APPROVED_UI_GENERATION_AVAILABLE';
+  if (/EXTERNAL_ACTION_FAILED/.test(text)) return 'EXTERNAL_ACTION_FAILED';
+  return 'EXTERNAL_ACTION_FAILED';
+}
+
+async function defaultExecuteAgent25DesignOptions({ runDir, promptPath, argv }) {
+  return spawnSync(process.execPath, argv, {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    timeout: 360_000,
+  });
+}
+
+function normalizeRelativeRunPath(value) {
+  return String(value || '')
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .trim();
+}
+
+function referencedAssetPaths({ inputText = '', promptText = '', runMeta = null } = {}) {
+  const paths = new Set();
+  const add = (value) => {
+    const normalized = normalizeRunAssetPath(value);
+    if (normalized) paths.add(normalized);
+  };
+  for (const asset of Array.isArray(runMeta?.input_assets) ? runMeta.input_assets : []) add(asset.run_path);
+  for (const asset of Array.isArray(runMeta?.assets) ? runMeta.assets : []) add(asset.run_path);
+  for (const text of [inputText, promptText]) {
+    for (const match of String(text || '').matchAll(/\binput-assets\/[^\s`'"）),;；]+/gi)) add(match[0]);
+  }
+  return [...paths];
+}
+
+async function validateInputAssets({ runDir, promptText }) {
+  const runMeta = await readJsonOptional(path.join(runDir, 'run-meta.json'));
+  const inputText = await readOptional(path.join(runDir, 'input.md'));
+  const references = referencedAssetPaths({ inputText, promptText, runMeta });
+  if (references.length === 0) return { ok: true, references };
+
+  try {
+    await readdir(path.join(runDir, 'input-assets'));
+  } catch {
+    return { ok: false, references, missing: ['input-assets'] };
+  }
+
+  const missing = [];
+  for (const relPath of references) {
+    if (!(await exists(path.join(runDir, relPath)))) missing.push(relPath);
+  }
+  return { ok: missing.length === 0, references, missing };
 }
 
 function stripMarkdown(value) {
@@ -650,17 +729,177 @@ export async function runDesktopAgent2({ runDir, now = nowIso } = {}) {
   };
 }
 
+async function writeAgent25OptionSelectionReview({ runDir, now = nowIso }) {
+  const event = {
+    schema_version: 'human-review-event.v1',
+    type: 'human_review',
+    review_type: 'agent25_option_selection',
+    id: 'agent25-option-selection',
+    site_id: siteIdFromRunDir(runDir),
+    run_dir: runDir,
+    phase: 'agent-2.5',
+    agent: 'desktop-agent25',
+    status: 'open',
+    blocking: true,
+    blocks: 'agent-3',
+    title: 'Choose Agent2.5 UI option',
+    message: [
+      '本地 UI A/B/C 选择说明',
+      '',
+      '请打开 Agent2.5 options board，选择 A、B 或 C。',
+      '选择前不要进入 Agent3。',
+    ].join('\n'),
+    expected_reply: 'A / B / C / 重做：...',
+    attachments: [
+      {
+        label: 'Agent2.5 options board',
+        path: OPTIONS_BOARD_PATH,
+        kind: 'image',
+        required: true,
+      },
+    ],
+    created_at: now(),
+    created_by: 'desktop:agent25',
+  };
+  await appendReview(runDir, event);
+  return event;
+}
+
+export async function runDesktopAgent25({
+  runDir,
+  now = nowIso,
+  executeAgent25DesignOptions = defaultExecuteAgent25DesignOptions,
+} = {}) {
+  const state = await readDesktopState(runDir);
+  if (state.stage !== 'agent25' || state.last_completed_stage !== 'agent2') {
+    return {
+      ok: false,
+      code: INVALID_DESKTOP_STAGE,
+      stage: state.stage || '',
+      last_completed_stage: state.last_completed_stage || null,
+    };
+  }
+
+  const promptPath = path.join(runDir, AGENT25_PROMPT_PATH);
+  for (const relPath of [AGENT25_PROMPT_PATH, AGENT25_SITE_BRIEF_PATH]) {
+    if (!(await exists(path.join(runDir, relPath)))) {
+      await blockAgent25(runDir, state, {
+        blockingReason: relPath,
+        nextAction: 'run desktop:agent2 before desktop:agent25',
+        now,
+      });
+      return { ok: false, code: AGENT2_OUTPUT_MISSING, stage: 'agent25', missing: relPath };
+    }
+  }
+
+  const compliance = await readJsonOptional(path.join(runDir, 'gate-results/agent2-brief-compliance.json'));
+  if (!gatePassed(compliance)) {
+    await blockAgent25(runDir, state, {
+      blockingReason: 'agent2-brief-compliance',
+      nextAction: 'repair Agent2 compliance before desktop:agent25',
+      now,
+    });
+    return { ok: false, code: AGENT2_COMPLIANCE_REQUIRED, stage: 'agent25' };
+  }
+
+  const promptText = await readFile(promptPath, 'utf8');
+  const assets = await validateInputAssets({ runDir, promptText });
+  if (!assets.ok) {
+    await blockAgent25(runDir, state, {
+      blockingReason: `input-assets:${assets.missing.join(',')}`,
+      nextAction: 'restore referenced input-assets before desktop:agent25',
+      now,
+    });
+    return { ok: false, code: INPUT_ASSETS_UNREADABLE, stage: 'agent25', missing: assets.missing };
+  }
+
+  const argv = [
+    AGENT25_EXECUTOR_SCRIPT,
+    '--run-dir',
+    runDir,
+    '--prompt',
+    promptPath,
+  ];
+  const executor = await executeAgent25DesignOptions({ runDir, promptPath, argv });
+  if (executor.status !== 0) {
+    const failureCode = executorFailureCode(executor);
+    await blockAgent25(runDir, state, {
+      blockingReason: failureCode,
+      nextAction: 'rerun desktop:agent25 after the approved design surface is available',
+      now,
+    });
+    return {
+      ok: false,
+      code: AGENT25_EXECUTOR_FAILED,
+      stage: 'agent25',
+      blocking_reason: failureCode,
+      stdout: executor.stdout || '',
+      stderr: executor.stderr || '',
+    };
+  }
+
+  const externalProof = await runAgent25ExternalDesignProofGate({ runDir });
+  await writeGateResult(runDir, 'agent25-external-design-proof.json', externalProof);
+  if (!gatePassed(externalProof)) {
+    await blockAgent25(runDir, state, {
+      blockingReason: 'agent25-external-design-proof',
+      nextAction: 'repair Agent2.5 external evidence before desktop:agent25',
+      now,
+    });
+    return { ok: false, code: AGENT25_GATE_FAILED, stage: 'agent25', gateResult: externalProof };
+  }
+
+  const review = await writeAgent25OptionSelectionReview({ runDir, now });
+  const optionImages = await runAgent25OptionImagesGate({ runDir });
+  await writeGateResult(runDir, 'agent25-option-images.json', optionImages);
+  if (!gatePassed(optionImages)) {
+    await blockAgent25(runDir, state, {
+      blockingReason: 'agent25-option-images',
+      nextAction: 'repair Agent2.5 option image board before desktop:agent25',
+      now,
+    });
+    return { ok: false, code: AGENT25_GATE_FAILED, stage: 'agent25', gateResult: optionImages };
+  }
+
+  await writeDesktopState(runDir, {
+    mode: 'desktop',
+    stage: 'ui-review',
+    last_completed_stage: 'agent25',
+    next_action: 'review Agent2.5 options and run desktop:select-ui',
+    blocking_reason: 'ui-option-selection',
+    repair_attempts: {},
+    updated_at: now(),
+  });
+
+  return {
+    ok: true,
+    code: AGENT25_COMPLETE,
+    stage: 'ui-review',
+    review,
+    gates: {
+      externalProof,
+      optionImages,
+    },
+  };
+}
+
 function configuredStage(stage) {
   return STAGE_RUNNERS.has(stage);
 }
 
-export async function runDesktopStage({ runDir, stage = '', now = nowIso } = {}) {
+export async function runDesktopStage({
+  runDir,
+  stage = '',
+  now = nowIso,
+  executeAgent25DesignOptions = defaultExecuteAgent25DesignOptions,
+} = {}) {
   const state = await readDesktopState(runDir);
   const targetStage = stage || state.stage || 'pre-agent2';
   const events = await readEvents(runDir);
 
   if (targetStage === 'pre-agent2') return runDesktopPreAgent2({ runDir, now });
   if (targetStage === 'agent2') return runDesktopAgent2({ runDir, now });
+  if (targetStage === 'agent25') return runDesktopAgent25({ runDir, now, executeAgent25DesignOptions });
 
   if (targetStage === 'spec-review') {
     if (!confirmedReview(events, 'spec-confirmation')) {
@@ -715,7 +954,7 @@ async function main() {
       'Stages:',
       '  pre-agent2   Generate toolsite-spec.md and open local spec-confirmation review.',
       '  agent2       Require confirmed SPEC, write agent-2-output/*, run pre-agent2-toolsite-spec, page-plan, and agent2-brief-compliance gates, then stop at stage=agent25.',
-      '  agent25      Not wired yet; returns NO_STAGE_RUNNER_CONFIGURED.',
+      '  agent25      Require Agent2 compliance, call Agent2.5 design-options executor, run option image and external proof gates, then stop at ui-review.',
       '  implement    Not wired yet; returns NO_STAGE_RUNNER_CONFIGURED.',
       '  qa           Not wired yet; returns NO_STAGE_RUNNER_CONFIGURED.',
       '  deploy       Requires pre_deploy_approval before deployment; real deployment runner is not wired in this skeleton.',
@@ -728,6 +967,14 @@ async function main() {
       '  Writes agent-2-output/* plus gate-results/pre-agent2-toolsite-spec.json, page-plan.json, and agent2-brief-compliance.json.',
       '  On gate failure, leaves stage=agent2 with blocking_reason set to the failing gate.',
       '  On success, writes stage=agent25, last_completed_stage=agent2, next_action="run desktop:agent25", then stops.',
+      '',
+      'desktop:agent25:',
+      '  npm run desktop:agent25 -- --run-dir runs/<site-id>',
+      '  Runs only after stage=agent25 and last_completed_stage=agent2.',
+      `  Calls node ${AGENT25_EXECUTOR_SCRIPT} --run-dir runs/<site-id> --prompt runs/<site-id>/${AGENT25_PROMPT_PATH}.`,
+      '  Requires the Agent2 brief compliance gate to pass and referenced input-assets/ to be readable.',
+      '  Writes Agent2.5 external evidence, opens a local A/B/C UI option review, and writes agent25-option-images and agent25-external-design-proof gate results.',
+      '  On success, writes stage=ui-review and waits for desktop:select-ui.',
     ].join('\n'));
     return;
   }
