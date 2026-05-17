@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -13,6 +14,10 @@ export const FINAL_VISUAL_TARGET_DIMENSION_MISMATCH = 'FINAL_VISUAL_TARGET_DIMEN
 
 const FINAL_VISUAL_TARGET_DESKTOP_PATH = 'agent-5-output/final-visual-target/desktop.png';
 const FINAL_VISUAL_TARGET_MOBILE_PATH = 'agent-5-output/final-visual-target/mobile.png';
+const FINAL_VISUAL_TARGET_MANIFEST_PATH = 'agent-5-output/final-visual-target/final-visual-target-manifest.json';
+const FINAL_VISUAL_TARGET_SOURCE_MAP_PATH = 'agent-5-output/final-visual-target/source-map.json';
+const SELECTED_DESIGN_PACKAGE_PATH = 'agent-2-5-output/selected-assets/selected-design-package.md';
+const ACTION_RECEIPT_PATH = 'agent-2-5-output/external-design-evidence/action-receipt.json';
 
 function parseArgs(argv) {
   const args = { write: false, threshold: 0.9 };
@@ -88,6 +93,89 @@ async function pngInfo(filePath) {
     height: buffer.readUInt32BE(20),
     size: buffer.length,
   };
+}
+
+async function readJsonOptional(filePath) {
+  try {
+    return JSON.parse(await readFile(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async function sha256File(filePath) {
+  return crypto.createHash('sha256').update(await readFile(filePath)).digest('hex');
+}
+
+function manifestHash(manifest, relPath) {
+  return String(
+    manifest?.sha256_hashes?.[relPath] ||
+    manifest?.sha256Hashes?.[relPath] ||
+    manifest?.target_hashes?.[relPath] ||
+    manifest?.targetHashes?.[relPath] ||
+    '',
+  ).trim();
+}
+
+function sourceMapHash(sourceMap, relPath) {
+  return String(
+    sourceMap?.target_hashes?.[relPath] ||
+    sourceMap?.targetHashes?.[relPath] ||
+    sourceMap?.sha256_hashes?.[relPath] ||
+    sourceMap?.sha256Hashes?.[relPath] ||
+    '',
+  ).trim();
+}
+
+function outputPathFor(record, name) {
+  return String(record?.output_paths?.[name] || record?.outputPaths?.[name] || record?.output_targets?.[name] || record?.outputTargets?.[name] || '').trim();
+}
+
+async function validateFinalVisualTargetManifest({ absoluteRunDir, sourcePairs, failures }) {
+  const manifestPath = path.join(absoluteRunDir, FINAL_VISUAL_TARGET_MANIFEST_PATH);
+  const sourceMapPath = path.join(absoluteRunDir, FINAL_VISUAL_TARGET_SOURCE_MAP_PATH);
+  const manifest = await readJsonOptional(manifestPath);
+  const sourceMap = await readJsonOptional(sourceMapPath);
+
+  if (!manifest) failures.push(`${FINAL_VISUAL_TARGET_MISSING}: missing ${FINAL_VISUAL_TARGET_MANIFEST_PATH}`);
+  if (!sourceMap) failures.push(`${FINAL_VISUAL_TARGET_MISSING}: missing ${FINAL_VISUAL_TARGET_SOURCE_MAP_PATH}`);
+  if (!manifest || !sourceMap) return;
+
+  if (String(manifest.source_selected_design_package || '').trim() !== SELECTED_DESIGN_PACKAGE_PATH) {
+    failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target manifest must reference ${SELECTED_DESIGN_PACKAGE_PATH}`);
+  }
+  if (String(manifest.external_action_receipt || '').trim() !== ACTION_RECEIPT_PATH) {
+    failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target manifest must reference ${ACTION_RECEIPT_PATH}`);
+  }
+  if (!manifest.generation_method && !manifest.generationMethod) {
+    failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target manifest must record generation method`);
+  }
+  if (!manifest.source_selected_targets && !manifest.sourceSelectedTargets) {
+    failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target manifest must record source selected targets`);
+  }
+
+  for (const pair of sourcePairs) {
+    const relPath = path.relative(absoluteRunDir, pair.targetPath);
+    if (outputPathFor(manifest, pair.name) !== relPath) {
+      failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target manifest output path for ${pair.name} must be ${relPath}`);
+    }
+    if (outputPathFor(sourceMap, pair.name) !== relPath) {
+      failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target source-map output path for ${pair.name} must be ${relPath}`);
+    }
+    const actualHash = await sha256File(pair.targetPath);
+    const expectedManifestHash = manifestHash(manifest, relPath);
+    const expectedSourceMapHash = sourceMapHash(sourceMap, relPath);
+    if (!/^[a-f0-9]{64}$/i.test(expectedManifestHash)) {
+      failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target manifest hash missing for ${relPath}`);
+    } else if (expectedManifestHash !== actualHash) {
+      failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target manifest hash for ${relPath} does not match actual file`);
+    }
+    if (!/^[a-f0-9]{64}$/i.test(expectedSourceMapHash)) {
+      failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target source-map hash missing for ${relPath}`);
+    } else if (expectedSourceMapHash !== actualHash) {
+      failures.push(`${FINAL_VISUAL_TARGET_MISSING}: final visual target source-map hash for ${relPath} does not match actual file`);
+    }
+  }
 }
 
 async function defaultCompareImages({ outputDir, sourcePairs, evidence, absoluteRunDir }) {
@@ -221,11 +309,19 @@ export async function runFinalVisualSimilarityGate({ runDir, threshold = 0.9, co
       }
       const target = await pngInfo(pair.targetPath);
       const final = await pngInfo(pair.finalPath);
+      const targetSha = await sha256File(pair.targetPath);
+      const finalSha = await sha256File(pair.finalPath);
+      if (targetSha === finalSha) {
+        failures.push(`${FINAL_VISUAL_TARGET_MISSING}: ${pair.name} final visual target must not copy current final screenshot`);
+      }
       if (target.width !== final.width || target.height !== final.height) {
         failures.push(
           `${FINAL_VISUAL_TARGET_DIMENSION_MISMATCH}: ${pair.name}: final screenshot dimensions ${final.width}x${final.height} differ from final visual target ${target.width}x${target.height}`,
         );
       }
+    }
+    if (failures.length === 0) {
+      await validateFinalVisualTargetManifest({ absoluteRunDir, sourcePairs, failures });
     }
     if (failures.length === 0) {
       details = await compareImages({ outputDir, sourcePairs, evidence, absoluteRunDir });

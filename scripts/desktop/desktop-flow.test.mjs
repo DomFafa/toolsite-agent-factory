@@ -32,6 +32,7 @@ import {
   NEEDS_BING_CREDENTIALS,
   NEEDS_CLOUDFLARE_CREDENTIALS,
   NEEDS_SEARCH_CONSOLE_CREDENTIALS,
+  NO_APPROVED_UI_GENERATION_AVAILABLE,
   NO_DEPLOY_RUNNER_CONFIGURED,
   NOT_PRODUCTION_RUN,
   QA_NOT_PASSED,
@@ -60,6 +61,12 @@ import {
   SPEC_NOT_CONFIRMED,
   UI_REVIEW_REQUIRED,
 } from './continue.mjs';
+import {
+  FINAL_VISUAL_TARGET_COMPLETE,
+  FINAL_VISUAL_TARGET_DIMENSION_MISMATCH,
+  FINAL_VISUAL_TARGET_MISSING,
+  generateFinalVisualTargets,
+} from './final-visual-target.mjs';
 
 async function exists(filePath) {
   try {
@@ -521,6 +528,34 @@ async function makeQaReadyRun(root, { selectedOptionId = 'option-a' } = {}) {
   assert.equal(implemented.code, IMPLEMENT_COMPLETE);
   assert.equal((await readDesktopState(created.runDir)).stage, 'qa');
   return created;
+}
+
+async function writeFinalVisualTargetOutputFiles(runDir, {
+  desktop = pngBuffer('final-target-desktop'),
+  mobile = pngBuffer('final-target-mobile'),
+} = {}) {
+  await mkdir(path.join(runDir, 'agent-5-output/final-visual-target'), { recursive: true });
+  await writeFile(path.join(runDir, 'agent-5-output/final-visual-target/desktop.png'), desktop);
+  await writeFile(path.join(runDir, 'agent-5-output/final-visual-target/mobile.png'), mobile);
+}
+
+function approvedFinalTargetProvider({ desktop, mobile, method = 'mock-approved-external-final-target-generator' } = {}) {
+  return async ({ runDir }) => {
+    await writeFinalVisualTargetOutputFiles(runDir, {
+      desktop: desktop || pngBuffer('viewport-desktop'),
+      mobile: mobile || (() => {
+        const buffer = Buffer.from(pngBuffer('viewport-mobile'));
+        buffer.writeUInt32BE(390, 16);
+        buffer.writeUInt32BE(844, 20);
+        return buffer;
+      })(),
+    });
+    return {
+      ok: true,
+      method,
+      receipt_path: 'agent-5-output/final-visual-target/external-action-receipt.json',
+    };
+  };
 }
 
 async function makeDeployReviewReadyRun(root, { approve = true } = {}) {
@@ -1556,6 +1591,83 @@ test('desktop:qa refuses without site directory', async () => {
   assert.equal(state.blocking_reason, SITE_MISSING);
 });
 
+test('final visual target generator writes viewport targets and source manifest', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-final-target-generator-'));
+  const created = await makeQaReadyRun(root, { selectedOptionId: 'option-b' });
+
+  const result = await generateFinalVisualTargets({
+    runDir: created.runDir,
+    now: () => '2026-05-16T11:30:00.000Z',
+    generateTargets: approvedFinalTargetProvider(),
+  });
+  const desktop = await readFile(path.join(created.runDir, 'agent-5-output/final-visual-target/desktop.png'));
+  const mobile = await readFile(path.join(created.runDir, 'agent-5-output/final-visual-target/mobile.png'));
+  const manifest = JSON.parse(await readFile(
+    path.join(created.runDir, 'agent-5-output/final-visual-target/final-visual-target-manifest.json'),
+    'utf8',
+  ));
+  const sourceMap = JSON.parse(await readFile(path.join(created.runDir, 'agent-5-output/final-visual-target/source-map.json'), 'utf8'));
+
+  assert.equal(result.code, FINAL_VISUAL_TARGET_COMPLETE);
+  assert.deepEqual(pngDimensions(desktop), { width: 1440, height: 900 });
+  assert.deepEqual(pngDimensions(mobile), { width: 390, height: 844 });
+  assert.equal(manifest.selected_option, 'B');
+  assert.equal(manifest.source_selected_design_package, 'agent-2-5-output/selected-assets/selected-design-package.md');
+  assert.equal(manifest.external_action_receipt, 'agent-2-5-output/external-design-evidence/action-receipt.json');
+  assert.equal(manifest.output_paths.desktop, 'agent-5-output/final-visual-target/desktop.png');
+  assert.equal(manifest.output_paths.mobile, 'agent-5-output/final-visual-target/mobile.png');
+  assert.equal(manifest.sha256_hashes['agent-5-output/final-visual-target/desktop.png'], sha256(desktop));
+  assert.equal(manifest.sha256_hashes['agent-5-output/final-visual-target/mobile.png'], sha256(mobile));
+  assert.equal(sourceMap.target_hashes['agent-5-output/final-visual-target/desktop.png'], sha256(desktop));
+});
+
+test('final visual target generator refuses when approved provider is unavailable', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-final-target-no-provider-'));
+  const created = await makeQaReadyRun(root);
+
+  const result = await generateFinalVisualTargets({
+    runDir: created.runDir,
+    env: {},
+  });
+
+  assert.equal(result.code, NO_APPROVED_UI_GENERATION_AVAILABLE);
+  assert.equal(await exists(path.join(created.runDir, 'agent-5-output/final-visual-target/desktop.png')), false);
+});
+
+test('final visual target generator refuses missing provider output', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-final-target-missing-output-'));
+  const created = await makeQaReadyRun(root);
+
+  const result = await generateFinalVisualTargets({
+    runDir: created.runDir,
+    generateTargets: async () => ({ ok: false, code: FINAL_VISUAL_TARGET_MISSING, failures: ['approved provider did not return viewport targets'] }),
+  });
+
+  assert.equal(result.code, FINAL_VISUAL_TARGET_MISSING);
+  assert.match(result.failures.join('\n'), /approved provider did not return viewport targets/);
+});
+
+test('final visual target generator refuses current final screenshots as targets', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-final-target-copy-final-'));
+  const created = await makeQaReadyRun(root);
+  const finalDesktop = pngBuffer('current-final-desktop');
+  const finalMobile = Buffer.from(pngBuffer('current-final-mobile'));
+  finalMobile.writeUInt32BE(390, 16);
+  finalMobile.writeUInt32BE(844, 20);
+  await mkdir(path.join(created.runDir, 'agent-5-output/final-visual-lock'), { recursive: true });
+  await writeFile(path.join(created.runDir, 'agent-5-output/final-visual-lock/desktop.png'), finalDesktop);
+  await writeFile(path.join(created.runDir, 'agent-5-output/final-visual-lock/mobile.png'), finalMobile);
+
+  const result = await generateFinalVisualTargets({
+    runDir: created.runDir,
+    generateTargets: approvedFinalTargetProvider({ desktop: finalDesktop, mobile: finalMobile }),
+  });
+
+  assert.equal(result.code, FINAL_VISUAL_TARGET_MISSING);
+  assert.match(result.failures.join('\n'), /must not match current final screenshot/);
+  assert.equal(await exists(path.join(created.runDir, 'agent-5-output/final-visual-target/desktop.png')), false);
+});
+
 test('desktop:qa runs build and QA gate sequence using mocks, then opens pre-deploy review', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-success-'));
   const created = await makeQaReadyRun(root);
@@ -1768,7 +1880,53 @@ test('desktop:qa regenerates stale visual restoration screenshots before rerunni
   assert.deepEqual(runQaGate.calls.filter((call) => call.gate === 'visual-restoration-similarity').map((call) => call.attempt), [0, 1]);
 });
 
-test('desktop:qa does not repair site when final visual target is missing', async () => {
+test('desktop:qa generates missing final visual targets before rerunning similarity', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-generates-final-target-'));
+  const created = await makeQaReadyRun(root, { selectedOptionId: 'option-b' });
+  let generationCount = 0;
+  const runQaGate = passingQaGateRunner({
+    fail: {
+      'final-visual-similarity': ({ runDir, gate, attempt }) => {
+        if (attempt === 0) {
+          return mockGateResult(runDir, gate, {
+            passed: false,
+            failures: ['FINAL_VISUAL_TARGET_MISSING: desktop final visual target missing'],
+          });
+        }
+        return mockGateResult(runDir, gate);
+      },
+    },
+  });
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate,
+    generateFinalVisualTargets: async ({ runDir, now }) => {
+      generationCount += 1;
+      return generateFinalVisualTargets({
+        runDir,
+        now,
+        generateTargets: approvedFinalTargetProvider(),
+      });
+    },
+  });
+  const desktop = await readFile(path.join(created.runDir, 'agent-5-output/final-visual-target/desktop.png'));
+  const mobile = await readFile(path.join(created.runDir, 'agent-5-output/final-visual-target/mobile.png'));
+  const manifest = JSON.parse(await readFile(
+    path.join(created.runDir, 'agent-5-output/final-visual-target/final-visual-target-manifest.json'),
+    'utf8',
+  ));
+
+  assert.equal(result.code, QA_COMPLETE);
+  assert.equal(generationCount, 1);
+  assert.deepEqual(pngDimensions(desktop), { width: 1440, height: 900 });
+  assert.deepEqual(pngDimensions(mobile), { width: 390, height: 844 });
+  assert.equal(manifest.selected_option, 'B');
+  assert.deepEqual(runQaGate.calls.filter((call) => call.gate === 'final-visual-similarity').map((call) => call.attempt), [0, 1]);
+});
+
+test('desktop:qa reports unavailable final target provider without repairing site', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-final-target-missing-'));
   const created = await makeQaReadyRun(root);
   const runQaGate = passingQaGateRunner({
@@ -1789,15 +1947,57 @@ test('desktop:qa does not repair site when final visual target is missing', asyn
       repairCount += 1;
       return { repaired: true, changed_files: ['site/src/pages/index.astro'] };
     },
+    generateFinalVisualTargets: async () => ({
+      ok: false,
+      code: NO_APPROVED_UI_GENERATION_AVAILABLE,
+      failures: ['approved provider unavailable'],
+    }),
   });
   const state = await readDesktopState(created.runDir);
 
-  assert.equal(result.code, 'FINAL_VISUAL_TARGET_MISSING');
+  assert.equal(result.code, NO_APPROVED_UI_GENERATION_AVAILABLE);
   assert.equal(result.failed_gate, 'final-visual-similarity');
   assert.equal(repairCount, 0);
   assert.equal(state.stage, 'qa');
-  assert.equal(state.blocking_reason, 'FINAL_VISUAL_TARGET_MISSING');
+  assert.equal(state.blocking_reason, NO_APPROVED_UI_GENERATION_AVAILABLE);
   assert.deepEqual(runQaGate.calls.filter((call) => call.gate === 'final-visual-similarity').map((call) => call.attempt), [0]);
+});
+
+test('desktop:qa does not repair site when final visual target dimensions mismatch', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-final-target-dimension-'));
+  const created = await makeQaReadyRun(root);
+  const runQaGate = passingQaGateRunner({
+    fail: {
+      'final-visual-similarity': ({ runDir, gate }) => mockGateResult(runDir, gate, {
+        passed: false,
+        failures: ['FINAL_VISUAL_TARGET_DIMENSION_MISMATCH: desktop final screenshot dimensions 1440x900 differ from final visual target 558x941'],
+      }),
+    },
+  });
+  let repairCount = 0;
+  let generationCount = 0;
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate,
+    repairQaGate: async () => {
+      repairCount += 1;
+      return { repaired: true, changed_files: ['site/src/pages/index.astro'] };
+    },
+    generateFinalVisualTargets: async () => {
+      generationCount += 1;
+      return { ok: true };
+    },
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, FINAL_VISUAL_TARGET_DIMENSION_MISMATCH);
+  assert.equal(result.failed_gate, 'final-visual-similarity');
+  assert.equal(repairCount, 0);
+  assert.equal(generationCount, 0);
+  assert.equal(state.stage, 'qa');
+  assert.equal(state.blocking_reason, FINAL_VISUAL_TARGET_DIMENSION_MISMATCH);
 });
 
 test('desktop deploy refuses without pre_deploy_approval', async () => {
