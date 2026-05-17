@@ -27,7 +27,11 @@ import {
 } from '../qa/check-visual-restoration-similarity.mjs';
 import { runFinalQaEvidenceGate } from '../qa/check-final-qa-evidence.mjs';
 import { runFinalVisualLockGate } from '../qa/check-final-visual-lock.mjs';
-import { runFinalVisualSimilarityGate } from '../qa/check-final-visual-similarity.mjs';
+import {
+  FINAL_VISUAL_TARGET_DIMENSION_MISMATCH,
+  FINAL_VISUAL_TARGET_MISSING,
+  runFinalVisualSimilarityGate,
+} from '../qa/check-final-visual-similarity.mjs';
 import { runPreAgent2ToolsiteSpecGate } from '../qa/check-pre-agent2-toolsite-spec.mjs';
 import { runPagePlanGate } from '../qa/check-page-plan.mjs';
 import { runRenderedAssetsGate } from '../qa/check-rendered-assets.mjs';
@@ -3122,6 +3126,14 @@ function resultFailures(result) {
   return Array.isArray(result?.failures) ? result.failures : [];
 }
 
+function nonRepairableQaBlockingReason({ gate, result }) {
+  if (gate !== 'final-visual-similarity') return '';
+  const failures = resultFailures(result).map((failure) => String(failure));
+  if (failures.some((failure) => failure.includes(FINAL_VISUAL_TARGET_MISSING))) return FINAL_VISUAL_TARGET_MISSING;
+  if (failures.some((failure) => failure.includes(FINAL_VISUAL_TARGET_DIMENSION_MISMATCH))) return FINAL_VISUAL_TARGET_DIMENSION_MISMATCH;
+  return '';
+}
+
 async function runQaGateWithRepair({
   runDir,
   gate,
@@ -3135,6 +3147,10 @@ async function runQaGateWithRepair({
   let result = await runQaGate({ runDir, gate, url, runSiteBuild, now, attempt: 0 });
   await writeGateResult(runDir, gateResultFilename(gate), result);
   if (gatePassed(result)) return { ok: true, gate, result, attempts: [] };
+  const blockingReason = nonRepairableQaBlockingReason({ gate, result });
+  if (blockingReason) {
+    return { ok: false, gate, result, attempts: [], blockingReason, nonRepairable: true };
+  }
 
   const attempts = [];
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -3906,16 +3922,19 @@ export async function runDesktopQa({
     gateResults[gate] = gateRun.result;
     repairAttempts[gate] = gateRun.attempts.length;
     if (!gateRun.ok) {
+      const blockingReason = gateRun.blockingReason || QA_REPAIR_LIMIT_REACHED;
       await writeQaReports(runDir, { gateResults, now });
       await blockQa(runDir, state, {
-        blockingReason: QA_REPAIR_LIMIT_REACHED,
-        nextAction: `QA gate ${gate} still fails after ${maxQaRepairAttempts} repair attempts`,
+        blockingReason,
+        nextAction: gateRun.nonRepairable
+          ? `QA gate ${gate} blocked by ${blockingReason}`
+          : `QA gate ${gate} still fails after ${maxQaRepairAttempts} repair attempts`,
         repairAttempts,
         now,
       });
       return {
         ok: false,
-        code: QA_REPAIR_LIMIT_REACHED,
+        code: blockingReason,
         stage: 'qa',
         failed_gate: gate,
         failures: resultFailures(gateRun.result),
@@ -3941,16 +3960,19 @@ export async function runDesktopQa({
     gateResults[gate] = gateRun.result;
     repairAttempts[gate] = gateRun.attempts.length;
     if (!gateRun.ok) {
+      const blockingReason = gateRun.blockingReason || QA_REPAIR_LIMIT_REACHED;
       await writeQaReports(runDir, { gateResults, now });
       await blockQa(runDir, state, {
-        blockingReason: QA_REPAIR_LIMIT_REACHED,
-        nextAction: `QA gate ${gate} still fails after ${maxQaRepairAttempts} repair attempts`,
+        blockingReason,
+        nextAction: gateRun.nonRepairable
+          ? `QA gate ${gate} blocked by ${blockingReason}`
+          : `QA gate ${gate} still fails after ${maxQaRepairAttempts} repair attempts`,
         repairAttempts,
         now,
       });
       return {
         ok: false,
-        code: QA_REPAIR_LIMIT_REACHED,
+        code: blockingReason,
         stage: 'qa',
         failed_gate: gate,
         failures: resultFailures(gateRun.result),
