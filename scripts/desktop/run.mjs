@@ -38,6 +38,7 @@ import { runRenderedAssetsGate } from '../qa/check-rendered-assets.mjs';
 import { runSelectedAssetsGate } from '../qa/check-selected-assets.mjs';
 import { runToolSpecGate } from '../qa/check-tool-spec.mjs';
 import { runToolsiteDesignReviewGate } from '../qa/check-toolsite-design-review.mjs';
+import { generateFinalVisualTargets as defaultGenerateFinalVisualTargets } from './final-visual-target.mjs';
 
 export const NO_STAGE_RUNNER_CONFIGURED = 'NO_STAGE_RUNNER_CONFIGURED';
 export const SPEC_REVIEW_OPEN = 'SPEC_REVIEW_OPEN';
@@ -3126,12 +3127,88 @@ function resultFailures(result) {
   return Array.isArray(result?.failures) ? result.failures : [];
 }
 
+function finalVisualTargetFailure(result, code) {
+  return resultFailures(result).some((failure) => String(failure).includes(code));
+}
+
 function nonRepairableQaBlockingReason({ gate, result }) {
   if (gate !== 'final-visual-similarity') return '';
-  const failures = resultFailures(result).map((failure) => String(failure));
-  if (failures.some((failure) => failure.includes(FINAL_VISUAL_TARGET_MISSING))) return FINAL_VISUAL_TARGET_MISSING;
-  if (failures.some((failure) => failure.includes(FINAL_VISUAL_TARGET_DIMENSION_MISMATCH))) return FINAL_VISUAL_TARGET_DIMENSION_MISMATCH;
+  if (finalVisualTargetFailure(result, FINAL_VISUAL_TARGET_DIMENSION_MISMATCH)) return FINAL_VISUAL_TARGET_DIMENSION_MISMATCH;
   return '';
+}
+
+async function appendFinalVisualTargetGenerationFailure(result, generation) {
+  return {
+    ...result,
+    failures: [
+      ...resultFailures(result),
+      ...((generation?.failures?.length ? generation.failures : [generation?.code || FINAL_VISUAL_TARGET_MISSING]).map((failure) => String(failure))),
+    ],
+    details: {
+      ...(result?.details || {}),
+      finalVisualTargetGeneration: {
+        ok: Boolean(generation?.ok),
+        code: generation?.code || FINAL_VISUAL_TARGET_MISSING,
+        failures: generation?.failures || [],
+      },
+    },
+    evidence: {
+      ...(result?.evidence || {}),
+      finalVisualTargetGeneration: {
+        manifest: generation?.manifest_path || 'agent-5-output/final-visual-target/final-visual-target-manifest.json',
+        sourceMap: generation?.source_map_path || 'agent-5-output/final-visual-target/source-map.json',
+      },
+    },
+  };
+}
+
+async function tryGenerateFinalVisualTargetsForQa({
+  runDir,
+  result,
+  gate,
+  runQaGate,
+  url,
+  runSiteBuild,
+  now,
+  generateFinalVisualTargets,
+}) {
+  if (gate !== 'final-visual-similarity' || !finalVisualTargetFailure(result, FINAL_VISUAL_TARGET_MISSING)) {
+    return { attempted: false, result };
+  }
+
+  await appendRepairLog(runDir, [
+    '## final-visual-similarity final target generation',
+    '',
+    `Generated at: ${now()}`,
+    '',
+    '### Failure reasons',
+    ...resultFailures(result).map((failure) => `- ${failure}`),
+    '',
+    '### Generation task',
+    '- Generate viewport-sized final visual targets from the selected design package and approved external design evidence.',
+    '- Do not copy current final screenshots, selected option crops, local HTML/CSS/SVG, or markdown boards as targets.',
+  ]);
+  const generation = await generateFinalVisualTargets({ runDir, now });
+  if (!generation?.ok) {
+    const nextResult = await appendFinalVisualTargetGenerationFailure(result, generation);
+    await writeGateResult(runDir, gateResultFilename(gate), nextResult);
+    return {
+      attempted: true,
+      ok: false,
+      result: nextResult,
+      blockingReason: generation?.code || FINAL_VISUAL_TARGET_MISSING,
+      generation,
+    };
+  }
+
+  const rerun = await runQaGate({ runDir, gate, url, runSiteBuild, now, attempt: 1 });
+  await writeGateResult(runDir, gateResultFilename(gate), rerun);
+  return {
+    attempted: true,
+    ok: gatePassed(rerun),
+    result: rerun,
+    generation,
+  };
 }
 
 async function runQaGateWithRepair({
@@ -3141,12 +3218,50 @@ async function runQaGateWithRepair({
   runQaGate = defaultRunQaGate,
   repairQaGate = defaultRepairQaGate,
   runSiteBuild = defaultRunSiteBuild,
+  generateFinalVisualTargets = defaultGenerateFinalVisualTargets,
   maxAttempts = QA_REPAIR_LIMIT,
   now = nowIso,
 } = {}) {
   let result = await runQaGate({ runDir, gate, url, runSiteBuild, now, attempt: 0 });
   await writeGateResult(runDir, gateResultFilename(gate), result);
   if (gatePassed(result)) return { ok: true, gate, result, attempts: [] };
+
+  const generatedTarget = await tryGenerateFinalVisualTargetsForQa({
+    runDir,
+    result,
+    gate,
+    runQaGate,
+    url,
+    runSiteBuild,
+    now,
+    generateFinalVisualTargets,
+  });
+  if (generatedTarget.attempted) {
+    result = generatedTarget.result;
+    if (generatedTarget.ok) {
+      return {
+        ok: true,
+        gate,
+        result,
+        attempts: [{
+          attempt: 'final-visual-target-generation',
+          failure: resultFailures(result),
+          repair: {
+            repaired: true,
+            note: 'GENERATED_FINAL_VISUAL_TARGETS',
+            generation: generatedTarget.generation,
+          },
+        }],
+      };
+    }
+    const blockingReason = generatedTarget.blockingReason
+      || (finalVisualTargetFailure(result, FINAL_VISUAL_TARGET_MISSING) ? FINAL_VISUAL_TARGET_MISSING : '')
+      || nonRepairableQaBlockingReason({ gate, result });
+    if (blockingReason) {
+      return { ok: false, gate, result, attempts: [], blockingReason, nonRepairable: true };
+    }
+  }
+
   const blockingReason = nonRepairableQaBlockingReason({ gate, result });
   if (blockingReason) {
     return { ok: false, gate, result, attempts: [], blockingReason, nonRepairable: true };
@@ -3851,6 +3966,7 @@ export async function runDesktopQa({
   runSiteBuild = defaultRunSiteBuild,
   runQaGate = defaultRunQaGate,
   repairQaGate = defaultRepairQaGate,
+  generateFinalVisualTargets = defaultGenerateFinalVisualTargets,
   maxQaRepairAttempts = QA_REPAIR_LIMIT,
 } = {}) {
   const state = await readDesktopState(runDir);
@@ -3916,6 +4032,7 @@ export async function runDesktopQa({
       runQaGate,
       repairQaGate,
       runSiteBuild,
+      generateFinalVisualTargets,
       maxAttempts: maxQaRepairAttempts,
       now,
     });
@@ -3954,6 +4071,7 @@ export async function runDesktopQa({
       runQaGate,
       repairQaGate,
       runSiteBuild,
+      generateFinalVisualTargets,
       maxAttempts: maxQaRepairAttempts,
       now,
     });
@@ -4042,6 +4160,7 @@ export async function runDesktopStage({
   runSiteBuild = defaultRunSiteBuild,
   runQaGate = defaultRunQaGate,
   repairQaGate = defaultRepairQaGate,
+  generateFinalVisualTargets = defaultGenerateFinalVisualTargets,
   maxQaRepairAttempts = QA_REPAIR_LIMIT,
   runDeployGateEvidenceIntegrity = defaultRunDeployGateEvidenceIntegrity,
   runDeployBeforeAgent6Gate = defaultRunDeployBeforeAgent6Gate,
@@ -4066,6 +4185,7 @@ export async function runDesktopStage({
       runSiteBuild,
       runQaGate,
       repairQaGate,
+      generateFinalVisualTargets,
       maxQaRepairAttempts,
     });
   }

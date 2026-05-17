@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -26,6 +27,59 @@ async function writeRunFile(runDir, relPath, content) {
   const absolutePath = path.join(runDir, relPath);
   await mkdir(path.dirname(absolutePath), { recursive: true });
   await writeFile(absolutePath, content);
+}
+
+async function sha256RunFile(runDir, relPath) {
+  return crypto.createHash('sha256').update(await readFile(path.join(runDir, relPath))).digest('hex');
+}
+
+async function writeFinalTargetManifest(runDir) {
+  const desktopPath = 'agent-5-output/final-visual-target/desktop.png';
+  const mobilePath = 'agent-5-output/final-visual-target/mobile.png';
+  const hashes = {
+    [desktopPath]: await sha256RunFile(runDir, desktopPath),
+    [mobilePath]: await sha256RunFile(runDir, mobilePath),
+  };
+  await writeRunFile(
+    runDir,
+    'agent-5-output/final-visual-target/final-visual-target-manifest.json',
+    JSON.stringify(
+      {
+        schema_version: 'final-visual-target-manifest.v1',
+        selected_option: 'B',
+        source_selected_design_package: 'agent-2-5-output/selected-assets/selected-design-package.md',
+        source_selected_targets: {
+          desktop: { path: 'agent-2-5-output/selected-assets/selected-target-desktop.png' },
+          mobile: { path: 'agent-2-5-output/selected-assets/selected-target-mobile.png' },
+        },
+        external_action_receipt: 'agent-2-5-output/external-design-evidence/action-receipt.json',
+        generation_method: 'approved-external-final-visual-target-generator',
+        output_paths: {
+          desktop: desktopPath,
+          mobile: mobilePath,
+        },
+        sha256_hashes: hashes,
+      },
+      null,
+      2,
+    ),
+  );
+  await writeRunFile(
+    runDir,
+    'agent-5-output/final-visual-target/source-map.json',
+    JSON.stringify(
+      {
+        schema_version: 'final-visual-target-source-map.v1',
+        output_targets: {
+          desktop: desktopPath,
+          mobile: mobilePath,
+        },
+        target_hashes: hashes,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function makeFinalVisualRun() {
@@ -83,6 +137,7 @@ test('final visual similarity compares only after viewport-sized final targets e
   const runDir = await makeFinalVisualRun();
   await writeRunFile(runDir, 'agent-5-output/final-visual-target/desktop.png', pngHeader(1440, 900, 'target-desktop'));
   await writeRunFile(runDir, 'agent-5-output/final-visual-target/mobile.png', pngHeader(390, 844, 'target-mobile'));
+  await writeFinalTargetManifest(runDir);
   let compared = false;
 
   const result = await runFinalVisualSimilarityGate({
@@ -109,6 +164,7 @@ test('final visual similarity keeps the 90 percent threshold after target preche
   const runDir = await makeFinalVisualRun();
   await writeRunFile(runDir, 'agent-5-output/final-visual-target/desktop.png', pngHeader(1440, 900, 'target-desktop'));
   await writeRunFile(runDir, 'agent-5-output/final-visual-target/mobile.png', pngHeader(390, 844, 'target-mobile'));
+  await writeFinalTargetManifest(runDir);
 
   const result = await runFinalVisualSimilarityGate({
     runDir,
