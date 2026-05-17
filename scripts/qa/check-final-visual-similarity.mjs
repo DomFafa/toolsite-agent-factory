@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,6 +7,12 @@ import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { resultFromFailures, writeGateResult } from '../run/gate-result-utils.mjs';
+
+export const FINAL_VISUAL_TARGET_MISSING = 'FINAL_VISUAL_TARGET_MISSING';
+export const FINAL_VISUAL_TARGET_DIMENSION_MISMATCH = 'FINAL_VISUAL_TARGET_DIMENSION_MISMATCH';
+
+const FINAL_VISUAL_TARGET_DESKTOP_PATH = 'agent-5-output/final-visual-target/desktop.png';
+const FINAL_VISUAL_TARGET_MOBILE_PATH = 'agent-5-output/final-visual-target/mobile.png';
 
 function parseArgs(argv) {
   const args = { write: false, threshold: 0.9 };
@@ -60,6 +66,52 @@ function parseJsOutput(stdout) {
 async function imageDataUri(filePath) {
   const data = await readFile(filePath);
   return `data:image/png;base64,${data.toString('base64')}`;
+}
+
+async function exists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function pngInfo(filePath) {
+  const buffer = await readFile(filePath);
+  const signature = '89504e470d0a1a0a';
+  if (buffer.length < 24 || buffer.subarray(0, 8).toString('hex') !== signature) {
+    throw new Error(`${filePath} is not a PNG`);
+  }
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+    size: buffer.length,
+  };
+}
+
+async function defaultCompareImages({ outputDir, sourcePairs, evidence, absoluteRunDir }) {
+  const pairs = [];
+  for (const pair of sourcePairs) {
+    pairs.push({
+      name: pair.name,
+      target: path.relative(absoluteRunDir, pair.targetPath),
+      final: path.relative(absoluteRunDir, pair.finalPath),
+      targetSrc: await imageDataUri(pair.targetPath),
+      finalSrc: await imageDataUri(pair.finalPath),
+    });
+  }
+
+  const htmlPath = path.join(outputDir, 'compare.html');
+  await writeFile(htmlPath, compareHtml(pairs));
+  evidence.comparePage = path.relative(absoluteRunDir, htmlPath);
+
+  const stdout = runBrowse([
+    ['goto', pathToFileURL(htmlPath).href],
+    ['wait', '--networkidle'],
+    ['js', 'await window.__compareImages()'],
+  ]);
+  return parseJsOutput(stdout);
 }
 
 function compareHtml(pairs) {
@@ -128,7 +180,7 @@ window.__compareImages = async () => {
 </script>`;
 }
 
-export async function runFinalVisualSimilarityGate({ runDir, threshold = 0.9 }) {
+export async function runFinalVisualSimilarityGate({ runDir, threshold = 0.9, compareImages = defaultCompareImages }) {
   const absoluteRunDir = path.resolve(runDir);
   const outputDir = path.join(absoluteRunDir, 'agent-5-output/final-visual-similarity');
   await mkdir(outputDir, { recursive: true });
@@ -136,12 +188,12 @@ export async function runFinalVisualSimilarityGate({ runDir, threshold = 0.9 }) 
   const sourcePairs = [
     {
       name: 'desktop',
-      targetPath: path.join(absoluteRunDir, 'agent-2-5-output/selected-design/target/desktop.png'),
+      targetPath: path.join(absoluteRunDir, FINAL_VISUAL_TARGET_DESKTOP_PATH),
       finalPath: path.join(absoluteRunDir, 'agent-5-output/final-visual-lock/desktop.png'),
     },
     {
       name: 'mobile',
-      targetPath: path.join(absoluteRunDir, 'agent-2-5-output/selected-design/target/mobile.png'),
+      targetPath: path.join(absoluteRunDir, FINAL_VISUAL_TARGET_MOBILE_PATH),
       finalPath: path.join(absoluteRunDir, 'agent-5-output/final-visual-lock/mobile.png'),
     },
   ];
@@ -158,25 +210,26 @@ export async function runFinalVisualSimilarityGate({ runDir, threshold = 0.9 }) 
 
   let details = { results: [], overall: 0 };
   try {
-    const pairs = [];
     for (const pair of sourcePairs) {
-      pairs.push({
-        name: pair.name,
-        targetSrc: await imageDataUri(pair.targetPath),
-        finalSrc: await imageDataUri(pair.finalPath),
-      });
+      if (!(await exists(pair.targetPath))) {
+        failures.push(`${FINAL_VISUAL_TARGET_MISSING}: ${pair.name} final visual target missing: ${path.relative(absoluteRunDir, pair.targetPath)}`);
+        continue;
+      }
+      if (!(await exists(pair.finalPath))) {
+        failures.push(`${pair.name} final screenshot missing: ${path.relative(absoluteRunDir, pair.finalPath)}`);
+        continue;
+      }
+      const target = await pngInfo(pair.targetPath);
+      const final = await pngInfo(pair.finalPath);
+      if (target.width !== final.width || target.height !== final.height) {
+        failures.push(
+          `${FINAL_VISUAL_TARGET_DIMENSION_MISMATCH}: ${pair.name}: final screenshot dimensions ${final.width}x${final.height} differ from final visual target ${target.width}x${target.height}`,
+        );
+      }
     }
-
-    const htmlPath = path.join(outputDir, 'compare.html');
-    await writeFile(htmlPath, compareHtml(pairs));
-    evidence.comparePage = path.relative(absoluteRunDir, htmlPath);
-
-    const stdout = runBrowse([
-      ['goto', pathToFileURL(htmlPath).href],
-      ['wait', '--networkidle'],
-      ['js', 'await window.__compareImages()'],
-    ]);
-    details = parseJsOutput(stdout);
+    if (failures.length === 0) {
+      details = await compareImages({ outputDir, sourcePairs, evidence, absoluteRunDir });
+    }
   } catch (error) {
     failures.push(`visual similarity comparison failed: ${error.message}`);
   }
@@ -187,11 +240,11 @@ export async function runFinalVisualSimilarityGate({ runDir, threshold = 0.9 }) 
     }
     if (result.width !== result.finalWidth || result.height !== result.finalHeight) {
       failures.push(
-        `${result.name}: final screenshot dimensions ${result.finalWidth}x${result.finalHeight} differ from target ${result.width}x${result.height}`,
+        `${FINAL_VISUAL_TARGET_DIMENSION_MISMATCH}: ${result.name}: final screenshot dimensions ${result.finalWidth}x${result.finalHeight} differ from final visual target ${result.width}x${result.height}`,
       );
     }
   }
-  if ((details.results || []).length !== sourcePairs.length) {
+  if (failures.length === 0 && (details.results || []).length !== sourcePairs.length) {
     failures.push(`expected ${sourcePairs.length} screenshot comparisons, found ${(details.results || []).length}`);
   }
 

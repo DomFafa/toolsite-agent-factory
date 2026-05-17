@@ -1768,6 +1768,38 @@ test('desktop:qa regenerates stale visual restoration screenshots before rerunni
   assert.deepEqual(runQaGate.calls.filter((call) => call.gate === 'visual-restoration-similarity').map((call) => call.attempt), [0, 1]);
 });
 
+test('desktop:qa does not repair site when final visual target is missing', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'desktop-qa-final-target-missing-'));
+  const created = await makeQaReadyRun(root);
+  const runQaGate = passingQaGateRunner({
+    fail: {
+      'final-visual-similarity': ({ runDir, gate }) => mockGateResult(runDir, gate, {
+        passed: false,
+        failures: ['FINAL_VISUAL_TARGET_MISSING: desktop final visual target missing'],
+      }),
+    },
+  });
+  let repairCount = 0;
+
+  const result = await runDesktopStage({
+    runDir: created.runDir,
+    stage: 'qa',
+    runQaGate,
+    repairQaGate: async () => {
+      repairCount += 1;
+      return { repaired: true, changed_files: ['site/src/pages/index.astro'] };
+    },
+  });
+  const state = await readDesktopState(created.runDir);
+
+  assert.equal(result.code, 'FINAL_VISUAL_TARGET_MISSING');
+  assert.equal(result.failed_gate, 'final-visual-similarity');
+  assert.equal(repairCount, 0);
+  assert.equal(state.stage, 'qa');
+  assert.equal(state.blocking_reason, 'FINAL_VISUAL_TARGET_MISSING');
+  assert.deepEqual(runQaGate.calls.filter((call) => call.gate === 'final-visual-similarity').map((call) => call.attempt), [0]);
+});
+
 test('desktop deploy refuses without pre_deploy_approval', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'desktop-deploy-no-approval-'));
   const created = await makeDeployReviewReadyRun(root, { approve: false });
